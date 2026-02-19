@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastFootSatış - Restoran Yönetim Sistemi</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <h1 class="company-name" id="companyName">RESTORAN</h1>
+            <div class="header-info">
+                <span class="status-indicator" id="connectionStatus">●</span>
+                <span id="terminalId">Terminal 1</span>
+                <span class="ip-address" id="ipAddress">IP: ---</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="main-container">
+
+        <!-- Left Panel - Menu -->
+        <div class="panel left-panel">
+            <div class="panel-header">
+                <h2>🍽️ MENÜ</h2>
+            </div>
+            <div class="menu-container" id="menuContainer">
+                <!-- Menu items will be loaded here -->
+            </div>
+        </div>
+
+        <!-- Center Panel - Tables/Tables -->
+        <div class="panel center-panel">
+            <div class="panel-header">
+                <h2>📋 MASALAR & PAKETLER</h2>
+            </div>
+
+            <!-- Paket Servisi -->
+            <div class="tables-section" id="paketSection" style="display: none;">
+                <h3 class="section-title">🛵 Paket Servis</h3>
+                <div class="tables-grid" id="paketGrid">
+                    <!-- Paket buttons will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Salon Masaları -->
+            <div class="tables-section" id="masaSection" style="display: none;">
+                <h3 class="section-title">🪑 Salon</h3>
+                <div class="tables-grid" id="masaGrid">
+                    <!-- Table buttons will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Logo Area (if exists) -->
+            <div class="logo-container" id="logoContainer">
+                <img src="logo.png" alt="Logo" id="logo" onerror="this.style.display='none'">
+            </div>
+        </div>
+
+        <!-- Right Panel - Order & Checkout -->
+        <div class="panel right-panel">
+            <div class="panel-header">
+                <h2 id="currentMasaLabel">Masa Seçiniz</h2>
+            </div>
+
+            <!-- Order List -->
+            <div class="order-list-container">
+                <div class="order-list" id="orderList">
+                    <div class="empty-state">
+                        <p>Sipariş yok</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Controls -->
+            <div class="controls-container">
+                <!-- Total -->
+                <div class="total-display">
+                    <span class="total-label">TOPLAM:</span>
+                    <span class="total-amount" id="totalAmount">0.00 TL</span>
+                </div>
+
+                <!-- Print Button -->
+                <button class="btn btn-print" id="btnPrint">
+                    🖨️ FİŞ YAZDIR
+                </button>
+
+                <!-- Payment Buttons -->
+                <div class="payment-buttons">
+                    <button class="btn btn-cash" id="btnCash">💵 NAKİT</button>
+                    <button class="btn btn-card" id="btnCard">💳 KART</button>
+                    <button class="btn btn-credit" id="btnCredit">📝 AÇIK</button>
+                    <button class="btn btn-tip" id="btnTip">🎁 TİP</button>
+                </div>
+
+                <!-- Management Buttons -->
+                <button class="btn btn-secondary" id="btnCari">💰 CARİ YÖNETİMİ</button>
+                <button class="btn btn-secondary" id="btnReports">📊 GÜN SONU PDF</button>
+                <button class="btn btn-secondary" id="btnSettings">⚙️ AYARLAR</button>
+                <button class="btn btn-info" id="btnAbout">ℹ️ HAKKINDA</button>
+            </div>
+
+            <!-- Footer Info -->
+            <div class="footer-info">
+                <div class="footer-ip" id="footerIp">📡 IP: ---</div>
+                <div class="footer-terminal" id="footerTerminal">🆔 Terminal 1</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Socket.IO Library (CDN) -->
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <!-- Main Script -->
+    <script src="script.js"></script>
+</body>
+
+</html>

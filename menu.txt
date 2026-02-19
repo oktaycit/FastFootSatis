@@ -1,0 +1,32 @@
+Çorbalar;Mercimek ;120.0
+Çorbalar;Tavuk ;150.0
+Çorbalar;İşkembe ;180.0
+Çorbalar;Mercimek (Az);100.0
+Çorbalar;Tavuk(Az);100.0
+Çorbalar;İşkembe(Az);140.0
+Çorbalar;Kelle-paça ;250.0
+Çorbalar;Kokteyl;350.0
+Çorbalar;Çürük ;300.0
+Çorbalar;Kelle-Paça(Az);200.0
+Çorbalar;Az kokteyl;250.0
+Çorbalar;Çürük(Az) ;270.0
+Çorbalar;1,5 Kelle-paça ;350.0
+Yemekler;Köfte;270.0
+Yemekler;Köfte(1,5 porsiyon);400.0
+Yemekler;Köfte Duble;500.0
+Yemekler;Piyaz (Az);150.0
+Yemekler;Piyaz;200.0
+Yemekler;Piyaz Duble;300.0
+Yemekler;YEkmek Köfte;150.0
+Yemekler;Yumurta;100.0
+Tatlılar;Kabak Tatlı;100.0
+Tatlılar;Sütlaç;100.0
+Tatlılar;Keşkül;100.0
+Tatlılar;İrmik tatlısı;100.0
+İçecekler;Su,Soda;20.0
+İçecekler;Küçük Ayran;20.0
+İçecekler;Büyük Ayran;30.0
+İçecekler;Kutu G.İçecek;60.0
+İçecekler;Şişe G.İçecek;60.0
+İçecekler;Kola 1lt;100.0
+İçecekler;Şalgam;40.0
