@@ -300,6 +300,11 @@ def index():
     """Ana sayfa"""
     return app.send_static_file('index.html')
 
+@app.route('/terminals')
+def terminals():
+    """Terminal yönetim sayfası"""
+    return app.send_static_file('terminals.html')
+
 @app.route('/api/system/info')
 def system_info():
     """Sistem bilgileri"""

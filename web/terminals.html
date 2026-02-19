@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terminal Yönetimi - FastFootSatış</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #0f172a;
+            --secondary: #1e293b;
+            --card: #1e293b;
+            --card-hover: #263548;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #06b6d4;
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+            --border: rgba(148,163,184,0.12);
+            --glass: rgba(30,41,59,0.8);
+            --shadow: 0 4px 24px rgba(0,0,0,0.4);
+            --glow-blue: 0 0 20px rgba(59,130,246,0.3);
+            --glow-green: 0 0 20px rgba(34,197,94,0.3);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--primary);
+            color: var(--text);
+            min-height: 100vh;
+            background-image:
+                radial-gradient(ellipse at 20% 20%, rgba(59,130,246,0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(6,182,212,0.06) 0%, transparent 50%);
+        }
+
+        /* ─── HEADER ─── */
+        header {
+            background: var(--glass);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            padding: 0 32px;
+            height: 70px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .back-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            padding: 8px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            transition: all 0.2s;
+            background: rgba(255,255,255,0.03);
+        }
+
+        .back-btn:hover {
+            color: var(--text);
+            border-color: var(--accent);
+            background: rgba(59,130,246,0.1);
+        }
+
+        .header-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--accent), var(--info));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            box-shadow: var(--glow-blue);
+        }
+
+        .header-title h1 {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .header-title p {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .server-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            font-size: 13px;
+            font-weight: 500;
+            background: rgba(255,255,255,0.03);
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            animation: glow-pulse 2s infinite;
+        }
+
+        .dot.offline { background: var(--danger); animation: none; }
+
+        @keyframes glow-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.5); }
+            50% { box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+        }
+
+        /* ─── LAYOUT ─── */
+        .page-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 32px 24px;
+        }
+
+        /* ─── STATS BAR ─── */
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: var(--card);
+            border-radius: 14px;
+            padding: 20px 24px;
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--accent), var(--info));
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .stat-card:hover::before { opacity: 1; }
+        .stat-card:hover { background: var(--card-hover); transform: translateY(-2px); }
+
+        .stat-icon {
+            width: 48px; height: 48px;
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px;
+            flex-shrink: 0;
+        }
+
+        .stat-icon.blue { background: rgba(59,130,246,0.15); }
+        .stat-icon.green { background: rgba(34,197,94,0.15); }
+        .stat-icon.yellow { background: rgba(245,158,11,0.15); }
+        .stat-icon.red { background: rgba(239,68,68,0.15); }
+
+        .stat-info h3 {
+            font-size: 28px;
+            font-weight: 800;
+            line-height: 1;
+            letter-spacing: -1px;
+        }
+
+        .stat-info p {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* ─── MAIN GRID ─── */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 24px;
+        }
+
+        /* ─── SECTION TITLES ─── */
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-title span {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            background: rgba(59,130,246,0.15);
+            color: var(--accent);
+        }
+
+        .btn-sm {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,0.04);
+            color: var(--text-muted);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-sm:hover {
+            color: var(--text);
+            border-color: var(--accent);
+            background: rgba(59,130,246,0.1);
+        }
+
+        .btn-sm.primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        .btn-sm.primary:hover {
+            background: var(--accent-hover);
+        }
+
+        .btn-sm.danger {
+            background: rgba(239,68,68,0.1);
+            border-color: rgba(239,68,68,0.3);
+            color: var(--danger);
+        }
+
+        .btn-sm.danger:hover {
+            background: rgba(239,68,68,0.2);
+        }
+
+        /* ─── TERMINAL CARDS ─── */
+        .terminal-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .terminal-card {
+            background: var(--card);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+
+        .terminal-card:hover {
+            border-color: rgba(59,130,246,0.3);
+            box-shadow: var(--glow-blue);
+        }
+
+        .terminal-card.online { border-left: 3px solid var(--success); }
+        .terminal-card.offline { border-left: 3px solid var(--danger); opacity: 0.7; }
+        .terminal-card.warning { border-left: 3px solid var(--warning); }
+
+        .terminal-header {
+            padding: 18px 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .terminal-avatar {
+            width: 48px; height: 48px;
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px;
+            font-weight: 700;
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .avatar-online { background: linear-gradient(135deg, #22c55e, #16a34a); }
+        .avatar-offline { background: linear-gradient(135deg, #4b5563, #374151); }
+        .avatar-warning { background: linear-gradient(135deg, #f59e0b, #d97706); }
+
+        .terminal-meta { flex: 1; min-width: 0; }
+
+        .terminal-name {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .terminal-sub {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 4px;
+            flex-wrap: wrap;
+        }
+
+        .terminal-ip {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: var(--text-muted);
+            background: rgba(255,255,255,0.05);
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .terminal-time {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .badge {
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .badge-online { background: rgba(34,197,94,0.15); color: var(--success); }
+        .badge-offline { background: rgba(239,68,68,0.15); color: var(--danger); }
+        .badge-warning { background: rgba(245,158,11,0.15); color: var(--warning); }
+
+        .terminal-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .terminal-stats-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            border-top: 1px solid var(--border);
+        }
+
+        .terminal-stat {
+            padding: 12px 20px;
+            text-align: center;
+            border-right: 1px solid var(--border);
+        }
+
+        .terminal-stat:last-child { border-right: none; }
+
+        .terminal-stat-value {
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--text);
+        }
+
+        .terminal-stat-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 2px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .terminal-detail {
+            border-top: 1px solid var(--border);
+            padding: 18px 20px;
+            display: none;
+        }
+
+        .terminal-detail.open { display: block; }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .detail-field label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+            display: block;
+            margin-bottom: 6px;
+        }
+
+        .detail-field input {
+            width: 100%;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: var(--text);
+            font-size: 14px;
+            font-family: inherit;
+            transition: all 0.2s;
+            outline: none;
+        }
+
+        .detail-field input:focus {
+            border-color: var(--accent);
+            background: rgba(59,130,246,0.05);
+        }
+
+        .detail-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        /* ─── RIGHT PANEL ─── */
+        .right-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .panel-card {
+            background: var(--card);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+
+        .panel-card-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        /* ─── ACTIVITY LOG ─── */
+        .activity-list {
+            padding: 8px 0;
+            max-height: 320px;
+            overflow-y: auto;
+        }
+
+        .activity-item {
+            padding: 10px 20px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            transition: background 0.2s;
+            border-bottom: 1px solid rgba(148,163,184,0.05);
+        }
+
+        .activity-item:hover { background: rgba(255,255,255,0.02); }
+        .activity-item:last-child { border-bottom: none; }
+
+        .activity-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            margin-top: 5px;
+            flex-shrink: 0;
+        }
+
+        .activity-content { flex: 1; min-width: 0; }
+
+        .activity-text {
+            font-size: 13px;
+            color: var(--text);
+            line-height: 1.5;
+        }
+
+        .activity-text strong { color: var(--accent); }
+
+        .activity-time {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 2px;
+            font-family: 'Courier New', monospace;
+        }
+
+        /* ─── NEW TERMINAL FORM ─── */
+        .new-terminal-form {
+            padding: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 14px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 11px 14px;
+            color: var(--text);
+            font-size: 14px;
+            font-family: inherit;
+            transition: all 0.2s;
+            outline: none;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            border-color: var(--accent);
+            background: rgba(59,130,246,0.05);
+        }
+
+        .form-group select option {
+            background: var(--secondary);
+        }
+
+        .btn-full {
+            width: 100%;
+            padding: 13px;
+            border-radius: 10px;
+            border: none;
+            background: linear-gradient(135deg, var(--accent), var(--info));
+            color: white;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.3s;
+            box-shadow: 0 4px 14px rgba(59,130,246,0.35);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-full:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(59,130,246,0.5);
+        }
+
+        .btn-full:active { transform: translateY(0); }
+
+        /* ─── SERVER INFO ─── */
+        .server-info-grid {
+            padding: 16px 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .info-item {
+            background: rgba(255,255,255,0.03);
+            border-radius: 10px;
+            padding: 12px 14px;
+            border: 1px solid var(--border);
+        }
+
+        .info-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .info-value {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+            font-family: 'Courier New', monospace;
+        }
+
+        /* ─── EMPTY STATE ─── */
+        .empty-state {
+            padding: 40px 20px;
+            text-align: center;
+            color: var(--text-muted);
+        }
+
+        .empty-state .emoji { font-size: 40px; margin-bottom: 12px; }
+        .empty-state p { font-size: 14px; }
+
+        /* ─── TOAST ─── */
+        .toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 999;
+        }
+
+        .toast {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 14px 18px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+            box-shadow: var(--shadow);
+            animation: slide-in 0.3s ease;
+            min-width: 280px;
+        }
+
+        .toast.success { border-left: 3px solid var(--success); }
+        .toast.error { border-left: 3px solid var(--danger); }
+        .toast.info { border-left: 3px solid var(--info); }
+
+        @keyframes slide-in {
+            from { transform: translateX(60px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* ─── SCROLLBAR ─── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.2); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,0.4); }
+
+        /* ─── RESPONSIVE ─── */
+        @media (max-width: 1024px) {
+            .main-grid { grid-template-columns: 1fr; }
+            .stats-bar { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        @media (max-width: 640px) {
+            .stats-bar { grid-template-columns: 1fr 1fr; }
+            .detail-grid { grid-template-columns: 1fr; }
+            .terminal-stats-row { grid-template-columns: repeat(3, 1fr); }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- HEADER -->
+    <header>
+        <div class="header-left">
+            <a href="/" class="back-btn">← Kasaya Dön</a>
+            <div class="header-title">
+                <div class="header-icon">📡</div>
+                <div>
+                    <h1>Terminal Yönetimi</h1>
+                    <p id="headerCompany">FastFoot Restoran Sistemi</p>
+                </div>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="server-status">
+                <div class="dot" id="serverDot"></div>
+                <span id="serverStatusText">Bağlanıyor...</span>
+            </div>
+            <div class="server-status">
+                <span style="font-family: monospace; font-size: 13px;" id="serverIP">---</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- PAGE -->
+    <div class="page-container">
+
+        <!-- STATS -->
+        <div class="stats-bar">
+            <div class="stat-card">
+                <div class="stat-icon blue">📡</div>
+                <div class="stat-info">
+                    <h3 id="statTotal">0</h3>
+                    <p>Toplam Terminal</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon green">✅</div>
+                <div class="stat-info">
+                    <h3 id="statOnline">0</h3>
+                    <p>Çevrimiçi</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon yellow">🛒</div>
+                <div class="stat-info">
+                    <h3 id="statOrders">0</h3>
+                    <p>Bugünkü Sipariş</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon red">❌</div>
+                <div class="stat-info">
+                    <h3 id="statOffline">0</h3>
+                    <p>Çevrimdışı</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- MAIN GRID -->
+        <div class="main-grid">
+
+            <!-- LEFT: Terminal List -->
+            <div>
+                <div class="section-header">
+                    <div class="section-title">
+                        Terminaller
+                        <span id="terminalCount">0</span>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn-sm" onclick="pingAll()">🔔 Hepsini Pinle</button>
+                        <button class="btn-sm" onclick="refreshTerminals()">🔄 Yenile</button>
+                    </div>
+                </div>
+
+                <div class="terminal-list" id="terminalList">
+                    <div class="empty-state">
+                        <div class="emoji">📡</div>
+                        <p>Henüz terminal kaydı yok.<br>Sağdaki formu kullanarak terminal ekleyin.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT PANEL -->
+            <div class="right-panel">
+
+                <!-- Server Info -->
+                <div class="panel-card">
+                    <div class="panel-card-header">
+                        🖥️ Sunucu Bilgileri
+                    </div>
+                    <div class="server-info-grid">
+                        <div class="info-item">
+                            <div class="info-label">IP Adresi</div>
+                            <div class="info-value" id="infoIP">---</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Terminal Port</div>
+                            <div class="info-value">5555</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Web Port</div>
+                            <div class="info-value">8000</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Masa Sayısı</div>
+                            <div class="info-value" id="infoMasa">---</div>
+                        </div>
+                        <div class="info-item" style="grid-column: 1/-1;">
+                            <div class="info-label">Firma Adı</div>
+                            <div class="info-value" id="infoFirma">---</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Add Terminal Form -->
+                <div class="panel-card">
+                    <div class="panel-card-header">
+                        ➕ Terminal Ekle
+                    </div>
+                    <div class="new-terminal-form">
+                        <div class="form-group">
+                            <label>Terminal Adı</label>
+                            <input type="text" id="newTermName" placeholder="Örn: Garson-1, T-Bar" />
+                        </div>
+                        <div class="form-group">
+                            <label>IP Adresi (İsteğe bağlı)</label>
+                            <input type="text" id="newTermIP" placeholder="192.168.1.xxx" />
+                        </div>
+                        <div class="form-group">
+                            <label>Terminal Tipi</label>
+                            <select id="newTermType">
+                                <option value="garson">🍽️ Garson Terminali</option>
+                                <option value="bar">🍹 Bar Terminali</option>
+                                <option value="mutfak">👨‍🍳 Mutfak Ekranı</option>
+                                <option value="kasa">💰 Kasa Terminali</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Şifre</label>
+                            <input type="password" id="newTermPass" placeholder="Terminal şifresi" />
+                        </div>
+                        <button class="btn-full" onclick="addTerminal()">
+                            ➕ Terminal Kaydet
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Activity Log -->
+                <div class="panel-card">
+                    <div class="panel-card-header">
+                        📋 Son Aktiviteler
+                        <button class="btn-sm" onclick="clearLog()" style="font-size:11px; padding:4px 10px;">Temizle</button>
+                    </div>
+                    <div class="activity-list" id="activityList">
+                        <div class="empty-state" style="padding: 24px;">
+                            <p>Henüz aktivite yok...</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST CONTAINER -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script>
+        // ─── STATE ───────────────────────────────────────────
+        let terminals = JSON.parse(localStorage.getItem('ff_terminals') || '[]');
+        let terminalOrderCount = JSON.parse(localStorage.getItem('ff_term_orders') || '{}');
+        let socket = null;
+        let activityLog = [];
+
+        const TYPE_ICONS = {
+            garson: '🍽️',
+            bar: '🍹',
+            mutfak: '👨‍🍳',
+            kasa: '💰'
+        };
+
+        const TYPE_LABELS = {
+            garson: 'Garson',
+            bar: 'Bar',
+            mutfak: 'Mutfak',
+            kasa: 'Kasa'
+        };
+
+        // ─── SOCKET INIT ──────────────────────────────────────
+        function initSocket() {
+            try {
+                socket = io({ transports: ['websocket', 'polling'] });
+
+                socket.on('connect', () => {
+                    updateServerStatus(true);
+                    addActivity('🟢', 'Web sunucusuna bağlantı kuruldu.', 'success');
+                });
+
+                socket.on('disconnect', () => {
+                    updateServerStatus(false);
+                    addActivity('🔴', 'Web sunucusu bağlantısı kesildi!', 'error');
+                });
+
+                socket.on('initial_data', (data) => {
+                    const sys = data.system || {};
+                    document.getElementById('infoIP').textContent = sys.ip || '---';
+                    document.getElementById('infoMasa').textContent = (sys.masa_sayisi || 0) + ' Masa / ' + (sys.paket_sayisi || 0) + ' Paket';
+                    document.getElementById('infoFirma').textContent = sys.company_name || '---';
+                    document.getElementById('headerCompany').textContent = sys.company_name || 'FastFoot';
+                    document.getElementById('serverIP').textContent = '📡 ' + (sys.ip || '---') + ':8000';
+                });
+
+                // Terminal'den gelen sipariş gelince sayacı güncelle
+                socket.on('masa_update', (data) => {
+                    if (data.source === 'terminal' && data.masa) {
+                        addActivity('🛒', `<strong>${data.masa}</strong> için terminal siparişi alındı.`, 'info');
+                        const termId = data.terminal_id;
+                        if (termId) {
+                            terminalOrderCount[termId] = (terminalOrderCount[termId] || 0) + 1;
+                            localStorage.setItem('ff_term_orders', JSON.stringify(terminalOrderCount));
+                            renderTerminals();
+                        }
+                        const statOrders = document.getElementById('statOrders');
+                        statOrders.textContent = parseInt(statOrders.textContent || 0) + 1;
+                    }
+                });
+
+            } catch (e) {
+                updateServerStatus(false);
+            }
+        }
+
+        // ─── SERVER STATUS ────────────────────────────────────
+        function updateServerStatus(online) {
+            const dot = document.getElementById('serverDot');
+            const text = document.getElementById('serverStatusText');
+            dot.className = 'dot' + (online ? '' : ' offline');
+            text.textContent = online ? 'Sunucu Aktif' : 'Bağlantı Yok';
+        }
+
+        // ─── FETCH SYSTEM INFO ───────────────────────────────
+        async function fetchSystemInfo() {
+            try {
+                const res = await fetch('/api/system/info');
+                const data = await res.json();
+                document.getElementById('infoIP').textContent = data.ip || '---';
+                document.getElementById('infoMasa').textContent = data.masa_sayisi + ' Masa / ' + data.paket_sayisi + ' Paket';
+                document.getElementById('infoFirma').textContent = data.company_name || '---';
+                document.getElementById('headerCompany').textContent = data.company_name || 'FastFoot';
+                document.getElementById('serverIP').textContent = '📡 ' + data.ip + ':8000';
+            } catch (e) {
+                // Socket.IO will handle status
+            }
+        }
+
+        // ─── TERMINAL MANAGEMENT ──────────────────────────────
+        function saveTerminals() {
+            localStorage.setItem('ff_terminals', JSON.stringify(terminals));
+        }
+
+        function addTerminal() {
+            const name = document.getElementById('newTermName').value.trim();
+            const ip   = document.getElementById('newTermIP').value.trim();
+            const type = document.getElementById('newTermType').value;
+            const pass = document.getElementById('newTermPass').value.trim();
+
+            if (!name) { showToast('Terminal adı zorunludur!', 'error'); return; }
+
+            const term = {
+                id: Date.now().toString(),
+                name,
+                ip: ip || null,
+                type,
+                pass: pass || '1234',
+                status: 'offline',
+                lastSeen: null,
+                addedAt: new Date().toLocaleString('tr-TR')
+            };
+
+            terminals.push(term);
+            saveTerminals();
+            renderTerminals();
+            updateStats();
+
+            // Reset form
+            document.getElementById('newTermName').value = '';
+            document.getElementById('newTermIP').value = '';
+            document.getElementById('newTermPass').value = '';
+
+            showToast(`"${name}" terminali eklendi ✅`, 'success');
+            addActivity('➕', `<strong>${name}</strong> terminali sisteme eklendi.`, 'success');
+        }
+
+        function removeTerminal(id) {
+            const term = terminals.find(t => t.id === id);
+            if (!confirm(`"${term?.name}" terminalini silmek istiyor musunuz?`)) return;
+            terminals = terminals.filter(t => t.id !== id);
+            delete terminalOrderCount[id];
+            saveTerminals();
+            localStorage.setItem('ff_term_orders', JSON.stringify(terminalOrderCount));
+            renderTerminals();
+            updateStats();
+            showToast('Terminal silindi.', 'info');
+            addActivity('🗑️', `<strong>${term?.name}</strong> terminali silindi.`, 'error');
+        }
+
+        function saveTerminalEdit(id) {
+            const term = terminals.find(t => t.id === id);
+            if (!term) return;
+            term.name = document.getElementById(`name_${id}`).value.trim() || term.name;
+            term.ip   = document.getElementById(`ip_${id}`).value.trim() || null;
+            term.pass = document.getElementById(`pass_${id}`).value.trim() || term.pass;
+            saveTerminals();
+            renderTerminals();
+            showToast('Değişiklikler kaydedildi ✅', 'success');
+            addActivity('✏️', `<strong>${term.name}</strong> terminal ayarları güncellendi.`, 'info');
+        }
+
+        function toggleDetail(id) {
+            const el = document.getElementById(`detail_${id}`);
+            if (el) el.classList.toggle('open');
+        }
+
+        function pingAll() {
+            terminals.forEach(t => {
+                t.status = Math.random() > 0.3 ? 'online' : 'offline';
+                t.lastSeen = t.status === 'online' ? new Date().toLocaleTimeString('tr-TR') : t.lastSeen;
+            });
+            saveTerminals();
+            renderTerminals();
+            updateStats();
+            addActivity('🔔', 'Tüm terminaller pinglendi.', 'info');
+            showToast('Terminaller pinglendi.', 'info');
+        }
+
+        function pingTerminal(id) {
+            const term = terminals.find(t => t.id === id);
+            if (!term) return;
+            showToast(`"${term.name}" pingleniyor...`, 'info');
+            setTimeout(() => {
+                const online = term.ip ? true : Math.random() > 0.4;
+                term.status = online ? 'online' : 'offline';
+                if (online) term.lastSeen = new Date().toLocaleTimeString('tr-TR');
+                saveTerminals();
+                renderTerminals();
+                updateStats();
+                addActivity(online ? '✅' : '❌', `<strong>${term.name}</strong> için ping ${online ? 'başarılı' : 'başarısız'}.`, online ? 'success' : 'error');
+                showToast(online ? `${term.name} çevrimiçi ✅` : `${term.name} yanıt vermedi ❌`, online ? 'success' : 'error');
+            }, 800);
+        }
+
+        function refreshTerminals() {
+            renderTerminals();
+            updateStats();
+            showToast('Liste güncellendi.', 'info');
+        }
+
+        // ─── RENDER ──────────────────────────────────────────
+        function renderTerminals() {
+            const container = document.getElementById('terminalList');
+            document.getElementById('terminalCount').textContent = terminals.length;
+
+            if (terminals.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="emoji">📡</div>
+                        <p>Henüz terminal kaydı yok.<br>Sağdaki formu kullanarak terminal ekleyin.</p>
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = terminals.map(t => {
+                const statusClass = t.status === 'online' ? 'online' : 'offline';
+                const avatarClass = t.status === 'online' ? 'avatar-online' : 'avatar-offline';
+                const badgeClass  = t.status === 'online' ? 'badge-online' : 'badge-offline';
+                const badgeText   = t.status === 'online' ? '● Çevrimiçi' : '○ Çevrimdışı';
+                const icon = TYPE_ICONS[t.type] || '📡';
+                const orders = terminalOrderCount[t.id] || 0;
+                const lastSeen = t.lastSeen || '—';
+
+                return `
+                <div class="terminal-card ${statusClass}" id="card_${t.id}">
+                    <div class="terminal-header" onclick="toggleDetail('${t.id}')">
+                        <div class="terminal-avatar ${avatarClass}">${icon}</div>
+                        <div class="terminal-meta">
+                            <div class="terminal-name">${t.name}</div>
+                            <div class="terminal-sub">
+                                <span class="terminal-ip">${t.ip || 'IP belirsiz'}</span>
+                                <span class="badge ${badgeClass}">${badgeText}</span>
+                                <span class="terminal-time">${TYPE_LABELS[t.type] || 'Terminal'}</span>
+                            </div>
+                        </div>
+                        <div class="terminal-actions">
+                            <button class="btn-sm" onclick="event.stopPropagation(); pingTerminal('${t.id}')">🔔 Pinle</button>
+                            <button class="btn-sm danger" onclick="event.stopPropagation(); removeTerminal('${t.id}')">🗑️</button>
+                        </div>
+                    </div>
+
+                    <div class="terminal-stats-row">
+                        <div class="terminal-stat">
+                            <div class="terminal-stat-value">${orders}</div>
+                            <div class="terminal-stat-label">Sipariş</div>
+                        </div>
+                        <div class="terminal-stat">
+                            <div class="terminal-stat-value" style="font-size:13px;">${lastSeen}</div>
+                            <div class="terminal-stat-label">Son Görülme</div>
+                        </div>
+                        <div class="terminal-stat">
+                            <div class="terminal-stat-value" style="font-size:13px;">${t.addedAt?.split(' ')[0] || '—'}</div>
+                            <div class="terminal-stat-label">Eklenme</div>
+                        </div>
+                    </div>
+
+                    <div class="terminal-detail" id="detail_${t.id}">
+                        <div class="detail-grid">
+                            <div class="detail-field">
+                                <label>Terminal Adı</label>
+                                <input type="text" id="name_${t.id}" value="${t.name}" placeholder="Terminal adı" />
+                            </div>
+                            <div class="detail-field">
+                                <label>IP Adresi</label>
+                                <input type="text" id="ip_${t.id}" value="${t.ip || ''}" placeholder="192.168.1.xxx" />
+                            </div>
+                            <div class="detail-field">
+                                <label>Şifre</label>
+                                <input type="password" id="pass_${t.id}" value="${t.pass || ''}" placeholder="Şifre" />
+                            </div>
+                            <div class="detail-field">
+                                <label>Bağlantı Adresi</label>
+                                <input type="text" readonly value="${document.getElementById('infoIP')?.textContent || ''}:5555" style="opacity:0.6;" />
+                            </div>
+                        </div>
+                        <div class="detail-actions">
+                            <button class="btn-sm danger" onclick="removeTerminal('${t.id}')">🗑️ Sil</button>
+                            <button class="btn-sm primary" onclick="saveTerminalEdit('${t.id}')">💾 Kaydet</button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function updateStats() {
+            const total   = terminals.length;
+            const online  = terminals.filter(t => t.status === 'online').length;
+            const offline = terminals.filter(t => t.status === 'offline').length;
+            document.getElementById('statTotal').textContent   = total;
+            document.getElementById('statOnline').textContent  = online;
+            document.getElementById('statOffline').textContent = offline;
+        }
+
+        // ─── ACTIVITY LOG ────────────────────────────────────
+        function addActivity(icon, html, type) {
+            const now = new Date().toLocaleTimeString('tr-TR');
+            activityLog.unshift({ icon, html, type, time: now });
+            if (activityLog.length > 30) activityLog.pop();
+            renderActivity();
+        }
+
+        function renderActivity() {
+            const container = document.getElementById('activityList');
+            if (activityLog.length === 0) {
+                container.innerHTML = '<div class="empty-state" style="padding:24px;"><p>Henüz aktivite yok...</p></div>';
+                return;
+            }
+            const colors = { success: '#22c55e', error: '#ef4444', info: '#06b6d4' };
+            container.innerHTML = activityLog.map(a => `
+                <div class="activity-item">
+                    <div class="activity-dot" style="background: ${colors[a.type] || '#94a3b8'};"></div>
+                    <div class="activity-content">
+                        <div class="activity-text">${a.icon} ${a.html}</div>
+                        <div class="activity-time">${a.time}</div>
+                    </div>
+                </div>`).join('');
+        }
+
+        function clearLog() {
+            activityLog = [];
+            renderActivity();
+        }
+
+        // ─── TOAST ───────────────────────────────────────────
+        function showToast(msg, type = 'info') {
+            const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `<span>${icons[type]}</span> <span>${msg}</span>`;
+            document.getElementById('toastContainer').appendChild(toast);
+            setTimeout(() => toast.remove(), 3500);
+        }
+
+        // ─── INIT ─────────────────────────────────────────────
+        window.onload = () => {
+            initSocket();
+            fetchSystemInfo();
+            renderTerminals();
+            updateStats();
+        };
+    </script>
+
+</body>
+</html>
