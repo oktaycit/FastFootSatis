@@ -173,6 +173,11 @@ function onPaymentCompleted(data) {
         currentItems = [];
         currentTotal = 0;
         updateOrderDisplay();
+
+        // YENİ: Ödeme tamamlandığında modalı kapat
+        if (typeof closePaymentModal === 'function') {
+            closePaymentModal();
+        }
     }
 
     // Update table button
@@ -403,6 +408,7 @@ function removeItemFromOrder(index) {
  * Payment functions
  */
 function processPayment(type) {
+    console.log(`💰 processPayment called for: ${type}`);
     if (!currentMasa) {
         showNotification('Lütfen önce masa seçiniz!', 'warning');
         return;
@@ -416,6 +422,7 @@ function processPayment(type) {
     const confirmMsg = `${type} ile ${currentTotal.toFixed(2)} TL ödeme alınacak. Onaylıyor musunuz?`;
 
     if (confirm(confirmMsg)) {
+        console.log(`📤 Sending finalize_payment for: ${type}`);
         socket.emit('finalize_payment', { type: type });
     }
 }
@@ -423,7 +430,7 @@ function processPayment(type) {
 /**
  * Split Payment Modal Functions
  */
-function openPaymentModal() {
+function openPaymentModal(prefillType = null) {
     if (!currentMasa) {
         showNotification('Lütfen önce masa seçiniz!', 'warning');
         return;
@@ -438,10 +445,16 @@ function openPaymentModal() {
     elements.paymentNakit.value = '';
     elements.paymentKart.value = '';
     elements.paymentCari.value = '';
+
+    // Pre-fill if type provided
+    if (prefillType === 'Nakit') elements.paymentNakit.value = currentTotal.toFixed(2);
+    if (prefillType === 'Kredi Kartı') elements.paymentKart.value = currentTotal.toFixed(2);
+    if (prefillType === 'Açık Hesap') elements.paymentCari.value = currentTotal.toFixed(2);
+
     elements.customerSearch.value = '';
     elements.selectedCustomer.value = '';
     elements.selectedCustomerDisplay.textContent = 'Henüz müşteri seçilmedi';
-    elements.customerSelectionDiv.style.display = 'none';
+    elements.customerSelectionDiv.style.display = prefillType === 'Açık Hesap' ? 'block' : 'none';
 
     // Show modal
     elements.paymentModal.style.display = 'block';
@@ -572,16 +585,23 @@ function finalizeSplitPayment() {
  */
 function setupEventListeners() {
     if (elements.btnCash) {
-        elements.btnCash.onclick = () => processPayment('Nakit');
+        elements.btnCash.onclick = () => {
+            console.log('💵 btnCash clicked -> opening modal with Nakit prefill');
+            openPaymentModal('Nakit');
+        };
     }
 
     if (elements.btnCard) {
-        elements.btnCard.onclick = () => processPayment('Kredi Kartı');
+        elements.btnCard.onclick = () => {
+            console.log('💳 btnCard clicked -> opening modal with Kart prefill');
+            openPaymentModal('Kredi Kartı');
+        };
     }
 
     if (elements.btnCredit) {
         elements.btnCredit.onclick = () => {
-            showNotification('Cari hesap özelliği yakında eklenecek!', 'info');
+            console.log('📝 btnCredit clicked -> opening modal with Cari prefill');
+            openPaymentModal('Açık Hesap');
         };
     }
 
@@ -621,9 +641,12 @@ function setupEventListeners() {
         };
     }
 
-    // Modal Events
+    // Modal & Payment Events
     if (elements.btnCredit) {
-        elements.btnCredit.onclick = () => openPaymentModal();
+        elements.btnCredit.onclick = () => {
+            console.log('📝 btnCredit clicked -> opening modal');
+            openPaymentModal();
+        };
     }
 
     if (elements.closePaymentModal) {
