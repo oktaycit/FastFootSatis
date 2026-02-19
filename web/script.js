@@ -512,6 +512,38 @@ function handlePaymentInputFocus(input) {
     }
 }
 
+function balancePaymentInputs(changedInput) {
+    const total = currentTotal;
+    const nakit = parseFloat(elements.paymentNakit.value) || 0;
+    const kart = parseFloat(elements.paymentKart.value) || 0;
+    const cari = parseFloat(elements.paymentCari.value) || 0;
+
+    const currentSum = nakit + kart + cari;
+
+    if (currentSum > total) {
+        let excess = currentSum - total;
+
+        // Diğer alanları azaltarak dengele (Nakit > Kart > Cari sırasıyla, ama değişen alanı atla)
+        const possibleInputs = [
+            { el: elements.paymentNakit, val: nakit },
+            { el: elements.paymentKart, val: kart },
+            { el: elements.paymentCari, val: cari }
+        ];
+
+        // Mevcut alanı listeden çıkar
+        const inputsToAdjust = possibleInputs.filter(item => item.el !== changedInput && item.val > 0);
+
+        for (let item of inputsToAdjust) {
+            if (excess <= 0.001) break;
+            let reduceBy = Math.min(item.val, excess);
+            let newVal = item.val - reduceBy;
+            item.el.value = newVal > 0.001 ? newVal.toFixed(2) : '';
+            excess -= reduceBy;
+        }
+    }
+    updateRemainingAmount();
+}
+
 async function searchCustomers() {
     const query = elements.customerSearch.value.toLowerCase();
     if (query.length < 2) {
@@ -680,15 +712,21 @@ function setupEventListeners() {
     }
 
     if (elements.paymentNakit) {
-        elements.paymentNakit.oninput = () => updateRemainingAmount();
+        elements.paymentNakit.oninput = () => {
+            balancePaymentInputs(elements.paymentNakit);
+        };
         elements.paymentNakit.onfocus = () => handlePaymentInputFocus(elements.paymentNakit);
     }
     if (elements.paymentKart) {
-        elements.paymentKart.oninput = () => updateRemainingAmount();
+        elements.paymentKart.oninput = () => {
+            balancePaymentInputs(elements.paymentKart);
+        };
         elements.paymentKart.onfocus = () => handlePaymentInputFocus(elements.paymentKart);
     }
     if (elements.paymentCari) {
-        elements.paymentCari.oninput = () => updateRemainingAmount();
+        elements.paymentCari.oninput = () => {
+            balancePaymentInputs(elements.paymentCari);
+        };
         elements.paymentCari.onfocus = () => handlePaymentInputFocus(elements.paymentCari);
     }
 
