@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastFootSatış - Gün Sonu Z Raporu</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --surface2: #263347;
+            --border: rgba(255, 255, 255, 0.08);
+            --text: #f1f5f9;
+            --muted: #94a3b8;
+            --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+            --radius: 14px;
+            --amber: #f59e0b;
+            --green: #10b981;
+            --blue: #3b82f6;
+            --purple: #8b5cf6;
+            --red: #ef4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── HEADER ── */
+        .header {
+            background: linear-gradient(135deg, #1e293b, #334155);
+            padding: 14px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .back-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 7px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-family: 'Inter', sans-serif;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .page-title {
+            font-size: 20px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .date-selector {
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 7px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+        }
+
+        .date-selector:focus {
+            outline: none;
+            border-color: var(--amber);
+        }
+
+        .refresh-btn {
+            background: linear-gradient(135deg, var(--amber), #d97706);
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 700;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s;
+        }
+
+        .refresh-btn:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .company-badge {
+            background: rgba(245, 158, 11, 0.15);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #fbbf24;
+        }
+
+        /* ── MAIN ── */
+        .main {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            overflow-y: auto;
+        }
+
+        /* ── STAT CARDS ── */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+        }
+
+        .stat-card.total::before {
+            background: linear-gradient(90deg, var(--amber), #d97706);
+        }
+
+        .stat-card.nakit::before {
+            background: linear-gradient(90deg, var(--green), #059669);
+        }
+
+        .stat-card.kart::before {
+            background: linear-gradient(90deg, var(--blue), #2563eb);
+        }
+
+        .stat-card.count::before {
+            background: linear-gradient(90deg, var(--purple), #7c3aed);
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 800;
+            margin-top: 8px;
+            line-height: 1;
+        }
+
+        .stat-card.total .stat-value {
+            color: #fbbf24;
+        }
+
+        .stat-card.nakit .stat-value {
+            color: #6ee7b7;
+        }
+
+        .stat-card.kart .stat-value {
+            color: #93c5fd;
+        }
+
+        .stat-card.count .stat-value {
+            color: #c4b5fd;
+        }
+
+        .stat-sub {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 6px;
+        }
+
+        /* ── PANELS ── */
+        .panels {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 14px;
+            flex: 1;
+        }
+
+        .panel-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--surface2);
+        }
+
+        .panel-header h3 {
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .panel-header .badge {
+            background: rgba(245, 158, 11, 0.15);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            color: #fbbf24;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 3px 10px;
+            border-radius: 20px;
+        }
+
+        /* ── ÖZET TABLO ── */
+        .ozet-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .ozet-table th {
+            padding: 10px 16px;
+            text-align: left;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+            color: var(--muted);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .ozet-table td {
+            padding: 12px 16px;
+            font-size: 13px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .ozet-table tr:hover td {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .ozet-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Ödeme tipi badge'leri */
+        .odeme-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .odeme-nakit {
+            background: rgba(16, 185, 129, 0.15);
+            color: #6ee7b7;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .odeme-kart {
+            background: rgba(59, 130, 246, 0.15);
+            color: #93c5fd;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .odeme-acik {
+            background: rgba(139, 92, 246, 0.15);
+            color: #c4b5fd;
+            border: 1px solid rgba(139, 92, 246, 0.3);
+        }
+
+        .odeme-diger {
+            background: rgba(148, 163, 184, 0.15);
+            color: var(--muted);
+            border: 1px solid var(--border);
+        }
+
+        .tutar-cell {
+            font-weight: 700;
+            color: #fbbf24;
+        }
+
+        /* Toplam satır */
+        .ozet-total td {
+            background: rgba(245, 158, 11, 0.07);
+            font-weight: 700;
+            border-top: 2px solid rgba(245, 158, 11, 0.3) !important;
+        }
+
+        /* ── DETAY TABLO ── */
+        .detay-wrapper {
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .detay-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .detay-table th {
+            position: sticky;
+            top: 0;
+            z-index: 5;
+            background: var(--surface2);
+            padding: 11px 16px;
+            text-align: left;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+            color: var(--muted);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .detay-table td {
+            padding: 11px 16px;
+            font-size: 13px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .detay-table tr:hover td {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        /* ── BOŞ DURUM ── */
+        .empty-state {
+            padding: 60px 20px;
+            text-align: center;
+            color: var(--muted);
+        }
+
+        .empty-icon {
+            font-size: 56px;
+            opacity: 0.25;
+            margin-bottom: 12px;
+        }
+
+        .empty-state p {
+            font-size: 15px;
+            font-weight: 500;
+        }
+
+        .empty-state span {
+            font-size: 13px;
+            display: block;
+            margin-top: 6px;
+        }
+
+        /* ── FOOTER GİZLİ BİLGİ ── */
+        .secret-footer {
+            text-align: center;
+            padding: 10px;
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.1);
+            letter-spacing: 0.5px;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+
+        @media (max-width: 900px) {
+            .stat-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .panels {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- HEADER -->
+    <header class="header">
+        <div class="header-left">
+            <a href="/" class="back-btn">← Ana Sayfa</a>
+            <h1 class="page-title">🗂 Gün Sonu — Z Raporu</h1>
+        </div>
+        <div class="header-right">
+            <input type="date" class="date-selector" id="dateSelector">
+            <button class="refresh-btn" onclick="loadAll()">🔄 Yenile</button>
+            <div class="company-badge" id="companyBadge">RESTORAN</div>
+        </div>
+    </header>
+
+    <!-- MAIN -->
+    <div class="main">
+
+        <!-- ÖZET KARTLAR -->
+        <div class="stat-grid">
+            <div class="stat-card total">
+                <div class="stat-label">Toplam Ciro</div>
+                <div class="stat-value" id="statCiro">0,00 TL</div>
+                <div class="stat-sub" id="statDate">—</div>
+            </div>
+            <div class="stat-card nakit">
+                <div class="stat-label">Nakit</div>
+                <div class="stat-value" id="statNakit">0,00 TL</div>
+                <div class="stat-sub" id="statNakitAdet">0 işlem</div>
+            </div>
+            <div class="stat-card kart">
+                <div class="stat-label">Kart</div>
+                <div class="stat-value" id="statKart">0,00 TL</div>
+                <div class="stat-sub" id="statKartAdet">0 işlem</div>
+            </div>
+            <div class="stat-card count">
+                <div class="stat-label">Toplam Kalem</div>
+                <div class="stat-value" id="statKalem">0</div>
+                <div class="stat-sub" id="statOtherPayments"></div>
+            </div>
+        </div>
+
+        <!-- PANELLER -->
+        <div class="panels">
+
+            <!-- Sol: Ödeme dağılımı özet -->
+            <div class="panel-card">
+                <div class="panel-header">
+                    <h3>💳 Ödeme Dağılımı</h3>
+                    <span class="badge" id="ozetSayi">0 grup</span>
+                </div>
+                <div style="overflow-y:auto; flex:1;">
+                    <table class="ozet-table">
+                        <thead>
+                            <tr>
+                                <th>Ödeme</th>
+                                <th>Kalem</th>
+                                <th>Tutar</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ozetBody">
+                            <tr>
+                                <td colspan="3" class="empty-state"
+                                    style="padding:30px; text-align:center; color:var(--muted);">Yükleniyor...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Sağ: Satış detayları -->
+            <div class="panel-card">
+                <div class="panel-header">
+                    <h3>🧾 Satış Kalemleri</h3>
+                    <span class="badge" id="detaySayi">0 kayıt</span>
+                </div>
+                <div class="detay-wrapper">
+                    <table class="detay-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Ürün</th>
+                                <th>Adet</th>
+                                <th>Fiyat</th>
+                                <th>Toplam</th>
+                                <th>Ödeme</th>
+                                <th>Saat</th>
+                            </tr>
+                        </thead>
+                        <tbody id="detayBody">
+                            <tr>
+                                <td colspan="7" class="empty-state"
+                                    style="padding:30px; text-align:center; color:var(--muted);">Yükleniyor...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gizli bilgi -->
+    <div class="secret-footer">Ctrl+Shift+Z • Gizli Erişim</div>
+
+    <script>
+        // Bugünü seç
+        const ds = document.getElementById('dateSelector');
+        ds.value = new Date().toISOString().split('T')[0];
+        ds.addEventListener('change', loadAll);
+
+        async function loadAll() {
+            await Promise.all([loadOzet(), loadDetay()]);
+        }
+
+        async function loadSystemInfo() {
+            try {
+                const r = await fetch('/api/system/info');
+                const d = await r.json();
+                document.getElementById('companyBadge').textContent = d.company_name || 'RESTORAN';
+            } catch (e) { }
+        }
+
+        async function loadOzet() {
+            const tarih = document.getElementById('dateSelector').value;
+            document.getElementById('statDate').textContent = formatTarihGoster(tarih);
+
+            try {
+                const r = await fetch(`/api/gunsonu/ozet?tarih=${tarih}`);
+                const d = await r.json();
+                if (!d.success) { showOzetError(d.error); return; }
+
+                const ozet = d.ozet || [];
+                const genel = d.genel_toplam || 0;
+
+                // Kartları güncelle
+                document.getElementById('statCiro').textContent = formatTL(genel);
+
+                let nakit = 0, nakitAdet = 0, kart = 0, kartAdet = 0;
+                ozet.forEach(o => {
+                    const tipler = (o.odeme || '').toLowerCase();
+                    if (tipler.includes('nakit')) { nakit += o.toplam; nakitAdet += o.adet; }
+                    else if (tipler.includes('kart') || tipler.includes('kredi')) { kart += o.toplam; kartAdet += o.adet; }
+                });
+                document.getElementById('statNakit').textContent = formatTL(nakit);
+                document.getElementById('statNakitAdet').textContent = `${nakitAdet} işlem`;
+                document.getElementById('statKart').textContent = formatTL(kart);
+                document.getElementById('statKartAdet').textContent = `${kartAdet} işlem`;
+
+                const digerToplam = genel - nakit - kart;
+                document.getElementById('statOtherPayments').textContent =
+                    digerToplam > 0.01 ? `+ ${formatTL(digerToplam)} diğer` : '';
+
+                // Özet tablosu
+                document.getElementById('ozetSayi').textContent = `${ozet.length} grup`;
+
+                if (!ozet.length) {
+                    document.getElementById('ozetBody').innerHTML =
+                        `<tr><td colspan="3"><div class="empty-state"><div class="empty-icon">📭</div><p>Satış yok</p><span>${tarih} tarihinde kayıt bulunamadı</span></div></td></tr>`;
+                    return;
+                }
+
+                // Grupla: ödeme tipine göre topla
+                const grouped = {};
+                ozet.forEach(o => {
+                    const key = o.odeme || 'Diğer';
+                    if (!grouped[key]) grouped[key] = { toplam: 0, adet: 0 };
+                    grouped[key].toplam += o.toplam;
+                    grouped[key].adet += o.adet;
+                });
+
+                let rows = '';
+                let genelAdet = 0;
+                Object.entries(grouped).forEach(([odeme, v]) => {
+                    genelAdet += v.adet;
+                    rows += `<tr>
+                    <td><span class="odeme-badge ${getOdemeCls(odeme)}">${getOdemeEmoji(odeme)} ${odeme}</span></td>
+                    <td>${v.adet}</td>
+                    <td class="tutar-cell">${formatTL(v.toplam)}</td>
+                </tr>`;
+                });
+                // Toplam satırı
+                rows += `<tr class="ozet-total">
+                <td><strong>TOPLAM</strong></td>
+                <td><strong>${genelAdet}</strong></td>
+                <td class="tutar-cell"><strong>${formatTL(genel)}</strong></td>
+            </tr>`;
+                document.getElementById('ozetBody').innerHTML = rows;
+
+            } catch (e) {
+                showOzetError('Bağlantı hatası');
+            }
+        }
+
+        async function loadDetay() {
+            const tarih = document.getElementById('dateSelector').value;
+            try {
+                const r = await fetch(`/api/gunsonu/detay?tarih=${tarih}`);
+                const d = await r.json();
+                if (!d.success) { showDetayError(d.error); return; }
+
+                const detay = d.detay || [];
+                document.getElementById('detaySayi').textContent = `${detay.length} kayıt`;
+                document.getElementById('statKalem').textContent = detay.length;
+
+                if (!detay.length) {
+                    document.getElementById('detayBody').innerHTML =
+                        `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">🧾</div><p>Satış kaydı yok</p><span>${tarih} tarihinde satış bulunamadı</span></div></td></tr>`;
+                    return;
+                }
+
+                document.getElementById('detayBody').innerHTML = detay.map((s, i) => {
+                    const toplam = s.adet * s.fiyat;
+                    const saat = formatSaat(s.tarih_saat);
+                    const isIkram = (s.tip || '') === 'ikram';
+                    return `<tr>
+                    <td style="color:var(--muted);font-size:12px;">${i + 1}</td>
+                    <td style="font-weight:600;">${escHtml(s.urun)}${isIkram ? ' <span style="color:#fbbf24;font-size:11px;">(İkram)</span>' : ''}</td>
+                    <td style="text-align:center;">${s.adet}</td>
+                    <td>${formatTL(s.fiyat)}</td>
+                    <td class="tutar-cell">${formatTL(toplam)}</td>
+                    <td><span class="odeme-badge ${getOdemeCls(s.odeme)}">${getOdemeEmoji(s.odeme)} ${escHtml(s.odeme)}</span></td>
+                    <td style="color:var(--muted);font-size:12px;font-family:monospace;">${saat}</td>
+                </tr>`;
+                }).join('');
+
+            } catch (e) {
+                showDetayError('Bağlantı hatası');
+            }
+        }
+
+        function showOzetError(msg) {
+            document.getElementById('ozetBody').innerHTML =
+                `<tr><td colspan="3" style="padding:20px;text-align:center;color:#fca5a5;">⚠️ ${escHtml(msg)}</td></tr>`;
+        }
+        function showDetayError(msg) {
+            document.getElementById('detayBody').innerHTML =
+                `<tr><td colspan="7" style="padding:20px;text-align:center;color:#fca5a5;">⚠️ ${escHtml(msg)}</td></tr>`;
+        }
+
+        // ── Yardımcılar ──
+        function formatTL(n) {
+            return Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TL';
+        }
+        function formatTarihGoster(str) {
+            try {
+                const [y, m, d] = str.split('-');
+                return `${d}.${m}.${y}`;
+            } catch { return str; }
+        }
+        function formatSaat(str) {
+            if (!str) return '-';
+            try {
+                const d = new Date(str);
+                return d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            } catch { return str.split('T')[1]?.substring(0, 8) || str; }
+        }
+        function getOdemeCls(odeme) {
+            const o = (odeme || '').toLowerCase();
+            if (o.includes('nakit')) return 'odeme-nakit';
+            if (o.includes('kart') || o.includes('kredi')) return 'odeme-kart';
+            if (o.includes('açık') || o.includes('acik') || o.includes('cari')) return 'odeme-acik';
+            return 'odeme-diger';
+        }
+        function getOdemeEmoji(odeme) {
+            const o = (odeme || '').toLowerCase();
+            if (o.includes('nakit')) return '💵';
+            if (o.includes('kart') || o.includes('kredi')) return '💳';
+            if (o.includes('açık') || o.includes('acik') || o.includes('cari')) return '📝';
+            return '💰';
+        }
+        function escHtml(s) {
+            return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        // Init
+        loadSystemInfo();
+        loadAll();
+    </script>
+</body>
+
+</html>

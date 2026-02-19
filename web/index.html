@@ -99,8 +99,9 @@
                 </div>
 
                 <!-- Management Buttons -->
-                <button class="btn btn-secondary" id="btnCari">💰 CARİ YÖNETİMİ</button>
-                <button class="btn btn-secondary" id="btnReports">📊 GÜN SONU PDF</button>
+                <a href="/cari" style="text-decoration:none;">
+                    <button class="btn btn-secondary" id="btnCari">💰 CARİ YÖNETİMİ</button>
+                </a>
                 <a href="/settings" style="text-decoration:none;">
                     <button class="btn btn-secondary" id="btnSettings">⚙️ AYARLAR</button>
                 </a>
@@ -122,6 +123,15 @@
 
     <!-- Socket.IO Library (CDN) -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <!-- Gün Sonu kısayol: Ctrl+Shift+Z -->
+    <script>
+        document.addEventListener('keydown', function (e) {
+            if (e.ctrlKey && e.shiftKey && (e.key === 'Z' || e.key === 'z')) {
+                e.preventDefault();
+                window.location.href = '/gunsonu';
+            }
+        });
+    </script>
     <!-- Main Script -->
     <script src="script.js"></script>
 </body>

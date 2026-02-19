@@ -1,0 +1,1073 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastFootSatış - Cari İşlemler</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #1e293b;
+            --secondary: #334155;
+            --accent: #6366f1;
+            --accent2: #8b5cf6;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --surface2: #263347;
+            --border: rgba(255, 255, 255, 0.08);
+            --text: #f1f5f9;
+            --muted: #94a3b8;
+            --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+            --radius: 14px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── HEADER ── */
+        .header {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            padding: 16px 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+            box-shadow: var(--shadow);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .back-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .page-title {
+            font-size: 22px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #a5b4fc, #c4b5fd);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .company-badge {
+            background: rgba(99, 102, 241, 0.2);
+            border: 1px solid rgba(99, 102, 241, 0.4);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #a5b4fc;
+        }
+
+        /* ── MAIN ── */
+        .main {
+            display: flex;
+            flex: 1;
+            gap: 16px;
+            padding: 20px;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        /* ── LEFT PANEL ── */
+        .left-panel {
+            width: 340px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .panel-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+
+        .panel-header {
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            padding: 14px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .panel-header h2 {
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+
+        .add-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s;
+        }
+
+        .add-btn:hover {
+            background: rgba(255, 255, 255, 0.35);
+        }
+
+        .search-box {
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface2);
+        }
+
+        .search-box input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 9px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .search-box input::placeholder {
+            color: var(--muted);
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .cari-list {
+            max-height: calc(100vh - 280px);
+            overflow-y: auto;
+        }
+
+        .cari-item {
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .cari-item:hover {
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .cari-item.active {
+            background: rgba(99, 102, 241, 0.2);
+            border-left: 3px solid var(--accent);
+        }
+
+        .cari-item-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .cari-item-name {
+            font-weight: 600;
+            font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .cari-item-date {
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+
+        .bakiye-badge {
+            font-size: 13px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 20px;
+            white-space: nowrap;
+        }
+
+        .bakiye-borc {
+            background: rgba(239, 68, 68, 0.15);
+            color: #fca5a5;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .bakiye-alacak {
+            background: rgba(16, 185, 129, 0.15);
+            color: #6ee7b7;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .bakiye-sifir {
+            background: rgba(148, 163, 184, 0.15);
+            color: var(--muted);
+            border: 1px solid var(--border);
+        }
+
+        .empty-list {
+            padding: 48px 20px;
+            text-align: center;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        /* ── RIGHT PANEL ── */
+        .right-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            min-width: 0;
+        }
+
+        /* Özet Kartlar */
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 18px 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+        }
+
+        .stat-card.accent::before {
+            background: linear-gradient(90deg, var(--accent), var(--accent2));
+        }
+
+        .stat-card.success::before {
+            background: linear-gradient(90deg, var(--success), #34d399);
+        }
+
+        .stat-card.danger::before {
+            background: linear-gradient(90deg, var(--danger), #f87171);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--muted);
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-value {
+            font-size: 26px;
+            font-weight: 800;
+            margin-top: 6px;
+        }
+
+        .stat-card.accent .stat-value {
+            color: #a5b4fc;
+        }
+
+        .stat-card.success .stat-value {
+            color: #6ee7b7;
+        }
+
+        .stat-card.danger .stat-value {
+            color: #fca5a5;
+        }
+
+        /* Detay Paneli */
+        .detail-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        .detail-header {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .detail-title {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .detail-bakiye {
+            font-size: 22px;
+            font-weight: 800;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .btn-action {
+            padding: 9px 18px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 700;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s;
+        }
+
+        .btn-borc {
+            background: linear-gradient(135deg, var(--danger), #dc2626);
+            color: white;
+        }
+
+        .btn-odeme {
+            background: linear-gradient(135deg, var(--success), #059669);
+            color: white;
+        }
+
+        .btn-sil {
+            background: rgba(239, 68, 68, 0.15);
+            color: #fca5a5;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-action:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn-action:active {
+            transform: translateY(0);
+        }
+
+        .btn-action:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Hareketler Tablosu */
+        .table-wrapper {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: var(--surface2);
+        }
+
+        thead th {
+            padding: 12px 18px;
+            text-align: left;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--muted);
+            border-bottom: 1px solid var(--border);
+        }
+
+        tbody tr {
+            border-bottom: 1px solid var(--border);
+            transition: background 0.15s;
+        }
+
+        tbody tr:hover {
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        tbody td {
+            padding: 13px 18px;
+            font-size: 14px;
+        }
+
+        .islem-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .islem-borc {
+            background: rgba(239, 68, 68, 0.15);
+            color: #fca5a5;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
+        .islem-odeme {
+            background: rgba(16, 185, 129, 0.15);
+            color: #6ee7b7;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .tutar-borc {
+            color: #fca5a5;
+            font-weight: 700;
+        }
+
+        .tutar-odeme {
+            color: #6ee7b7;
+            font-weight: 700;
+        }
+
+        /* Placeholder */
+        .placeholder {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            color: var(--muted);
+        }
+
+        .placeholder-icon {
+            font-size: 64px;
+            opacity: 0.3;
+        }
+
+        .placeholder p {
+            font-size: 16px;
+            font-weight: 500;
+        }
+
+        .placeholder span {
+            font-size: 13px;
+        }
+
+        /* ── MODALS ── */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 28px;
+            width: 420px;
+            max-width: 95vw;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+            animation: slideUp 0.25s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal h3 {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--accent);
+            background: rgba(99, 102, 241, 0.08);
+        }
+
+        .form-group select option {
+            background: var(--surface);
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .btn-primary {
+            flex: 1;
+            padding: 11px;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 700;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .btn-cancel {
+            padding: 11px 20px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--border);
+            color: var(--muted);
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-cancel:hover {
+            background: rgba(255, 255, 255, 0.14);
+            color: var(--text);
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            z-index: 9999;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s;
+            max-width: 320px;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .toast.success {
+            background: #065f46;
+            color: #6ee7b7;
+            border: 1px solid #10b981;
+        }
+
+        .toast.error {
+            background: #7f1d1d;
+            color: #fca5a5;
+            border: 1px solid #ef4444;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.12);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.22);
+        }
+
+        @media (max-width: 900px) {
+            .main {
+                flex-direction: column;
+                overflow-y: auto;
+            }
+
+            .left-panel {
+                width: 100%;
+            }
+
+            .cari-list {
+                max-height: 280px;
+            }
+
+            .summary-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- HEADER -->
+    <header class="header">
+        <div class="header-left">
+            <a href="/" class="back-btn">← Ana Sayfa</a>
+            <h1 class="page-title">💰 Cari İşlemler</h1>
+        </div>
+        <div class="company-badge" id="companyBadge">RESTORAN</div>
+    </header>
+
+    <!-- MAIN -->
+    <div class="main">
+
+        <!-- SOL: Cari Listesi -->
+        <div class="left-panel">
+            <div class="panel-card">
+                <div class="panel-header">
+                    <h2>👥 Müşteri Listesi</h2>
+                    <button class="add-btn" onclick="showAddModal()">+ Yeni</button>
+                </div>
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="🔍 Müşteri ara..." oninput="filterList()">
+                </div>
+                <div class="cari-list" id="cariList">
+                    <div class="empty-list">Yükleniyor...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SAĞ: Detay -->
+        <div class="right-panel">
+
+            <!-- Özet Kartlar -->
+            <div class="summary-grid" id="summaryGrid">
+                <div class="stat-card accent">
+                    <div class="stat-label">Toplam Müşteri</div>
+                    <div class="stat-value" id="statTotal">-</div>
+                </div>
+                <div class="stat-card danger">
+                    <div class="stat-label">Toplam Borç</div>
+                    <div class="stat-value" id="statBorc">-</div>
+                </div>
+                <div class="stat-card success">
+                    <div class="stat-label">Tahsil Edilecek</div>
+                    <div class="stat-value" id="statTahsil">-</div>
+                </div>
+            </div>
+
+            <!-- Hesap Detayı -->
+            <div class="detail-card" id="detailCard">
+                <!-- Placeholder -->
+                <div class="placeholder" id="placeholder">
+                    <div class="placeholder-icon">💳</div>
+                    <p>Müşteri Seçin</p>
+                    <span>Soldan bir müşteri seçerek hesap detaylarını görüntüleyin</span>
+                </div>
+
+                <!-- Detay İçeriği (gizli) -->
+                <div id="detailContent"
+                    style="display:none; flex:1; display:none; flex-direction:column; min-height:0;">
+                    <div class="detail-header">
+                        <div>
+                            <div class="detail-title" id="detailName">-</div>
+                            <div class="detail-bakiye" id="detailBakiye">0.00 TL</div>
+                        </div>
+                        <div class="action-buttons">
+                            <button class="btn-action btn-borc" onclick="showIslemModal('borc')">📌 Borçlandır</button>
+                            <button class="btn-action btn-odeme" onclick="showIslemModal('odeme')">✅ Ödeme Al</button>
+                            <button class="btn-action btn-sil" onclick="deleteHesap()">🗑 Sil</button>
+                        </div>
+                    </div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Tarih & Saat</th>
+                                    <th>İşlem</th>
+                                    <th>Tutar</th>
+                                </tr>
+                            </thead>
+                            <tbody id="hareketlerBody">
+                            </tbody>
+                        </table>
+                        <div class="empty-list" id="hareketEmpty" style="display:none;">Henüz işlem yok</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Yeni Müşteri -->
+    <div class="modal-overlay" id="addModal">
+        <div class="modal">
+            <h3>👤 Yeni Müşteri Ekle</h3>
+            <div class="form-group">
+                <label>Ad Soyad / Firma</label>
+                <input type="text" id="newCariIsim" placeholder="Örn: Ahmet Yılmaz" autocomplete="off">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeModal('addModal')">İptal</button>
+                <button class="btn-primary" onclick="addHesap()">Ekle</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Yeni İşlem -->
+    <div class="modal-overlay" id="islemModal">
+        <div class="modal">
+            <h3 id="islemModalTitle">İşlem Ekle</h3>
+            <div class="form-group">
+                <label>İşlem Türü</label>
+                <select id="islemTuru">
+                    <option value="borc">📌 Borçlandır</option>
+                    <option value="odeme">✅ Ödeme Al</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Tutar (TL)</label>
+                <input type="number" id="islemTutar" placeholder="0.00" min="0.01" step="0.01">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeModal('islemModal')">İptal</button>
+                <button class="btn-primary" onclick="submitIslem()">Kaydet</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        let allHesaplar = [];
+        let selectedCari = null;
+
+        // ── Sistem Bilgisi ──
+        async function loadSystemInfo() {
+            try {
+                const r = await fetch('/api/system/info');
+                const d = await r.json();
+                document.getElementById('companyBadge').textContent = d.company_name || 'RESTORAN';
+            } catch (e) { }
+        }
+
+        // ── Hesapları Yükle ──
+        async function loadHesaplar() {
+            try {
+                const r = await fetch('/api/cari/hesaplar');
+                const d = await r.json();
+                if (!d.success) { showToast(d.error || 'Hata', 'error'); return; }
+                allHesaplar = d.hesaplar || [];
+                renderSummary();
+                renderList(allHesaplar);
+            } catch (e) {
+                showToast('Sunucu bağlantı hatası', 'error');
+            }
+        }
+
+        function renderSummary() {
+            document.getElementById('statTotal').textContent = allHesaplar.length;
+            const toplamBorc = allHesaplar.filter(h => h.bakiye > 0).reduce((s, h) => s + h.bakiye, 0);
+            const toplamAlacak = allHesaplar.filter(h => h.bakiye < 0).reduce((s, h) => s + Math.abs(h.bakiye), 0);
+            document.getElementById('statBorc').textContent = formatTL(toplamBorc);
+            document.getElementById('statTahsil').textContent = formatTL(toplamAlacak);
+        }
+
+        function renderList(hesaplar) {
+            const el = document.getElementById('cariList');
+            if (!hesaplar.length) {
+                el.innerHTML = '<div class="empty-list">Henüz müşteri yok</div>';
+                return;
+            }
+            el.innerHTML = hesaplar.map(h => {
+                const b = h.bakiye;
+                let badgeCls = 'bakiye-sifir', badgeTxt = '0.00 TL';
+                if (b > 0) { badgeCls = 'bakiye-borc'; badgeTxt = `📌 ${formatTL(b)}`; }
+                if (b < 0) { badgeCls = 'bakiye-alacak'; badgeTxt = `✅ ${formatTL(Math.abs(b))}`; }
+                const active = selectedCari === h.cari_isim ? 'active' : '';
+                const tarih = h.olusturma_tarihi ? h.olusturma_tarihi.split('T')[0] : '';
+                return `
+                <div class="cari-item ${active}" onclick="selectCari('${escHtml(h.cari_isim)}')">
+                    <div class="cari-item-info">
+                        <div class="cari-item-name">${escHtml(h.cari_isim)}</div>
+                        ${tarih ? `<div class="cari-item-date">📅 ${tarih}</div>` : ''}
+                    </div>
+                    <span class="bakiye-badge ${badgeCls}">${badgeTxt}</span>
+                </div>`;
+            }).join('');
+        }
+
+        function filterList() {
+            const q = document.getElementById('searchInput').value.toLowerCase();
+            renderList(allHesaplar.filter(h => h.cari_isim.toLowerCase().includes(q)));
+        }
+
+        // ── Hesap Seç ──
+        async function selectCari(isim) {
+            selectedCari = isim;
+            renderList(allHesaplar.filter(h => {
+                const q = document.getElementById('searchInput').value.toLowerCase();
+                return h.cari_isim.toLowerCase().includes(q);
+            }));
+
+            try {
+                const r = await fetch(`/api/cari/hareketler/${encodeURIComponent(isim)}`);
+                const d = await r.json();
+                if (!d.success) { showToast(d.error, 'error'); return; }
+
+                document.getElementById('placeholder').style.display = 'none';
+                const dc = document.getElementById('detailContent');
+                dc.style.display = 'flex';
+
+                document.getElementById('detailName').textContent = isim;
+                const b = d.bakiye;
+                const bEl = document.getElementById('detailBakiye');
+                if (b > 0) { bEl.textContent = `📌 ${formatTL(b)} BORÇLU`; bEl.style.color = '#fca5a5'; }
+                else if (b < 0) { bEl.textContent = `✅ ${formatTL(Math.abs(b))} ALACAKLI`; bEl.style.color = '#6ee7b7'; }
+                else { bEl.textContent = '0.00 TL'; bEl.style.color = '#94a3b8'; }
+
+                const tbody = document.getElementById('hareketlerBody');
+                const emptyEl = document.getElementById('hareketEmpty');
+
+                if (!d.hareketler.length) {
+                    tbody.innerHTML = '';
+                    emptyEl.style.display = 'block';
+                } else {
+                    emptyEl.style.display = 'none';
+                    tbody.innerHTML = d.hareketler.map((h, i) => {
+                        const isBorc = h.islem === 'borc';
+                        const tutarVal = Math.abs(h.tutar);
+                        const tarihStr = formatTarih(h.tarih);
+                        return `
+                        <tr>
+                            <td style="color:var(--muted);font-size:12px;">${i + 1}</td>
+                            <td style="color:var(--muted);font-size:13px;">${tarihStr}</td>
+                            <td><span class="islem-chip ${isBorc ? 'islem-borc' : 'islem-odeme'}">${isBorc ? '📌 Borç' : '✅ Ödeme'}</span></td>
+                            <td class="${isBorc ? 'tutar-borc' : 'tutar-odeme'}">${isBorc ? '+' : '-'}${formatTL(tutarVal)}</td>
+                        </tr>`;
+                    }).join('');
+                }
+            } catch (e) {
+                showToast('Hareketler yüklenemedi', 'error');
+            }
+        }
+
+        // ── Yeni Müşteri ──
+        function showAddModal() {
+            document.getElementById('newCariIsim').value = '';
+            document.getElementById('addModal').classList.add('show');
+            setTimeout(() => document.getElementById('newCariIsim').focus(), 100);
+        }
+
+        async function addHesap() {
+            const isim = document.getElementById('newCariIsim').value.trim();
+            if (!isim) { showToast('Müşteri adı boş olamaz', 'error'); return; }
+            try {
+                const r = await fetch('/api/cari/hesap', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cari_isim: isim })
+                });
+                const d = await r.json();
+                if (d.success) {
+                    showToast(`"${isim}" eklendi`, 'success');
+                    closeModal('addModal');
+                    await loadHesaplar();
+                } else {
+                    showToast(d.error || 'Hata', 'error');
+                }
+            } catch (e) { showToast('Bağlantı hatası', 'error'); }
+        }
+
+        // ── Yeni İşlem ──
+        function showIslemModal(tip) {
+            if (!selectedCari) return;
+            document.getElementById('islemTuru').value = tip;
+            document.getElementById('islemTutar').value = '';
+            document.getElementById('islemModalTitle').textContent =
+                tip === 'borc' ? '📌 Borçlandır - ' + selectedCari : '✅ Ödeme Al - ' + selectedCari;
+            document.getElementById('islemModal').classList.add('show');
+            setTimeout(() => document.getElementById('islemTutar').focus(), 100);
+        }
+
+        async function submitIslem() {
+            const islem = document.getElementById('islemTuru').value;
+            const tutar = parseFloat(document.getElementById('islemTutar').value);
+            if (!tutar || tutar <= 0) { showToast('Geçerli bir tutar girin', 'error'); return; }
+            try {
+                const r = await fetch('/api/cari/islem', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cari_isim: selectedCari, islem, tutar })
+                });
+                const d = await r.json();
+                if (d.success) {
+                    showToast(`İşlem kaydedildi`, 'success');
+                    closeModal('islemModal');
+                    await loadHesaplar();
+                    await selectCari(selectedCari);
+                } else {
+                    showToast(d.error || 'Hata', 'error');
+                }
+            } catch (e) { showToast('Bağlantı hatası', 'error'); }
+        }
+
+        // ── Hesap Sil ──
+        async function deleteHesap() {
+            if (!selectedCari) return;
+            if (!confirm(`"${selectedCari}" hesabını ve tüm hareketlerini silmek istediğinizden emin misiniz?`)) return;
+            try {
+                const r = await fetch(`/api/cari/hesap/${encodeURIComponent(selectedCari)}`, { method: 'DELETE' });
+                const d = await r.json();
+                if (d.success) {
+                    showToast(`"${selectedCari}" silindi`, 'success');
+                    selectedCari = null;
+                    document.getElementById('detailContent').style.display = 'none';
+                    document.getElementById('placeholder').style.display = 'flex';
+                    await loadHesaplar();
+                } else {
+                    showToast(d.error || 'Hata', 'error');
+                }
+            } catch (e) { showToast('Bağlantı hatası', 'error'); }
+        }
+
+        // ── Yardımcılar ──
+        function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+        function formatTL(n) { return Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TL'; }
+
+        function formatTarih(str) {
+            if (!str) return '-';
+            try {
+                const d = new Date(str);
+                return d.toLocaleDateString('tr-TR') + ' ' + d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+            } catch { return str; }
+        }
+
+        function escHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+        function showToast(msg, type = 'success') {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.className = `toast ${type} show`;
+            setTimeout(() => { t.className = 'toast'; }, 3000);
+        }
+
+        // Modal dışına tıklayınca kapat
+        document.querySelectorAll('.modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('show'); });
+        });
+
+        // Enter ile form gönder
+        document.getElementById('newCariIsim').addEventListener('keydown', e => { if (e.key === 'Enter') addHesap(); });
+        document.getElementById('islemTutar').addEventListener('keydown', e => { if (e.key === 'Enter') submitIslem(); });
+
+        // Init
+        loadSystemInfo();
+        loadHesaplar();
+    </script>
+</body>
+
+</html>

@@ -310,6 +310,16 @@ def settings_page():
     """Ayarlar sayfası"""
     return app.send_static_file('settings.html')
 
+@app.route('/cari')
+def cari_page():
+    """Cari işlemler sayfası"""
+    return app.send_static_file('cari.html')
+
+@app.route('/gunsonu')
+def gunsonu_page():
+    """Gün sonu işlemleri sayfası"""
+    return app.send_static_file('gunsonu.html')
+
 @app.route('/api/system/info')
 def system_info():
     """Sistem bilgileri"""
@@ -381,6 +391,170 @@ def save_settings():
 
     logger.info(f"✅ Ayarlar güncellendi: {server.company_name} / Masa:{server.masa_sayisi} Paket:{server.paket_sayisi}")
     return jsonify({'success': True})
+
+# ==================== GÜN SONU API ====================
+
+@app.route('/api/gunsonu/ozet')
+def get_gunsonu_ozet():
+    """Günlük özet rapor"""
+    if not USE_DATABASE:
+        return jsonify({'success': False, 'error': 'Veri tabanı bağlantısı yok'}), 503
+    tarih = request.args.get('tarih', datetime.datetime.now().strftime('%Y-%m-%d'))
+    try:
+        rows = db.get_daily_summary(tarih)
+        result = []
+        toplam = 0.0
+        for r in rows:
+            t = float(r['toplam'])
+            toplam += t
+            result.append({
+                'odeme': r['odeme'],
+                'tip': r['tip'],
+                'toplam': t,
+                'adet': r['adet']
+            })
+        return jsonify({'success': True, 'ozet': result, 'genel_toplam': toplam, 'tarih': tarih})
+    except Exception as e:
+        logger.error(f"Gün sonu özet hatası: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/gunsonu/detay')
+def get_gunsonu_detay():
+    """Günlük detay rapor"""
+    if not USE_DATABASE:
+        return jsonify({'success': False, 'error': 'Veri tabanı bağlantısı yok'}), 503
+    tarih = request.args.get('tarih', datetime.datetime.now().strftime('%Y-%m-%d'))
+    try:
+        rows = db.get_sales_by_date(tarih)
+        result = []
+        for r in rows:
+            result.append({
+                'urun': r['urun'],
+                'adet': r['adet'],
+                'fiyat': float(r['fiyat']),
+                'odeme': r['odeme'],
+                'tip': r.get('tip', 'normal'),
+                'tarih_saat': str(r['tarih_saat']) if r['tarih_saat'] else ''
+            })
+        return jsonify({'success': True, 'detay': result, 'tarih': tarih})
+    except Exception as e:
+        logger.error(f"Gün sonu detay hatası: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# ==================== CARİ İŞLEMLER API ====================
+
+@app.route('/api/cari/hesaplar')
+def get_cari_hesaplar():
+    """Tüm cari hesapları döndür"""
+    if not USE_DATABASE:
+        return jsonify({'success': False, 'error': 'Veri tabanı bağlantısı yok'}), 503
+    try:
+        hesaplar = db.get_all_cari_accounts()
+        result = []
+        for h in hesaplar:
+            result.append({
+                'id': h['id'],
+                'cari_isim': h['cari_isim'],
+                'bakiye': float(h['bakiye']),
+                'olusturma_tarihi': str(h['olusturma_tarihi']) if h['olusturma_tarihi'] else ''
+            })
+        return jsonify({'success': True, 'hesaplar': result})
+    except Exception as e:
+        logger.error(f"Cari hesap listesi hatası: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/cari/hareketler/<cari_isim>')
+def get_cari_hareketler(cari_isim):
+    """Belirli cari hesabın hareketlerini döndür"""
+    if not USE_DATABASE:
+        return jsonify({'success': False, 'error': 'Veri tabanı bağlantısı yok'}), 503
+    try:
+        hareketler = db.get_cari_transactions(cari_isim)
+        bakiye = db.get_cari_balance(cari_isim)
+        result = []
+        for h in hareketler:
+            result.append({
+                'id': h['id'],
+                'islem': h['islem'],
+                'tutar': float(h['tutar']),
+                'tarih': str(h['tarih']) if h['tarih'] else ''
+            })
+        return jsonify({'success': True, 'hareketler': result, 'bakiye': bakiye})
+    except Exception as e:
+        logger.error(f"Cari hareketler hatası: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/cari/islem', methods=['POST'])
+def add_cari_islem():
+    """Yeni cari işlem ekle (borç veya ödeme)"""
+    if not USE_DATABASE:
+        return jsonify({'success': False, 'error': 'Veri tabanı bağlantısı yok'}), 503
+    data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'Geçersiz veri'}), 400
+    
+    cari_isim = data.get('cari_isim', '').strip()
+    islem = data.get('islem', '')  # 'borc' veya 'odeme'
+    tutar = data.get('tutar', 0)
+    
+    if not cari_isim:
+        return jsonify({'success': False, 'error': 'Müşteri adı boş olamaz'}), 400
+    if islem not in ('borc', 'odeme'):
+        return jsonify({'success': False, 'error': 'Geçersiz işlem türü'}), 400
+    try:
+        tutar = float(tutar)
+        if tutar <= 0:
+            return jsonify({'success': False, 'error': 'Tutar sıfırdan büyük olmalı'}), 400
+    except:
+        return jsonify({'success': False, 'error': 'Geçersiz tutar'}), 400
+    
+    # Borç: pozitif, Ödeme: negatif
+    gercek_tutar = tutar if islem == 'borc' else -tutar
+    
+    try:
+        db.save_cari_transaction(cari_isim, islem, gercek_tutar)
+        bakiye = db.get_cari_balance(cari_isim)
+        logger.info(f"💰 Cari işlem: {cari_isim} | {islem} | {tutar:.2f} TL")
+        return jsonify({'success': True, 'bakiye': bakiye})
+    except Exception as e:
+        logger.error(f"Cari işlem hatası: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/cari/hesap', methods=['POST'])
+def add_cari_hesap():
+    """Yeni cari hesap oluştur"""
+    if not USE_DATABASE:
+        return jsonify({'success': False, 'error': 'Veri tabanı bağlantısı yok'}), 503
+    data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'Geçersiz veri'}), 400
+    
+    cari_isim = data.get('cari_isim', '').strip()
+    if not cari_isim:
+        return jsonify({'success': False, 'error': 'Müşteri adı boş olamaz'}), 400
+    
+    try:
+        db.get_or_create_cari(cari_isim)
+        logger.info(f"👤 Yeni cari hesap: {cari_isim}")
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"Cari hesap oluşturma hatası: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/cari/hesap/<cari_isim>', methods=['DELETE'])
+def delete_cari_hesap(cari_isim):
+    """Cari hesabı sil"""
+    if not USE_DATABASE:
+        return jsonify({'success': False, 'error': 'Veri tabanı bağlantısı yok'}), 503
+    try:
+        db.delete_cari_account(cari_isim)
+        logger.info(f"🗑️ Cari hesap silindi: {cari_isim}")
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"Cari hesap silme hatası: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# ==================== MENÜ ====================
 
 @app.route('/api/menu')
 def get_menu():
