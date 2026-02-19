@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastFootSatış - Ayarlar</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        /* ── Ayarlar sayfasına özel stiller ── */
+        body {
+            overflow: auto;
+        }
+
+        .settings-wrapper {
+            max-width: 960px;
+            margin: 30px auto;
+            padding: 0 20px 40px;
+        }
+
+        .settings-title {
+            font-size: 26px;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Kartlar */
+        .settings-card {
+            background: #fff;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            margin-bottom: 22px;
+            overflow: hidden;
+            animation: fadeIn 0.35s ease;
+        }
+
+        .card-header {
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+            color: #fff;
+            padding: 14px 22px;
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-body {
+            padding: 22px;
+        }
+
+        /* Form elemanları */
+        .form-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 16px;
+        }
+
+        .form-group {
+            flex: 1;
+            min-width: 200px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-group label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .form-group input[type="text"],
+        .form-group input[type="number"],
+        .form-group input[type="password"] {
+            padding: 11px 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: var(--radius-md);
+            font-size: 15px;
+            color: var(--text-primary);
+            transition: border-color 0.25s;
+            outline: none;
+            background: #f8f9fa;
+        }
+
+        .form-group input:focus {
+            border-color: var(--accent-color);
+            background: #fff;
+        }
+
+        /* Toggle switch */
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .toggle-row:last-child {
+            border-bottom: none;
+        }
+
+        .toggle-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .toggle-desc {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 52px;
+            height: 28px;
+            flex-shrink: 0;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            inset: 0;
+            background: #ccc;
+            border-radius: 28px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .slider::before {
+            content: '';
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            left: 4px;
+            top: 4px;
+            background: #fff;
+            border-radius: 50%;
+            transition: transform 0.3s;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+        }
+
+        .toggle-switch input:checked+.slider {
+            background: var(--success-color);
+        }
+
+        .toggle-switch input:checked+.slider::before {
+            transform: translateX(24px);
+        }
+
+        /* Sistem durumu */
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 14px;
+        }
+
+        .status-item {
+            background: #f8f9fa;
+            border-radius: var(--radius-md);
+            padding: 14px 16px;
+            border-left: 4px solid var(--accent-color);
+        }
+
+        .status-item.ok {
+            border-left-color: var(--success-color);
+        }
+
+        .status-item.warn {
+            border-left-color: var(--warning-color);
+        }
+
+        .status-item.err {
+            border-left-color: var(--danger-color);
+        }
+
+        .status-item .s-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .status-item .s-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--text-primary);
+        }
+
+        .status-item .s-sub {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        /* Aksiyon butonları */
+        .action-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 8px;
+        }
+
+        .btn-settings {
+            padding: 12px 24px;
+            border: none;
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.25s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .btn-settings:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-settings:active {
+            transform: translateY(0);
+        }
+
+        .btn-save {
+            background: var(--success-color);
+            color: #fff;
+        }
+
+        .btn-back {
+            background: var(--secondary-color);
+            color: #fff;
+        }
+
+        .btn-danger {
+            background: var(--danger-color);
+            color: #fff;
+        }
+
+        .btn-warning {
+            background: var(--warning-color);
+            color: #fff;
+        }
+
+        .btn-info-s {
+            background: var(--accent-color);
+            color: #fff;
+        }
+
+        /* Toast bildirimi */
+        #toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: #2c3e50;
+            color: #fff;
+            padding: 14px 28px;
+            border-radius: var(--radius-lg);
+            font-size: 15px;
+            font-weight: 600;
+            z-index: 9999;
+            box-shadow: var(--shadow-lg);
+            transition: transform 0.35s cubic-bezier(.22, 1, .36, 1);
+            white-space: nowrap;
+        }
+
+        #toast.show {
+            transform: translateX(-50%) translateY(0);
+        }
+
+        #toast.success {
+            background: var(--success-color);
+        }
+
+        #toast.error {
+            background: var(--danger-color);
+        }
+
+        #toast.warning {
+            background: var(--warning-color);
+            color: #000;
+        }
+
+        /* Şifre değiştirme bölümü */
+        .password-section {
+            background: #fff9f0;
+            border: 1px solid #ffe0b2;
+            border-radius: var(--radius-md);
+            padding: 16px 18px;
+        }
+
+        .password-section h4 {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--warning-color);
+            margin-bottom: 14px;
+        }
+
+        .divider {
+            border: none;
+            border-top: 1px solid #eee;
+            margin: 18px 0;
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .form-group {
+                min-width: 100%;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+            }
+
+            .btn-settings {
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <h1 class="company-name" id="companyName">⚙️ AYARLAR</h1>
+            <div class="header-info">
+                <span class="status-indicator" id="connectionDot">●</span>
+                <span id="sysIp" class="ip-address">IP: ---</span>
+                <a href="/" style="color:#fff; text-decoration:none; font-size:14px;">← Ana Sayfa</a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Settings Content -->
+    <div class="settings-wrapper">
+        <div class="settings-title">⚙️ Sistem Ayarları</div>
+
+        <!-- 1. Firma Bilgileri -->
+        <div class="settings-card">
+            <div class="card-header">🏢 Firma Bilgileri</div>
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="firmaIsmi">Firma / Restoran Adı</label>
+                        <input type="text" id="firmaIsmi" placeholder="RESTORAN OTOMASYON" maxlength="60">
+                    </div>
+                    <div class="form-group">
+                        <label for="terminalId">Terminal Kimliği</label>
+                        <input type="text" id="terminalId" placeholder="1" maxlength="10">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Salon Ayarları -->
+        <div class="settings-card">
+            <div class="card-header">🪑 Salon Ayarları</div>
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="masaSayisi">Masa Sayısı</label>
+                        <input type="number" id="masaSayisi" min="0" max="200" placeholder="30">
+                    </div>
+                    <div class="form-group">
+                        <label for="paketSayisi">Paket / Kurye Sayısı</label>
+                        <input type="number" id="paketSayisi" min="0" max="100" placeholder="5">
+                    </div>
+                </div>
+                <small style="color:var(--text-secondary);">
+                    ⚠️ Masa / paket sayısını değiştirmek mevcut adisyon verilerini sıfırlayacaktır.
+                </small>
+            </div>
+        </div>
+
+        <!-- 3. Güvenlik -->
+        <div class="settings-card">
+            <div class="card-header">🔐 Güvenlik</div>
+            <div class="card-body">
+                <div class="form-group" style="margin-bottom:16px; max-width:340px;">
+                    <label for="mevcutSifre">Mevcut Şifre</label>
+                    <input type="password" id="mevcutSifre" placeholder="••••">
+                </div>
+                <div class="password-section">
+                    <h4>🔑 Şifre Değiştir (isteğe bağlı)</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="yeniSifre">Yeni Şifre</label>
+                            <input type="password" id="yeniSifre" placeholder="Yeni şifre">
+                        </div>
+                        <div class="form-group">
+                            <label for="yeniSifreTekrar">Yeni Şifre (Tekrar)</label>
+                            <input type="password" id="yeniSifreTekrar" placeholder="Şifreyi tekrar girin">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. Yazıcı & Sistem -->
+        <div class="settings-card">
+            <div class="card-header">🖨️ Yazıcı &amp; Sistem</div>
+            <div class="card-body">
+                <div class="toggle-row">
+                    <div>
+                        <div class="toggle-label">Direkt Baskı Modu</div>
+                        <div class="toggle-desc">Ödeme alındığında fiş otomatik yazdırılır</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="directPrint">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <hr class="divider">
+
+                <!-- Sistem Durumu -->
+                <p
+                    style="font-size:13px; font-weight:600; color:var(--text-secondary); margin-bottom:12px; text-transform:uppercase;">
+                    Sistem Durumu
+                </p>
+                <div class="status-grid" id="statusGrid">
+                    <div class="status-item" id="si-db">
+                        <div class="s-label">Veri Tabanı</div>
+                        <div class="s-value" id="sv-db">---</div>
+                        <div class="s-sub">PostgreSQL</div>
+                    </div>
+                    <div class="status-item" id="si-pdf">
+                        <div class="s-label">PDF Desteği</div>
+                        <div class="s-value" id="sv-pdf">---</div>
+                        <div class="s-sub">ReportLab</div>
+                    </div>
+                    <div class="status-item ok" id="si-con">
+                        <div class="s-label">IP Adresi</div>
+                        <div class="s-value" id="sv-ip">---</div>
+                        <div class="s-sub">Yerel ağ</div>
+                    </div>
+                    <div class="status-item ok" id="si-masa">
+                        <div class="s-label">Aktif Masa</div>
+                        <div class="s-value" id="sv-masa">---</div>
+                        <div class="s-sub">Toplam masa + paket</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Butonlar -->
+        <div class="action-buttons">
+            <button class="btn-settings btn-save" id="btnSave" onclick="saveSettings()">
+                💾 Ayarları Kaydet
+            </button>
+            <button class="btn-settings btn-info-s" id="btnRefresh" onclick="loadSettings()">
+                🔄 Yenile
+            </button>
+            <button class="btn-settings btn-back" onclick="window.location.href='/'">
+                🏠 Ana Sayfa
+            </button>
+        </div>
+    </div>
+
+    <!-- Toast bildirimi -->
+    <div id="toast"></div>
+
+    <script>
+        /* ── Ayarlar sayfası JS ── */
+
+        async function loadSettings() {
+            try {
+                const res = await fetch('/api/settings');
+                if (!res.ok) throw new Error('API hatası');
+                const data = await res.json();
+
+                document.getElementById('firmaIsmi').value = data.firma_ismi || '';
+                document.getElementById('terminalId').value = data.terminal_id || '';
+                document.getElementById('masaSayisi').value = data.masa_sayisi ?? '';
+                document.getElementById('paketSayisi').value = data.paket_sayisi ?? '';
+                document.getElementById('directPrint').checked = data.direct_print || false;
+
+                // Header
+                document.getElementById('companyName').textContent = '⚙️ ' + (data.firma_ismi || 'AYARLAR');
+
+                // Sistem durumu
+                document.getElementById('sv-ip').textContent = data.ip || '---';
+                document.getElementById('sv-masa').textContent = (data.masa_sayisi || 0) + ' / ' + (data.paket_sayisi || 0);
+
+            } catch (e) {
+                showToast('Ayarlar yüklenemedi: ' + e.message, 'error');
+            }
+        }
+
+        async function loadSystemInfo() {
+            try {
+                const res = await fetch('/api/system/info');
+                if (!res.ok) return;
+                const data = await res.json();
+
+                document.getElementById('sysIp').textContent = 'IP: ' + (data.ip || '---');
+                document.getElementById('sv-ip').textContent = data.ip || '---';
+                document.getElementById('sv-masa').textContent = (data.masa_sayisi || 0) + ' / ' + (data.paket_sayisi || 0);
+
+                // DB durumu
+                const dbEl = document.getElementById('sv-db');
+                const dbSi = document.getElementById('si-db');
+                if (data.database) {
+                    dbEl.textContent = '✅ Aktif';
+                    dbSi.classList.add('ok');
+                } else {
+                    dbEl.textContent = '❌ Bağlı Değil';
+                    dbSi.classList.add('err');
+                }
+
+                // PDF durumu
+                const pdfEl = document.getElementById('sv-pdf');
+                const pdfSi = document.getElementById('si-pdf');
+                if (data.pdf) {
+                    pdfEl.textContent = '✅ Mevcut';
+                    pdfSi.classList.add('ok');
+                } else {
+                    pdfEl.textContent = '⚠️ Yok';
+                    pdfSi.classList.add('warn');
+                }
+
+            } catch (e) {
+                console.warn('Sistem bilgisi yüklenemedi:', e);
+            }
+        }
+
+        async function saveSettings() {
+            const firmaIsmi = document.getElementById('firmaIsmi').value.trim();
+            const terminalId = document.getElementById('terminalId').value.trim();
+            const masaSayisi = parseInt(document.getElementById('masaSayisi').value);
+            const paketSayisi = parseInt(document.getElementById('paketSayisi').value);
+            const directPrint = document.getElementById('directPrint').checked;
+            const mevcutSifre = document.getElementById('mevcutSifre').value;
+            const yeniSifre = document.getElementById('yeniSifre').value;
+            const yeniSifreTekrar = document.getElementById('yeniSifreTekrar').value;
+
+            // Basit validasyon
+            if (!firmaIsmi) {
+                showToast('Firma adı boş olamaz!', 'warning');
+                return;
+            }
+            if (isNaN(masaSayisi) || masaSayisi < 0) {
+                showToast('Geçersiz masa sayısı!', 'warning');
+                return;
+            }
+            if (isNaN(paketSayisi) || paketSayisi < 0) {
+                showToast('Geçersiz paket sayısı!', 'warning');
+                return;
+            }
+            if (yeniSifre && yeniSifre !== yeniSifreTekrar) {
+                showToast('Yeni şifreler eşleşmiyor!', 'error');
+                return;
+            }
+
+            const payload = {
+                firma_ismi: firmaIsmi,
+                terminal_id: terminalId,
+                masa_sayisi: masaSayisi,
+                paket_sayisi: paketSayisi,
+                direct_print: directPrint,
+                mevcut_sifre: mevcutSifre
+            };
+
+            if (yeniSifre) {
+                payload.yeni_sifre = yeniSifre;
+            }
+
+            try {
+                const btn = document.getElementById('btnSave');
+                btn.disabled = true;
+                btn.textContent = '⏳ Kaydediliyor...';
+
+                const res = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || 'Kaydetme başarısız');
+                }
+
+                showToast('✅ Ayarlar başarıyla kaydedildi!', 'success');
+
+                // Şifre alanlarını temizle
+                document.getElementById('mevcutSifre').value = '';
+                document.getElementById('yeniSifre').value = '';
+                document.getElementById('yeniSifreTekrar').value = '';
+
+                // Header güncelle
+                document.getElementById('companyName').textContent = '⚙️ ' + firmaIsmi;
+
+            } catch (e) {
+                showToast('Hata: ' + e.message, 'error');
+            } finally {
+                const btn = document.getElementById('btnSave');
+                btn.disabled = false;
+                btn.textContent = '💾 Ayarları Kaydet';
+            }
+        }
+
+        function showToast(msg, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.className = 'show ' + type;
+            setTimeout(() => { toast.className = ''; }, 3500);
+        }
+
+        // Enter tuşuna basınca kaydet
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                const tag = document.activeElement.tagName;
+                if (tag === 'INPUT') saveSettings();
+            }
+        });
+
+        // Sayfa yüklenince
+        window.addEventListener('DOMContentLoaded', () => {
+            loadSettings();
+            loadSystemInfo();
+        });
+    </script>
+</body>
+
+</html>

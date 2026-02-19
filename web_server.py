@@ -305,6 +305,11 @@ def terminals():
     """Terminal yönetim sayfası"""
     return app.send_static_file('terminals.html')
 
+@app.route('/settings')
+def settings_page():
+    """Ayarlar sayfası"""
+    return app.send_static_file('settings.html')
+
 @app.route('/api/system/info')
 def system_info():
     """Sistem bilgileri"""
@@ -317,6 +322,65 @@ def system_info():
         'database': USE_DATABASE,
         'pdf': PDF_SUPPORT
     })
+
+@app.route('/api/settings', methods=['GET'])
+def get_settings():
+    """Mevcut ayarları döndür"""
+    return jsonify({
+        'firma_ismi':   server.company_name,
+        'terminal_id':  server.terminal_id,
+        'masa_sayisi':  server.masa_sayisi,
+        'paket_sayisi': server.paket_sayisi,
+        'direct_print': server.direct_print,
+        'ip':           get_local_ip()
+    })
+
+@app.route('/api/settings', methods=['POST'])
+def save_settings():
+    """Ayarları kaydet"""
+    data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'Geçersiz veri'}), 400
+
+    # Şifre doğrula
+    mevcut_sifre = data.get('mevcut_sifre', '')
+    if mevcut_sifre != server.admin_password:
+        return jsonify({'success': False, 'error': 'Mevcut şifre hatalı!'}), 403
+
+    # Yeni şifre varsa güncelle
+    yeni_sifre = data.get('yeni_sifre', '')
+    if yeni_sifre:
+        server.admin_password = yeni_sifre
+
+    # Diğer ayarları güncelle
+    server.company_name  = data.get('firma_ismi',   server.company_name)
+    server.terminal_id   = data.get('terminal_id',  server.terminal_id)
+    server.direct_print  = data.get('direct_print', server.direct_print)
+
+    yeni_masa   = int(data.get('masa_sayisi',  server.masa_sayisi))
+    yeni_paket  = int(data.get('paket_sayisi', server.paket_sayisi))
+
+    masa_degisti = (yeni_masa != server.masa_sayisi or yeni_paket != server.paket_sayisi)
+    server.masa_sayisi   = yeni_masa
+    server.paket_sayisi  = yeni_paket
+
+    # Kaydet
+    ok = server.save_settings()
+    if not ok:
+        return jsonify({'success': False, 'error': 'Dosyaya yazılamadı'}), 500
+
+    # Masa/paket yapısı değiştiyse yenile
+    if masa_degisti:
+        server.refresh_adisyonlar()
+        socketio.emit('system_update', {
+            'masa_sayisi':  server.masa_sayisi,
+            'paket_sayisi': server.paket_sayisi,
+            'company_name': server.company_name,
+            'terminal_id':  server.terminal_id
+        })
+
+    logger.info(f"✅ Ayarlar güncellendi: {server.company_name} / Masa:{server.masa_sayisi} Paket:{server.paket_sayisi}")
+    return jsonify({'success': True})
 
 @app.route('/api/menu')
 def get_menu():
