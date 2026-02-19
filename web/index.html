@@ -132,6 +132,58 @@
             }
         });
     </script>
+    <!-- Payment Modal -->
+    <div id="paymentModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>💰 ÖDEME AL</h2>
+                <span class="close-modal" id="closePaymentModal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="modal-total-display">
+                    <div class="modal-total-item">
+                        <span class="label">GENEL TOPLAM:</span>
+                        <span class="value" id="modalTotalAmount">0.00 TL</span>
+                    </div>
+                    <div class="modal-total-item highlight">
+                        <span class="label">KALAN:</span>
+                        <span class="value" id="modalRemainingAmount">0.00 TL</span>
+                    </div>
+                </div>
+
+                <div class="payment-inputs">
+                    <div class="input-group">
+                        <label for="paymentNakit">💵 NAKİT</label>
+                        <input type="number" id="paymentNakit" placeholder="0.00" step="0.01">
+                    </div>
+                    <div class="input-group">
+                        <label for="paymentKart">💳 KREDİ KARTI</label>
+                        <input type="number" id="paymentKart" placeholder="0.00" step="0.01">
+                    </div>
+                    <div class="input-group">
+                        <label for="paymentCari">📝 AÇIK HESAP</label>
+                        <input type="number" id="paymentCari" placeholder="0.00" step="0.01">
+                    </div>
+                </div>
+
+                <div class="customer-selection" id="customerSelectionDiv" style="display: none;">
+                    <label for="customerSearch">👤 MÜŞTERİ SEÇİMİ (AÇIK HESAP İÇİN)</label>
+                    <div class="search-box">
+                        <input type="text" id="customerSearch" placeholder="Müşteri ara...">
+                        <div id="customerResults" class="search-results"></div>
+                    </div>
+                    <input type="hidden" id="selectedCustomer" value="">
+                    <div class="selected-customer-name" id="selectedCustomerDisplay">Henüz müşteri seçilmedi</div>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="btn btn-vazgec" id="btnCancelPayment">VAZGEÇ</button>
+                    <button class="btn btn-tamamla" id="btnFinalizePayment">ÖDEMEYİ TAMAMLA</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Main Script -->
     <script src="script.js"></script>
 </body>

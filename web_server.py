@@ -684,7 +684,6 @@ def handle_payment(data):
     """Ödeme al"""
     sid = request.sid
     masa_adi = server.current_selections.get(sid)
-    payment_type = data.get('type', 'Nakit')
     
     if not masa_adi or masa_adi not in server.adisyonlar:
         emit('error', {'message': 'Geçersiz masa'})
@@ -694,20 +693,43 @@ def handle_payment(data):
     if not items:
         emit('error', {'message': 'Sipariş yok'})
         return
+
+    # Ödeme listesini al (YENİ: Parçalı ödeme desteği)
+    payments = data.get('payments', [])
+    payment_type = data.get('type', 'Nakit') # Eski format desteği
+    
+    if not payments:
+        total_amount = sum(item['adet'] * item['fiyat'] for item in items)
+        payments = [{'type': payment_type, 'amount': total_amount}]
     
     # Database'e kaydet
     try:
         timestamp = datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-        sales_data = []
         
+        # Cari işlemleri kaydet
+        for p in payments:
+            if p['type'] == 'Açık Hesap' and USE_DATABASE:
+                customer = p.get('customer', 'Genel Müşteri')
+                amount = float(p.get('amount', 0))
+                if amount > 0:
+                    db.save_cari_transaction(customer, 'borc', amount)
+                    logger.info(f"📝 Cari Borç: {customer} | {amount:.2f} TL")
+
+        # Satışları kaydet
+        # Eğer birden fazla ödeme türü varsa 'Parçalı' olarak işaretle
+        final_payment_label = payments[0]['type'] if len(payments) == 1 else "Parçalı"
+        
+        sales_data = []
         for item in items:
             sales_data.append({
                 'urun': item['urun'],
                 'adet': item['adet'],
                 'fiyat': item['fiyat'],
-                'odeme': payment_type,
+                'odeme': final_payment_label,
                 'tip': item.get('tip', 'normal'),
-                'Tarih_Saat': timestamp
+                'Tarih_Saat': timestamp,
+                'masa': masa_adi,
+                'terminal_id': server.terminal_id
             })
         
         if USE_DATABASE:
@@ -719,10 +741,16 @@ def handle_payment(data):
         # Tüm clientlara bildir
         socketio.emit('payment_completed', {
             'masa': masa_adi,
-            'type': payment_type
+            'type': final_payment_label,
+            'payments': payments
         })
         
-        emit('success', {'message': f'{payment_type} ödemesi alındı'})
+        msg = f"{final_payment_label} ödemesi alındı"
+        if final_payment_label == "Parçalı":
+            details = ", ".join([f"{p['amount']} TL {p['type']}" for p in payments])
+            msg = f"Parçalı ödeme alındı: {details}"
+            
+        emit('success', {'message': msg})
         
     except Exception as e:
         logger.error(f"Ödeme hatası: {e}")

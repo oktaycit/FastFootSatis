@@ -38,7 +38,23 @@ const elements = {
     btnCari: null,
     btnReports: null,
     btnSettings: null,
-    btnAbout: null
+    btnAbout: null,
+
+    // Modal Elements
+    paymentModal: null,
+    closePaymentModal: null,
+    modalTotalAmount: null,
+    modalRemainingAmount: null,
+    paymentNakit: null,
+    paymentKart: null,
+    paymentCari: null,
+    customerSelectionDiv: null,
+    customerSearch: null,
+    customerResults: null,
+    selectedCustomer: null,
+    selectedCustomerDisplay: null,
+    btnCancelPayment: null,
+    btnFinalizePayment: null
 };
 
 /**
@@ -405,6 +421,153 @@ function processPayment(type) {
 }
 
 /**
+ * Split Payment Modal Functions
+ */
+function openPaymentModal() {
+    if (!currentMasa) {
+        showNotification('Lütfen önce masa seçiniz!', 'warning');
+        return;
+    }
+
+    if (currentItems.length === 0) {
+        showNotification('Sipariş listesi boş!', 'warning');
+        return;
+    }
+
+    // Reset inputs
+    elements.paymentNakit.value = '';
+    elements.paymentKart.value = '';
+    elements.paymentCari.value = '';
+    elements.customerSearch.value = '';
+    elements.selectedCustomer.value = '';
+    elements.selectedCustomerDisplay.textContent = 'Henüz müşteri seçilmedi';
+    elements.customerSelectionDiv.style.display = 'none';
+
+    // Show modal
+    elements.paymentModal.style.display = 'block';
+
+    // Update totals
+    elements.modalTotalAmount.textContent = `${currentTotal.toFixed(2)} TL`;
+    updateRemainingAmount();
+}
+
+function closePaymentModal() {
+    elements.paymentModal.style.display = 'none';
+}
+
+function updateRemainingAmount() {
+    const nakit = parseFloat(elements.paymentNakit.value) || 0;
+    const kart = parseFloat(elements.paymentKart.value) || 0;
+    const cari = parseFloat(elements.paymentCari.value) || 0;
+
+    const paid = nakit + kart + cari;
+    const remaining = currentTotal - paid;
+
+    elements.modalRemainingAmount.textContent = `${remaining.toFixed(2)} TL`;
+
+    if (remaining < 0) {
+        elements.modalRemainingAmount.style.color = '#e74c3c';
+    } else if (remaining === 0) {
+        elements.modalRemainingAmount.style.color = '#27ae60';
+    } else {
+        elements.modalRemainingAmount.style.color = '#f39c12';
+    }
+
+    // Show/hide customer selection if Cari is entered
+    if (cari > 0) {
+        elements.customerSelectionDiv.style.display = 'block';
+    } else {
+        elements.customerSelectionDiv.style.display = 'none';
+    }
+}
+
+async function searchCustomers() {
+    const query = elements.customerSearch.value.toLowerCase();
+    if (query.length < 2) {
+        elements.customerResults.style.display = 'none';
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/cari/hesaplar');
+        const data = await response.json();
+
+        if (data.success) {
+            const results = data.hesaplar.filter(h =>
+                h.cari_isim.toLowerCase().includes(query)
+            );
+
+            renderCustomerResults(results);
+        }
+    } catch (err) {
+        console.error('Customer fetch error:', err);
+    }
+}
+
+function renderCustomerResults(results) {
+    elements.customerResults.innerHTML = '';
+
+    if (results.length === 0) {
+        const noResult = document.createElement('div');
+        noResult.className = 'result-item';
+        noResult.textContent = 'Yeni müşteri olarak ekle...';
+        noResult.onclick = () => selectCustomer(elements.customerSearch.value, true);
+        elements.customerResults.appendChild(noResult);
+    } else {
+        results.forEach(h => {
+            const item = document.createElement('div');
+            item.className = 'result-item';
+            item.textContent = h.cari_isim;
+            item.onclick = () => selectCustomer(h.cari_isim);
+            elements.customerResults.appendChild(item);
+        });
+    }
+
+    elements.customerResults.style.display = 'block';
+}
+
+function selectCustomer(name, isNew = false) {
+    elements.selectedCustomer.value = name;
+    elements.selectedCustomerDisplay.textContent = isNew ? `Yeni: ${name}` : name;
+    elements.customerResults.style.display = 'none';
+    elements.customerSearch.value = name;
+}
+
+function finalizeSplitPayment() {
+    const nakit = parseFloat(elements.paymentNakit.value) || 0;
+    const kart = parseFloat(elements.paymentKart.value) || 0;
+    const cari = parseFloat(elements.paymentCari.value) || 0;
+
+    const total = nakit + kart + cari;
+
+    if (total === 0) {
+        showNotification('Ödeme tutarı girilmedi!', 'warning');
+        return;
+    }
+
+    if (Math.abs(total - currentTotal) > 0.01) {
+        if (!confirm(`Girilen toplam (${total.toFixed(2)}) sipariş tutarından (${currentTotal.toFixed(2)}) farklı. Devam etmek istiyor musunuz?`)) {
+            return;
+        }
+    }
+
+    const payments = [];
+    if (nakit > 0) payments.push({ type: 'Nakit', amount: nakit });
+    if (kart > 0) payments.push({ type: 'Kredi Kartı', amount: kart });
+    if (cari > 0) {
+        const customer = elements.selectedCustomer.value;
+        if (!customer) {
+            showNotification('Lütfen Cari hesap için bir müşteri seçiniz!', 'warning');
+            return;
+        }
+        payments.push({ type: 'Açık Hesap', amount: cari, customer: customer });
+    }
+
+    socket.emit('finalize_payment', { payments: payments });
+    closePaymentModal();
+}
+
+/**
  * Event listeners setup
  */
 function setupEventListeners() {
@@ -457,6 +620,38 @@ function setupEventListeners() {
             alert(`FastFootSatış\nRestoran Yönetim Sistemi\n\nVersiyon: 1.0\nIP: ${systemInfo.ip || '---'}\nTerminal: ${systemInfo.terminal_id || '1'}`);
         };
     }
+
+    // Modal Events
+    if (elements.btnCredit) {
+        elements.btnCredit.onclick = () => openPaymentModal();
+    }
+
+    if (elements.closePaymentModal) {
+        elements.closePaymentModal.onclick = () => closePaymentModal();
+    }
+
+    if (elements.btnCancelPayment) {
+        elements.btnCancelPayment.onclick = () => closePaymentModal();
+    }
+
+    if (elements.btnFinalizePayment) {
+        elements.btnFinalizePayment.onclick = () => finalizeSplitPayment();
+    }
+
+    if (elements.paymentNakit) elements.paymentNakit.oninput = () => updateRemainingAmount();
+    if (elements.paymentKart) elements.paymentKart.oninput = () => updateRemainingAmount();
+    if (elements.paymentCari) elements.paymentCari.oninput = () => updateRemainingAmount();
+
+    if (elements.customerSearch) {
+        elements.customerSearch.oninput = () => searchCustomers();
+    }
+
+    // Close modal on outside click
+    window.onclick = (event) => {
+        if (event.target == elements.paymentModal) {
+            closePaymentModal();
+        }
+    };
 }
 
 /**
