@@ -494,6 +494,24 @@ function updateRemainingAmount() {
     }
 }
 
+function handlePaymentInputFocus(input) {
+    const val = parseFloat(input.value) || 0;
+    if (val === 0) {
+        const nakit = input === elements.paymentNakit ? 0 : (parseFloat(elements.paymentNakit.value) || 0);
+        const kart = input === elements.paymentKart ? 0 : (parseFloat(elements.paymentKart.value) || 0);
+        const cari = input === elements.paymentCari ? 0 : (parseFloat(elements.paymentCari.value) || 0);
+
+        const otherPaid = nakit + kart + cari;
+        const remaining = Math.max(0, currentTotal - otherPaid);
+
+        if (remaining > 0) {
+            input.value = remaining.toFixed(2);
+            updateRemainingAmount();
+            input.select(); // Select the text for easy editing
+        }
+    }
+}
+
 async function searchCustomers() {
     const query = elements.customerSearch.value.toLowerCase();
     if (query.length < 2) {
@@ -661,9 +679,18 @@ function setupEventListeners() {
         elements.btnFinalizePayment.onclick = () => finalizeSplitPayment();
     }
 
-    if (elements.paymentNakit) elements.paymentNakit.oninput = () => updateRemainingAmount();
-    if (elements.paymentKart) elements.paymentKart.oninput = () => updateRemainingAmount();
-    if (elements.paymentCari) elements.paymentCari.oninput = () => updateRemainingAmount();
+    if (elements.paymentNakit) {
+        elements.paymentNakit.oninput = () => updateRemainingAmount();
+        elements.paymentNakit.onfocus = () => handlePaymentInputFocus(elements.paymentNakit);
+    }
+    if (elements.paymentKart) {
+        elements.paymentKart.oninput = () => updateRemainingAmount();
+        elements.paymentKart.onfocus = () => handlePaymentInputFocus(elements.paymentKart);
+    }
+    if (elements.paymentCari) {
+        elements.paymentCari.oninput = () => updateRemainingAmount();
+        elements.paymentCari.onfocus = () => handlePaymentInputFocus(elements.paymentCari);
+    }
 
     if (elements.customerSearch) {
         elements.customerSearch.oninput = () => searchCustomers();
