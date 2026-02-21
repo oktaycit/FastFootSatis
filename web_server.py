@@ -373,6 +373,11 @@ def mutfak_page():
     """Mutfak sipariş takip sayfası"""
     return app.send_static_file('mutfak.html')
 
+@app.route('/terminal')
+def terminal_page():
+    """Terminal arayüzü"""
+    return app.send_static_file('terminal.html')
+
 @app.route('/api/system/info')
 def system_info():
     """Sistem bilgileri"""
@@ -798,6 +803,66 @@ def handle_payment(data):
     if not items:
         emit('error', {'message': 'Sipariş yok'})
         return
+
+# ==================== TERMINAL SOCKET EVENTS ====================
+
+import pty
+import select
+
+terminal_processes = {} # {sid: {fd: fd, child_pid: pid}}
+
+@socketio.on('terminal_input')
+def handle_terminal_input(data):
+    """Terminalden gelen girdiyi işle"""
+    sid = request.sid
+    input_data = data.get('input', '')
+    
+    if sid in terminal_processes:
+        fd = terminal_processes[sid]['fd']
+        os.write(fd, input_data.encode())
+
+@socketio.on('terminal_connect')
+def handle_terminal_connect():
+    """Terminal oturumu başlat"""
+    sid = request.sid
+    
+    # Yeni bir pty (pseudo-terminal) aç
+    (master_fd, slave_fd) = pty.openpty()
+    
+    # Kabuğu başlat
+    shell = os.environ.get('SHELL', '/bin/sh')
+    p = subprocess.Popen([shell], 
+                         stdin=slave_fd, 
+                         stdout=slave_fd, 
+                         stderr=slave_fd, 
+                         preexec_fn=os.setsid)
+    
+    terminal_processes[sid] = {
+        'fd': master_fd,
+        'process': p
+    }
+    
+    def read_output(sid, fd):
+        while sid in terminal_processes:
+            try:
+                # master_fd'den oku (non-blocking için select kullanılabilir ama threading modda basit tutalım)
+                r, w, e = select.select([fd], [], [], 0.1)
+                if r:
+                    output = os.read(fd, 1024).decode('utf-8', errors='replace')
+                    if output:
+                        socketio.emit('terminal_output', {'output': output}, room=sid)
+            except Exception as e:
+                logger.error(f"Terminal okuma hatası: {e}")
+                break
+                
+    threading.Thread(target=read_output, args=(sid, master_fd), daemon=True).start()
+    logger.info(f"🐚 Terminal oturumu açıldı: {sid}")
+
+@socketio.on('terminal_resize')
+def handle_terminal_resize(data):
+    """Terminal boyutunu güncelle"""
+    # Gelecekte eklenebilir
+    pass
 
     # Ödeme listesini al (YENİ: Parçalı ödeme desteği)
     if data.get('role') == 'terminal':
