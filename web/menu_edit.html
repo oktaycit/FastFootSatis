@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastFootSatış - Menü Düzenle</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            overflow: auto;
+            background-color: #f0f2f5;
+        }
+
+        .edit-wrapper {
+            max-width: 1000px;
+            margin: 30px auto;
+            padding: 0 20px 60px;
+        }
+
+        .edit-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+
+        .edit-title {
+            font-size: 26px;
+            font-weight: 700;
+            color: #2c3e50;
+        }
+
+        .category-card {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            margin-bottom: 25px;
+            overflow: hidden;
+            border-top: 5px solid var(--primary-color);
+        }
+
+        .category-header {
+            padding: 15px 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .category-name {
+            font-size: 18px;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .item-list {
+            padding: 10px 20px;
+        }
+
+        .item-row {
+            display: grid;
+            grid-template-columns: 1fr 150px 80px;
+            gap: 15px;
+            padding: 10px 0;
+            border-bottom: 1px solid #f1f1f1;
+            align-items: center;
+        }
+
+        .item-row:last-child {
+            border-bottom: none;
+        }
+
+        .item-row input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .item-row input:focus {
+            border-color: var(--accent-color);
+            outline: none;
+        }
+
+        .btn-icon {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 18px;
+            color: #95a5a6;
+            transition: color 0.2s;
+        }
+
+        .btn-icon:hover {
+            color: #e74c3c;
+        }
+
+        .add-row {
+            padding: 15px 20px;
+            border-top: 1px dashed #ddd;
+            display: flex;
+            justify-content: center;
+        }
+
+        .btn-add-item {
+            background: #f8f9fa;
+            border: 1px dashed #ccc;
+            padding: 8px 20px;
+            border-radius: 6px;
+            color: #666;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 100%;
+        }
+
+        .btn-add-item:hover {
+            background: #eef2f7;
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+        }
+
+        .footer-actions {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #fff;
+            padding: 15px 0;
+            box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            z-index: 100;
+        }
+
+        .btn-edit {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-save {
+            background: var(--success-color);
+            color: #fff;
+        }
+
+        .btn-add-cat {
+            background: var(--accent-color);
+            color: #fff;
+        }
+
+        .btn-cancel {
+            background: #95a5a6;
+            color: #fff;
+        }
+
+        .btn-edit:hover {
+            transform: translateY(-2px);
+            opacity: 0.9;
+        }
+
+        /* Empty state */
+        .empty-menu {
+            text-align: center;
+            padding: 50px;
+            color: #7f8c8d;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="edit-wrapper">
+        <div class="edit-header">
+            <h1 class="edit-title">🍽️ Menü Yönetimi</h1>
+            <div class="action-buttons">
+                <button class="btn-edit btn-add-cat" onclick="addNewCategory()">+ Yeni Kategori</button>
+            </div>
+        </div>
+
+        <div id="menuEditorContainer">
+            <!-- Categories will be rendered here -->
+            <div class="empty-menu">Menü yükleniyor...</div>
+        </div>
+    </div>
+
+    <div class="footer-actions">
+        <button class="btn-edit btn-cancel" onclick="window.location.href='/settings'">❌ Vazgeç</button>
+        <button class="btn-edit btn-save" onclick="saveMenu()">💾 Değişiklikleri Kaydet</button>
+    </div>
+
+    <script>
+        let menuData = {};
+
+        async function loadMenu() {
+            try {
+                const res = await fetch('/api/menu');
+                menuData = await res.json();
+                renderEditor();
+            } catch (e) {
+                alert('Menü yüklenemedi: ' + e.message);
+            }
+        }
+
+        function renderEditor() {
+            const container = document.getElementById('menuEditorContainer');
+            container.innerHTML = '';
+
+            const categories = Object.keys(menuData);
+            if (categories.length === 0) {
+                container.innerHTML = '<div class="empty-menu">Menüde kategori bulunamadı. "Yeni Kategori" butonu ile ekleyebilirsiniz.</div>';
+                return;
+            }
+
+            categories.forEach(cat => {
+                const card = document.createElement('div');
+                card.className = 'category-card';
+
+                card.innerHTML = `
+                    <div class="category-header">
+                        <span class="category-name">${cat}</span>
+                        <button class="btn-icon" onclick="removeCategory('${cat}')" title="Kategoriyi Sil">🗑️</button>
+                    </div>
+                    <div class="item-list" id="list-${cat}">
+                        ${menuData[cat].map((item, idx) => `
+                            <div class="item-row">
+                                <input type="text" value="${item[0]}" placeholder="Ürün Adı" onchange="updateItem('${cat}', ${idx}, 0, this.value)">
+                                <input type="number" value="${item[1]}" placeholder="Fiyat" step="0.01" onchange="updateItem('${cat}', ${idx}, 1, this.value)">
+                                <button class="btn-icon" onclick="removeItem('${cat}', ${idx})">❌</button>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="add-row">
+                        <button class="btn-add-item" onclick="addItem('${cat}')">+ Yeni Ürün Ekle</button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function updateItem(cat, idx, field, value) {
+            if (field === 1) value = parseFloat(value) || 0;
+            menuData[cat][idx][field] = value;
+        }
+
+        function addItem(cat) {
+            menuData[cat].push(["Yeni Ürün", 0.0]);
+            renderEditor();
+        }
+
+        function removeItem(cat, idx) {
+            if (confirm('Bu ürünü silmek istediğinize emin misiniz?')) {
+                menuData[cat].splice(idx, 1);
+                renderEditor();
+            }
+        }
+
+        function addNewCategory() {
+            const name = prompt('Yeni kategori adı giriniz:');
+            if (name && name.trim()) {
+                const catName = name.trim();
+                if (menuData[catName]) {
+                    alert('Bu kategori zaten mevcut!');
+                    return;
+                }
+                menuData[catName] = [];
+                renderEditor();
+            }
+        }
+
+        function removeCategory(cat) {
+            if (confirm(`"${cat}" kategorisini ve içindeki TÜM ürünleri silmek istediğinize emin misiniz?`)) {
+                delete menuData[cat];
+                renderEditor();
+            }
+        }
+
+        async function saveMenu() {
+            if (!confirm('Değişiklikleri kaydetmek istiyor musunuz?')) return;
+
+            try {
+                const res = await fetch('/api/menu/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ menu: menuData })
+                });
+
+                const result = await res.json();
+                if (result.success) {
+                    alert('✅ Menü başarıyla güncellendi!');
+                    window.location.href = '/settings';
+                } else {
+                    alert('❌ Hata: ' + result.error);
+                }
+            } catch (e) {
+                alert('Kaydetme hatası: ' + e.message);
+            }
+        }
+
+        window.onload = loadMenu;
+    </script>
+</body>
+
+</html>

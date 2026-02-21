@@ -1,0 +1,19 @@
+RESTORAN OTOMASYON 
+   SİPARİŞ FİŞİ    
+===================
+20-02-2026      12:15
+Fiş No:1        Masa 1
+-------------------
+Ürün       Ad.   Tutar
+-------------------
+Tavuk        1 150.00TL
+Mercimek     1 120.00TL
+Su,Soda      1  20.00TL
+Su,Soda      1  20.00TL
+===================
+TOPLAM:        310.00TL 
+===================
+   Afiyet Olsun    
+
+
+

@@ -11,6 +11,8 @@ let adisyonlar = {};
 let currentMasa = null;
 let currentItems = [];
 let currentTotal = 0;
+let selectedItemIndices = [];
+let isSelectivePayment = false;
 
 // DOM Elements
 const elements = {
@@ -34,7 +36,6 @@ const elements = {
     btnCash: null,
     btnCard: null,
     btnCredit: null,
-    btnTip: null,
     btnCari: null,
     btnReports: null,
     btnSettings: null,
@@ -54,7 +55,11 @@ const elements = {
     selectedCustomer: null,
     selectedCustomerDisplay: null,
     btnCancelPayment: null,
-    btnFinalizePayment: null
+    btnFinalizePayment: null,
+    btnPaySelected: null,
+    splitButtonsArea: null,
+    selectedCount: null,
+    btnSplitEqually: null
 };
 
 /**
@@ -168,17 +173,20 @@ function onPaymentCompleted(data) {
     // Clear adisyon
     adisyonlar[data.masa] = [];
 
-    // If this is our current masa, clear display
-    if (data.masa === currentMasa) {
+    // If this is our current masa, clear display ONLY IF NOT partial
+    if (data.masa === currentMasa && !data.is_partial) {
         currentItems = [];
         currentTotal = 0;
         updateOrderDisplay();
 
-        // YENİ: Ödeme tamamlandığında modalı kapat
         if (typeof closePaymentModal === 'function') {
             closePaymentModal();
         }
     }
+
+    // Seçimleri temizle
+    selectedItemIndices = [];
+    updateSplitButtons();
 
     // Update table button
     updateTableButton(data.masa);
@@ -348,6 +356,10 @@ function selectMasa(masa) {
     if (elements.currentMasaLabel) {
         elements.currentMasaLabel.textContent = masa;
     }
+
+    // Reset selection on masa switch
+    selectedItemIndices = [];
+    updateSplitButtons();
 }
 
 function updateOrderDisplay() {
@@ -372,8 +384,15 @@ function updateOrderDisplay() {
                 <div class="order-item-price">${itemTotal.toFixed(2)} TL</div>
             `;
 
-            orderItem.onclick = () => removeItemFromOrder(index);
-            orderItem.ondblclick = () => removeItemFromOrder(index);
+            if (selectedItemIndices.includes(index)) {
+                orderItem.classList.add('selected');
+            }
+
+            orderItem.onclick = (e) => {
+                if (e.target.closest('.order-item')) {
+                    toggleItemSelection(index);
+                }
+            };
 
             elements.orderList.appendChild(orderItem);
         });
@@ -404,6 +423,28 @@ function removeItemFromOrder(index) {
     socket.emit('remove_item', { index: index });
 }
 
+function toggleItemSelection(index) {
+    const pos = selectedItemIndices.indexOf(index);
+    if (pos === -1) {
+        selectedItemIndices.push(index);
+    } else {
+        selectedItemIndices.splice(pos, 1);
+    }
+    updateOrderDisplay();
+    updateSplitButtons();
+}
+
+function updateSplitButtons() {
+    if (!elements.splitButtonsArea) return;
+
+    if (selectedItemIndices.length > 0) {
+        elements.splitButtonsArea.style.display = 'block';
+        elements.selectedCount.textContent = selectedItemIndices.length;
+    } else {
+        elements.splitButtonsArea.style.display = 'none';
+    }
+}
+
 /**
  * Payment functions
  */
@@ -430,16 +471,30 @@ function processPayment(type) {
 /**
  * Split Payment Modal Functions
  */
-function openPaymentModal(prefillType = null) {
+function getCurrentPaymentTotal() {
+    if (isSelectivePayment) {
+        return currentItems
+            .filter((_, i) => selectedItemIndices.includes(i))
+            .reduce((sum, item) => sum + (item.adet * item.fiyat), 0);
+    }
+    return currentTotal;
+}
+
+function openPaymentModal(prefillType = null, isSelective = false) {
     if (!currentMasa) {
         showNotification('Lütfen önce masa seçiniz!', 'warning');
         return;
     }
 
-    if (currentItems.length === 0) {
+    const itemsToPay = isSelective ? currentItems.filter((_, i) => selectedItemIndices.includes(i)) : currentItems;
+
+    if (itemsToPay.length === 0) {
         showNotification('Sipariş listesi boş!', 'warning');
         return;
     }
+
+    isSelectivePayment = isSelective;
+    const itemsTotal = itemsToPay.reduce((sum, item) => sum + (item.adet * item.fiyat), 0);
 
     // Reset inputs
     elements.paymentNakit.value = '';
@@ -447,9 +502,9 @@ function openPaymentModal(prefillType = null) {
     elements.paymentCari.value = '';
 
     // Pre-fill if type provided
-    if (prefillType === 'Nakit') elements.paymentNakit.value = currentTotal.toFixed(2);
-    if (prefillType === 'Kredi Kartı') elements.paymentKart.value = currentTotal.toFixed(2);
-    if (prefillType === 'Açık Hesap') elements.paymentCari.value = currentTotal.toFixed(2);
+    if (prefillType === 'Nakit') elements.paymentNakit.value = itemsTotal.toFixed(2);
+    if (prefillType === 'Kredi Kartı') elements.paymentKart.value = itemsTotal.toFixed(2);
+    if (prefillType === 'Açık Hesap') elements.paymentCari.value = itemsTotal.toFixed(2);
 
     elements.customerSearch.value = '';
     elements.selectedCustomer.value = '';
@@ -460,21 +515,24 @@ function openPaymentModal(prefillType = null) {
     elements.paymentModal.style.display = 'block';
 
     // Update totals
-    elements.modalTotalAmount.textContent = `${currentTotal.toFixed(2)} TL`;
-    updateRemainingAmount();
+    elements.modalTotalAmount.textContent = `${itemsTotal.toFixed(2)} TL`;
+    updateRemainingAmount(itemsTotal);
 }
 
 function closePaymentModal() {
     elements.paymentModal.style.display = 'none';
+    isSelectivePayment = false;
 }
 
-function updateRemainingAmount() {
+function updateRemainingAmount(overrideTotal = null) {
     const nakit = parseFloat(elements.paymentNakit.value) || 0;
     const kart = parseFloat(elements.paymentKart.value) || 0;
     const cari = parseFloat(elements.paymentCari.value) || 0;
 
+    const total = overrideTotal !== null ? overrideTotal : getCurrentPaymentTotal();
+
     const paid = nakit + kart + cari;
-    const remaining = currentTotal - paid;
+    const remaining = total - paid;
 
     elements.modalRemainingAmount.textContent = `${remaining.toFixed(2)} TL`;
 
@@ -497,12 +555,13 @@ function updateRemainingAmount() {
 function handlePaymentInputFocus(input) {
     const val = parseFloat(input.value) || 0;
     if (val === 0) {
+        const total = getCurrentPaymentTotal();
         const nakit = input === elements.paymentNakit ? 0 : (parseFloat(elements.paymentNakit.value) || 0);
         const kart = input === elements.paymentKart ? 0 : (parseFloat(elements.paymentKart.value) || 0);
         const cari = input === elements.paymentCari ? 0 : (parseFloat(elements.paymentCari.value) || 0);
 
         const otherPaid = nakit + kart + cari;
-        const remaining = Math.max(0, currentTotal - otherPaid);
+        const remaining = Math.max(0, total - otherPaid);
 
         if (remaining > 0) {
             input.value = remaining.toFixed(2);
@@ -513,7 +572,7 @@ function handlePaymentInputFocus(input) {
 }
 
 function balancePaymentInputs(changedInput) {
-    const total = currentTotal;
+    const total = getCurrentPaymentTotal();
     const nakit = parseFloat(elements.paymentNakit.value) || 0;
     const kart = parseFloat(elements.paymentKart.value) || 0;
     const cari = parseFloat(elements.paymentCari.value) || 0;
@@ -542,6 +601,24 @@ function balancePaymentInputs(changedInput) {
         }
     }
     updateRemainingAmount();
+}
+
+function splitEqually() {
+    const countStr = prompt("Hesap kaç kişiye bölünecek?", "2");
+    const count = parseInt(countStr);
+
+    if (isNaN(count) || count <= 0) return;
+
+    const total = getCurrentPaymentTotal();
+    const perPerson = total / count;
+
+    // Default to Cash
+    elements.paymentNakit.value = perPerson.toFixed(2);
+    elements.paymentKart.value = '';
+    elements.paymentCari.value = '';
+
+    updateRemainingAmount(total);
+    showNotification(`Kişi başı: ${perPerson.toFixed(2)} TL. Ödeme türünü değiştirebilirsiniz.`, 'info');
 }
 
 async function searchCustomers() {
@@ -608,7 +685,7 @@ function finalizeSplitPayment() {
         return;
     }
 
-    if (Math.abs(total - currentTotal) > 0.01) {
+    if (Math.abs(total - currentTotal) > 0.01 && !isSelectivePayment) {
         if (!confirm(`Girilen toplam (${total.toFixed(2)}) sipariş tutarından (${currentTotal.toFixed(2)}) farklı. Devam etmek istiyor musunuz?`)) {
             return;
         }
@@ -626,7 +703,12 @@ function finalizeSplitPayment() {
         payments.push({ type: 'Açık Hesap', amount: cari, customer: customer });
     }
 
-    socket.emit('finalize_payment', { payments: payments });
+    const payload = { payments: payments };
+    if (isSelectivePayment) {
+        payload.item_indices = selectedItemIndices;
+    }
+
+    socket.emit('finalize_payment', payload);
     closePaymentModal();
 }
 
@@ -636,34 +718,39 @@ function finalizeSplitPayment() {
 function setupEventListeners() {
     if (elements.btnCash) {
         elements.btnCash.onclick = () => {
-            console.log('💵 btnCash clicked -> opening modal with Nakit prefill');
-            openPaymentModal('Nakit');
+            const isSelective = selectedItemIndices.length > 0;
+            console.log(`💵 btnCash clicked -> opening modal with Nakit prefill (Selective: ${isSelective})`);
+            openPaymentModal('Nakit', isSelective);
         };
     }
 
     if (elements.btnCard) {
         elements.btnCard.onclick = () => {
-            console.log('💳 btnCard clicked -> opening modal with Kart prefill');
-            openPaymentModal('Kredi Kartı');
+            const isSelective = selectedItemIndices.length > 0;
+            console.log(`💳 btnCard clicked -> opening modal with Kart prefill (Selective: ${isSelective})`);
+            openPaymentModal('Kredi Kartı', isSelective);
         };
     }
 
     if (elements.btnCredit) {
         elements.btnCredit.onclick = () => {
-            console.log('📝 btnCredit clicked -> opening modal with Cari prefill');
-            openPaymentModal('Açık Hesap');
-        };
-    }
-
-    if (elements.btnTip) {
-        elements.btnTip.onclick = () => {
-            showNotification('Bahşiş özelliği yakında eklenecek!', 'info');
+            const isSelective = selectedItemIndices.length > 0;
+            console.log(`📝 btnCredit clicked -> opening modal with Cari prefill (Selective: ${isSelective})`);
+            openPaymentModal('Açık Hesap', isSelective);
         };
     }
 
     if (elements.btnPrint) {
         elements.btnPrint.onclick = () => {
-            showNotification('Fiş yazdırma özelliği yakında eklenecek!', 'info');
+            if (!currentMasa) {
+                showNotification('Lütfen önce masa seçiniz!', 'warning');
+                return;
+            }
+            if (currentItems.length === 0) {
+                showNotification('Yazdırılacak sipariş yok!', 'warning');
+                return;
+            }
+            socket.emit('print_receipt', { masa: currentMasa });
         };
     }
 
@@ -732,6 +819,14 @@ function setupEventListeners() {
 
     if (elements.customerSearch) {
         elements.customerSearch.oninput = () => searchCustomers();
+    }
+
+    if (elements.btnPaySelected) {
+        elements.btnPaySelected.onclick = () => openPaymentModal(null, true);
+    }
+
+    if (elements.btnSplitEqually) {
+        elements.btnSplitEqually.onclick = () => splitEqually();
     }
 
     // Close modal on outside click

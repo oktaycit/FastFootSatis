@@ -15,6 +15,8 @@ import os
 import sys
 import logging
 import socket
+import subprocess
+import platform
 from collections import defaultdict
 
 # Database modülünü yükle
@@ -166,6 +168,36 @@ class RestaurantServer:
         except Exception as e:
             logger.error(f"Ayar kaydetme hatası: {e}")
             return False
+            
+    def send_to_kitchen_legacy(self, masa_adi, urun_adi, adet=1):
+        """Mevcut mutfak.py (port 5556) sistemine sipariş gönderir"""
+        def task():
+            try:
+                # Ayarları yükle (Kitchen IP/Port her seferinde kontrol edilebilir veya tek seferlik yüklenebilir)
+                # Buradaki self.kitchen_ip ve self.kitchen_port varsayılan olarak sipariscari.py'den gelebilir
+                # web_server.py'de henüz bu ayarlar yok, ekleyelim.
+                kitchen_ip = getattr(self, 'kitchen_ip', '127.0.0.1')
+                kitchen_port = getattr(self, 'kitchen_port', 5556)
+                
+                client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                client.settimeout(3)
+                client.connect((kitchen_ip, kitchen_port))
+                
+                payload = {
+                    "islem": "yeni_siparis",
+                    "masa": masa_adi,
+                    "siparisler": [{"urun": urun_adi, "adet": adet}], # mutfak.py bu formatı bekliyor olabilir
+                    "saat": datetime.datetime.now().strftime("%H:%M:%S"),
+                    "terminal": self.terminal_id
+                }
+                
+                client.send(json.dumps(payload).encode('utf-8'))
+                client.close()
+                logger.info(f"👨‍🍳 Legacy Mutfak onayladı: {urun_adi} -> {masa_adi}")
+            except Exception as e:
+                logger.error(f"⚠ Legacy Mutfak ekranına bağlanılamadı: {e}")
+                
+        threading.Thread(target=task, daemon=True).start()
     
     def refresh_adisyonlar(self):
         """Masa/paket yapısını yeniden oluştur"""
@@ -284,6 +316,16 @@ class RestaurantServer:
                     'source': 'terminal'
                 })
                 
+                # Mutfak bildirimi
+                for item in yeni_urunler:
+                    socketio.emit('kitchen_new_order', {
+                        'masa': masa_adi,
+                        'urun': item['urun'],
+                        'adet': 1,
+                        'saat': datetime.datetime.now().strftime("%H:%M:%S")
+                    })
+                    self.send_to_kitchen_legacy(masa_adi, item['urun'], 1)
+                
                 logger.info(f"📲 Terminal siparişi: {terminal_adi} → {masa_adi}")
         except Exception as e:
             logger.error(f"Terminal veri hatası: {e}")
@@ -310,6 +352,11 @@ def settings_page():
     """Ayarlar sayfası"""
     return app.send_static_file('settings.html')
 
+@app.route('/menu_edit')
+def menu_edit_page():
+    """Menü düzenleme sayfası"""
+    return app.send_static_file('menu_edit.html')
+
 @app.route('/cari')
 def cari_page():
     """Cari işlemler sayfası"""
@@ -319,6 +366,11 @@ def cari_page():
 def gunsonu_page():
     """Gün sonu işlemleri sayfası"""
     return app.send_static_file('gunsonu.html')
+
+@app.route('/mutfak')
+def mutfak_page():
+    """Mutfak sipariş takip sayfası"""
+    return app.send_static_file('mutfak.html')
 
 @app.route('/api/system/info')
 def system_info():
@@ -556,6 +608,45 @@ def delete_cari_hesap(cari_isim):
 
 # ==================== MENÜ ====================
 
+@app.route('/api/menu/save', methods=['POST'])
+def save_menu_api():
+    """Menüyü kaydet"""
+    try:
+        data = request.json
+        if not data or 'menu' not in data:
+            return jsonify({'success': False, 'error': 'Geçersiz veri'})
+        
+        new_menu = data['menu']
+        
+        # 1. menu.txt dosyasını güncelle
+        with open(MENU_FILE, "w", encoding="utf-8") as f:
+            for cat, items in new_menu.items():
+                for item in items:
+                    f.write(f"{cat};{item[0]};{item[1]}\n")
+        
+        # 2. Veri tabanını güncelle (eğer kullanılıyorsa)
+        if USE_DATABASE:
+            try:
+                db.load_menu_from_file(MENU_FILE)
+            except Exception as e:
+                logger.error(f"Menü DB güncelleme hatası: {e}")
+        
+        # 3. Sunucu cache'ini yenile
+        global server
+        server.menu_data = new_menu
+        
+        # 4. İstemcilere bildir
+        socketio.emit('initial_data', {
+            'system': server.get_system_info(),
+            'menu': server.menu_data,
+            'adisyonlar': server.adisyonlar
+        })
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"Menü kaydetme hatası: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+
 @app.route('/api/menu')
 def get_menu():
     """Menüyü getir"""
@@ -644,7 +735,8 @@ def handle_add_item(data):
         'urun': urun,
         'adet': 1,
         'fiyat': fiyat,
-        'tip': 'normal'
+        'tip': 'normal',
+        'saat': datetime.datetime.now().strftime("%H:%M:%S")
     }
     
     server.adisyonlar[masa_adi].append(siparis)
@@ -658,6 +750,17 @@ def handle_add_item(data):
         'items': items,
         'total': total
     })
+    
+    # Mutfak bildirimi gönder
+    socketio.emit('kitchen_new_order', {
+        'masa': masa_adi,
+        'urun': urun,
+        'adet': 1,
+        'saat': datetime.datetime.now().strftime("%H:%M:%S")
+    })
+    
+    # Legacy mutfak sistemine gönder
+    server.send_to_kitchen_legacy(masa_adi, urun, 1)
 
 @socketio.on('remove_item')
 def handle_remove_item(data):
@@ -697,7 +800,22 @@ def handle_payment(data):
     # Ödeme listesini al (YENİ: Parçalı ödeme desteği)
     payments = data.get('payments', [])
     payment_type = data.get('type', 'Nakit') # Eski format desteği
-    
+    item_indices = data.get('item_indices', []) # YENİ: Seçili ürünlerin indexleri
+
+    # Hangi kalemlerin ödendiğini belirle
+    if item_indices:
+        items_to_pay = []
+        # Indexleri büyükten küçüğe sıralayarak pop işleminin diğer indexleri kaydırmasını önleyeceğiz
+        # Ama önce kopyasını alıp işlem yapalım ki hata durumunda veri kaybolmasın
+        for idx in item_indices:
+            if 0 <= idx < len(server.adisyonlar[masa_adi]):
+                items_to_pay.append(server.adisyonlar[masa_adi][idx])
+        
+        if not items_to_pay:
+            emit('error', {'message': 'Seçilen ürünler bulunamadı'})
+            return
+        items = items_to_pay
+
     if not payments:
         total_amount = sum(item['adet'] * item['fiyat'] for item in items)
         payments = [{'type': payment_type, 'amount': total_amount}]
@@ -735,15 +853,36 @@ def handle_payment(data):
         if USE_DATABASE:
             db.save_sales_batch(sales_data)
         
-        # Adisyonu temizle
-        server.adisyonlar[masa_adi] = []
+        # Adisyonu temizle (Sadece ödenen kalemleri)
+        is_partial = False
+        if item_indices:
+            # Indexleri büyükten küçüğe sıralayıp sil
+            for idx in sorted(item_indices, reverse=True):
+                if 0 <= idx < len(server.adisyonlar[masa_adi]):
+                    server.adisyonlar[masa_adi].pop(idx)
+            
+            # Eğer masada hala ürün varsa bu bir kısmi ödemedir
+            if server.adisyonlar[masa_adi]:
+                is_partial = True
+        else:
+            server.adisyonlar[masa_adi] = []
         
         # Tüm clientlara bildir
         socketio.emit('payment_completed', {
             'masa': masa_adi,
             'type': final_payment_label,
-            'payments': payments
+            'payments': payments,
+            'is_partial': is_partial
         })
+
+        # Eğer kısmi ödeme ise veya masada hala ürün varsa masa_update gönder
+        if is_partial or server.adisyonlar[masa_adi]:
+            remaining_total = sum(item['adet'] * item['fiyat'] for item in server.adisyonlar[masa_adi] if item.get('tip') != 'ikram')
+            socketio.emit('masa_update', {
+                'masa': masa_adi,
+                'items': server.adisyonlar[masa_adi],
+                'total': remaining_total
+            })
         
         msg = f"{final_payment_label} ödemesi alındı"
         if final_payment_label == "Parçalı":
@@ -756,10 +895,86 @@ def handle_payment(data):
         logger.error(f"Ödeme hatası: {e}")
         emit('error', {'message': str(e)})
 
+@socketio.on('print_receipt')
+def handle_print_receipt(data):
+    """Fiş yazdır"""
+    sid = request.sid
+    masa_adi = server.current_selections.get(sid)
+    
+    if not masa_adi or masa_adi not in server.adisyonlar:
+        emit('error', {'message': 'Geçersiz masa'})
+        return
+    
+    items = [i for i in server.adisyonlar.get(masa_adi, []) if i.get('tip') != 'tip']
+    if not items:
+        emit('error', {'message': 'Yazdırılacak sipariş yok'})
+        return
+    
+    try:
+        sira = server.get_and_inc_counter()
+        now = datetime.datetime.now().strftime("%d-%m-%Y      %H:%M")
+        fn = os.path.join(FIS_KLASORU, f"Fis_{sira}.txt")
+        total = sum(i['adet'] * i['fiyat'] for i in items)
+        C_WIDTH = 19 
+        
+        with open(fn, "w", encoding="utf-8") as f:
+            f.write(f"{server.company_name[:C_WIDTH]:^{C_WIDTH}}\n")
+            f.write(f"{'SİPARİŞ FİŞİ':^{C_WIDTH}}\n")
+            f.write(f"{'='*C_WIDTH}\n")
+            f.write(f"{now}\n")
+            f.write(f"Fiş No:{sira:<8} {masa_adi}\n")
+            f.write(f"{'-'*C_WIDTH}\n")
+            f.write(f"{'Ürün':<10} {'Ad.':<5} {'Tutar':}\n")
+            f.write(f"{'-'*C_WIDTH}\n")
+            for i in items:
+                ik = " (IK)" if i.get("tip") == "ikram" else ""
+                urun_adi = (i['urun'] + ik)[:14]
+                f.write(f"{urun_adi:<12} {i['adet']:<1} {i['adet']*i['fiyat']:>6.2f}TL\n")
+            f.write(f"{'='*C_WIDTH}\n")
+            f.write(f"{'TOPLAM:':<10}{total:>11.2f}TL \n")
+            f.write(f"{'='*C_WIDTH}\n")
+            f.write(f"{'Afiyet Olsun':^{C_WIDTH}}\n")
+            f.write("\n\n\n")
+
+        full_path = os.path.abspath(fn)
+        
+        # Yazdırma komutu
+        if server.direct_print:
+            system = platform.system()
+            try:
+                if system == "Windows":
+                    os.startfile(full_path, "print")
+                elif system == "Darwin": # MacOS
+                    subprocess.run(["lp", full_path], check=True)
+                else: # Linux
+                    subprocess.run(["lpr", full_path], check=True)
+            except Exception as e:
+                logger.error(f"Yazdırma hatası: {e}")
+                # Fallback: Dosyayı aç
+                if system == "Darwin":
+                    subprocess.run(["open", full_path])
+                elif system == "Windows":
+                    os.startfile(full_path)
+        else:
+            # Direct print kapalıysa sadece dosyayı aç (izleme amaçlı)
+            system = platform.system()
+            if system == "Darwin":
+                subprocess.run(["open", full_path])
+            elif system == "Windows":
+                os.startfile(full_path)
+            else:
+                subprocess.run(["xdg-open", full_path])
+
+        emit('success', {'message': 'Fiş oluşturuldu ve yazdırılmaya gönderildi'})
+        
+    except Exception as e:
+        logger.error(f"Fiş oluşturma hatası: {e}")
+        emit('error', {'message': f'Fiş oluşturulamadı: {str(e)}'})
+
 if __name__ == '__main__':
     # Terminal sunucusunu başlat
     server.start_terminal_server()
     
     # Web sunucuyu başlat
     logger.info(f"🌐 Web sunucu başlatılıyor: http://{get_local_ip()}:8000")
-    socketio.run(app, host='0.0.0.0', port=8000, debug=True, allow_unsafe_werkzeug=True)
+    socketio.run(app, host='0.0.0.0', port=8000, debug=False, allow_unsafe_werkzeug=True)

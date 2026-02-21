@@ -1,0 +1,51 @@
+2026-02-20 13:34:16,876 - INFO - ✓ 35 adisyon alanı oluşturuldu
+2026-02-20 13:34:16,877 - INFO - ✓ Menü dosyadan yüklendi: 4 kategori
+2026-02-20 13:34:16,877 - INFO - 🚀 RestaurantServer initialized
+2026-02-20 13:34:16,877 - INFO - 📊 Masa: 30, Paket: 5
+2026-02-20 13:34:16,878 - INFO - 📡 IP: 192.168.1.196
+2026-02-20 13:34:16,890 - INFO - 🌐 Web sunucu başlatılıyor: http://192.168.1.196:8000
+2026-02-20 13:34:16,890 - INFO - 📡 Terminal sunucusu başladı: 192.168.1.196:5555
+✗ PostgreSQL bağlantı hatası: connection to server at "localhost" (127.0.0.1), port 5432 failed: Connection refused
+	Is the server running on that host and accepting TCP/IP connections?
+connection to server at "localhost" (::1), port 5432 failed: Connection refused
+	Is the server running on that host and accepting TCP/IP connections?
+
+⚠ Veri tabanı bağlantısı yapılamadı: connection to server at "localhost" (127.0.0.1), port 5432 failed: Connection refused
+	Is the server running on that host and accepting TCP/IP connections?
+connection to server at "localhost" (::1), port 5432 failed: Connection refused
+	Is the server running on that host and accepting TCP/IP connections?
+
+ * Serving Flask app 'web_server'
+ * Debug mode: off
+2026-02-20 13:34:16,902 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8000
+ * Running on http://192.168.1.196:8000
+2026-02-20 13:34:16,902 - INFO - [33mPress CTRL+C to quit[0m
+2026-02-20 13:34:17,010 - INFO - 127.0.0.1 - - [20/Feb/2026 13:34:17] "GET /socket.io/?EIO=4&transport=polling&t=PnwdLGe HTTP/1.1" 200 -
+2026-02-20 13:34:17,021 - INFO - ✅ Client bağlandı: 127.0.0.1 (24YAbqBICE1sSrDcAAAB)
+2026-02-20 13:34:17,023 - INFO - 127.0.0.1 - - [20/Feb/2026 13:34:17] "POST /socket.io/?EIO=4&transport=polling&t=PnwdLGq&sid=1tiYUbkO6E_KY8erAAAA HTTP/1.1" 200 -
+2026-02-20 13:34:17,025 - INFO - 127.0.0.1 - - [20/Feb/2026 13:34:17] "GET /socket.io/?EIO=4&transport=polling&t=PnwdLGs&sid=1tiYUbkO6E_KY8erAAAA HTTP/1.1" 200 -
+2026-02-20 13:34:17,032 - INFO - 127.0.0.1 - - [20/Feb/2026 13:34:17] "GET /socket.io/?EIO=4&transport=polling&t=PnwdLH4&sid=1tiYUbkO6E_KY8erAAAA HTTP/1.1" 200 -
+2026-02-20 13:34:17,316 - INFO - 127.0.0.1 - - [20/Feb/2026 13:34:17] "GET /socket.io/?EIO=4&transport=polling&t=PnwdLLU HTTP/1.1" 200 -
+2026-02-20 13:34:17,326 - INFO - ✅ Client bağlandı: 127.0.0.1 (IWz5wL-uh6QemP1TAAAD)
+2026-02-20 13:34:17,328 - INFO - 127.0.0.1 - - [20/Feb/2026 13:34:17] "POST /socket.io/?EIO=4&transport=polling&t=PnwdLLc&sid=r0hOl-qbDdpF18xkAAAC HTTP/1.1" 200 -
+2026-02-20 13:34:17,329 - INFO - 127.0.0.1 - - [20/Feb/2026 13:34:17] "GET /socket.io/?EIO=4&transport=polling&t=PnwdLLf&sid=r0hOl-qbDdpF18xkAAAC HTTP/1.1" 200 -
+2026-02-20 13:34:17,335 - INFO - 127.0.0.1 - - [20/Feb/2026 13:34:17] "GET /socket.io/?EIO=4&transport=polling&t=PnwdLLp&sid=r0hOl-qbDdpF18xkAAAC HTTP/1.1" 200 -
+2026-02-20 13:34:39,094 - INFO - 127.0.0.1 - - [20/Feb/2026 13:34:39] "GET /mutfak HTTP/1.1" 200 -
+2026-02-20 13:34:39,103 - INFO - ❌ Client ayrıldı: 127.0.0.1 (24YAbqBICE1sSrDcAAAB)
+2026-02-20 13:34:39,104 - INFO - 127.0.0.1 - - [20/Feb/2026 13:34:39] "GET /socket.io/?EIO=4&transport=websocket&sid=1tiYUbkO6E_KY8erAAAA HTTP/1.1" 200 -
+2026-02-20 13:34:39,117 - INFO - 127.0.0.1 - - [20/Feb/2026 13:34:39] "[36mGET /styles.css HTTP/1.1[0m" 304 -
+2026-02-20 13:34:39,131 - INFO - 127.0.0.1 - - [20/Feb/2026 13:34:39] "GET /socket.io/?EIO=4&transport=polling&t=PnwdQgI HTTP/1.1" 200 -
+2026-02-20 13:34:39,149 - INFO - ✅ Client bağlandı: 127.0.0.1 (RMnJMHlK05j6eIHKAAAF)
+2026-02-20 13:34:39,153 - INFO - 127.0.0.1 - - [20/Feb/2026 13:34:39] "GET /socket.io/?EIO=4&transport=polling&t=PnwdQgV&sid=remJZogy9B0_xFfJAAAE HTTP/1.1" 200 -
+2026-02-20 13:34:39,154 - INFO - 127.0.0.1 - - [20/Feb/2026 13:34:39] "POST /socket.io/?EIO=4&transport=polling&t=PnwdQgU&sid=remJZogy9B0_xFfJAAAE HTTP/1.1" 200 -
+2026-02-20 13:34:39,164 - INFO - 127.0.0.1 - - [20/Feb/2026 13:34:39] "GET /socket.io/?EIO=4&transport=polling&t=PnwdQgq&sid=remJZogy9B0_xFfJAAAE HTTP/1.1" 200 -
+2026-02-20 13:34:45,780 - ERROR - ⚠ Legacy Mutfak ekranına bağlanılamadı: [Errno 61] Connection refused
+2026-02-20 13:34:51,314 - ERROR - ⚠ Legacy Mutfak ekranına bağlanılamadı: [Errno 61] Connection refused
+2026-02-20 13:34:55,693 - ERROR - ⚠ Legacy Mutfak ekranına bağlanılamadı: [Errno 61] Connection refused
+2026-02-20 13:35:12,793 - ERROR - ⚠ Legacy Mutfak ekranına bağlanılamadı: [Errno 61] Connection refused
+2026-02-20 13:35:58,435 - INFO - ❌ Client ayrıldı: 127.0.0.1 (RMnJMHlK05j6eIHKAAAF)
+2026-02-20 13:35:58,437 - INFO - 127.0.0.1 - - [20/Feb/2026 13:35:58] "GET /socket.io/?EIO=4&transport=websocket&sid=remJZogy9B0_xFfJAAAE HTTP/1.1" 200 -
+2026-02-20 13:35:58,442 - INFO - ❌ Client ayrıldı: 127.0.0.1 (IWz5wL-uh6QemP1TAAAD)
+2026-02-20 13:35:58,444 - INFO - 127.0.0.1 - - [20/Feb/2026 13:35:58] "GET /socket.io/?EIO=4&transport=websocket&sid=r0hOl-qbDdpF18xkAAAC HTTP/1.1" 200 -

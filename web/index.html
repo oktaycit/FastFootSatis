@@ -90,27 +90,36 @@
                     🖨️ FİŞ YAZDIR
                 </button>
 
+                <!-- Bill Split Buttons -->
+                <div id="splitButtonsArea" style="display: none; margin-bottom: 8px;">
+                    <button class="btn" id="btnPaySelected"
+                        style="background: linear-gradient(135deg, #f1c40f, #f39c12); color: white;">
+                        ⚖️ SEÇİLENLERİ ÖDE (<span id="selectedCount">0</span>)
+                    </button>
+                </div>
+
                 <!-- Payment Buttons -->
                 <div class="payment-buttons">
                     <button class="btn btn-cash" id="btnCash">💵 NAKİT</button>
                     <button class="btn btn-card" id="btnCard">💳 KART</button>
                     <button class="btn btn-credit" id="btnCredit">📝 AÇIK</button>
-                    <button class="btn btn-tip" id="btnTip">🎁 TİP</button>
                 </div>
-
                 <!-- Management Buttons -->
-                <a href="/cari" style="text-decoration:none;">
-                    <button class="btn btn-secondary" id="btnCari">💰 CARİ YÖNETİMİ</button>
-                </a>
-                <a href="/settings" style="text-decoration:none;">
-                    <button class="btn btn-secondary" id="btnSettings">⚙️ AYARLAR</button>
-                </a>
-                <button class="btn btn-info" id="btnAbout">ℹ️ HAKKINDA</button>
-                <a href="/terminals" style="text-decoration:none;">
-                    <button class="btn"
-                        style="background: linear-gradient(135deg,#3b82f6,#06b6d4); color:white; width:100%;">📡
-                        TERMİNALLER</button>
-                </a>
+                <div class="management-buttons">
+                    <a href="/cari" style="text-decoration:none;">
+                        <button class="btn btn-secondary" id="btnCari">💰 CARİ</button>
+                    </a>
+                    <a href="/settings" style="text-decoration:none;">
+                        <button class="btn btn-secondary" id="btnSettings">⚙️ AYARLAR</button>
+                    </a>
+                    <button class="btn btn-info" id="btnAbout">ℹ️ HAKKINDA</button>
+                    <a href="/terminals" style="text-decoration:none;">
+                        <button class="btn btn-terminals" id="btnTerminals">📡 TERMİNAL</button>
+                    </a>
+                    <a href="/mutfak" style="text-decoration:none;" target="_blank">
+                        <button class="btn" style="background: #2c3e50; color: white;">👨‍🍳 MUTFAK</button>
+                    </a>
+                </div>
             </div>
 
             <!-- Footer Info -->
@@ -149,43 +158,48 @@
                         <span class="label">KALAN:</span>
                         <span class="value" id="modalRemainingAmount">0.00 TL</span>
                     </div>
-                </div>
+                    <div class="modal-split-actions" style="margin-bottom: 20px;">
+                        <button class="btn btn-info" id="btnSplitEqually"
+                            style="width: auto; padding: 10px 20px; margin: 0 auto; display: block;">
+                            ➗ EŞİT BÖL
+                        </button>
+                    </div>
 
-                <div class="payment-inputs">
-                    <div class="input-group">
-                        <label for="paymentNakit">💵 NAKİT</label>
-                        <input type="number" id="paymentNakit" placeholder="0.00" step="0.01">
+                    <div class="payment-inputs">
+                        <div class="input-group">
+                            <label for="paymentNakit">💵 NAKİT</label>
+                            <input type="number" id="paymentNakit" placeholder="0.00" step="0.01">
+                        </div>
+                        <div class="input-group">
+                            <label for="paymentKart">💳 KREDİ KARTI</label>
+                            <input type="number" id="paymentKart" placeholder="0.00" step="0.01">
+                        </div>
+                        <div class="input-group">
+                            <label for="paymentCari">📝 AÇIK HESAP</label>
+                            <input type="number" id="paymentCari" placeholder="0.00" step="0.01">
+                        </div>
                     </div>
-                    <div class="input-group">
-                        <label for="paymentKart">💳 KREDİ KARTI</label>
-                        <input type="number" id="paymentKart" placeholder="0.00" step="0.01">
-                    </div>
-                    <div class="input-group">
-                        <label for="paymentCari">📝 AÇIK HESAP</label>
-                        <input type="number" id="paymentCari" placeholder="0.00" step="0.01">
-                    </div>
-                </div>
 
-                <div class="customer-selection" id="customerSelectionDiv" style="display: none;">
-                    <label for="customerSearch">👤 MÜŞTERİ SEÇİMİ (AÇIK HESAP İÇİN)</label>
-                    <div class="search-box">
-                        <input type="text" id="customerSearch" placeholder="Müşteri ara...">
-                        <div id="customerResults" class="search-results"></div>
+                    <div class="customer-selection" id="customerSelectionDiv" style="display: none;">
+                        <label for="customerSearch">👤 MÜŞTERİ SEÇİMİ (AÇIK HESAP İÇİN)</label>
+                        <div class="search-box">
+                            <input type="text" id="customerSearch" placeholder="Müşteri ara...">
+                            <div id="customerResults" class="search-results"></div>
+                        </div>
+                        <input type="hidden" id="selectedCustomer" value="">
+                        <div class="selected-customer-name" id="selectedCustomerDisplay">Henüz müşteri seçilmedi</div>
                     </div>
-                    <input type="hidden" id="selectedCustomer" value="">
-                    <div class="selected-customer-name" id="selectedCustomerDisplay">Henüz müşteri seçilmedi</div>
-                </div>
 
-                <div class="modal-actions">
-                    <button class="btn btn-vazgec" id="btnCancelPayment">VAZGEÇ</button>
-                    <button class="btn btn-tamamla" id="btnFinalizePayment">ÖDEMEYİ TAMAMLA</button>
+                    <div class="modal-actions">
+                        <button class="btn btn-vazgec" id="btnCancelPayment">VAZGEÇ</button>
+                        <button class="btn btn-tamamla" id="btnFinalizePayment">ÖDEMEYİ TAMAMLA</button>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- Main Script -->
-    <script src="script.js"></script>
+        <!-- Main Script -->
+        <script src="script.js"></script>
 </body>
 
 </html>
