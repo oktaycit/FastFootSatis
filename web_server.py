@@ -322,7 +322,8 @@ class RestaurantServer:
                         'masa': masa_adi,
                         'urun': item['urun'],
                         'adet': 1,
-                        'saat': datetime.datetime.now().strftime("%H:%M:%S")
+                        'saat': datetime.datetime.now().strftime("%H:%M:%S"),
+                        'terminal_id': f"TCP:{terminal_adi}"
                     })
                     self.send_to_kitchen_legacy(masa_adi, item['urun'], 1)
                 
@@ -756,7 +757,8 @@ def handle_add_item(data):
         'masa': masa_adi,
         'urun': urun,
         'adet': 1,
-        'saat': datetime.datetime.now().strftime("%H:%M:%S")
+        'saat': datetime.datetime.now().strftime("%H:%M:%S"),
+        'terminal_id': f"sid:{sid}"
     })
     
     # Legacy mutfak sistemine gönder
@@ -798,9 +800,34 @@ def handle_payment(data):
         return
 
     # Ödeme listesini al (YENİ: Parçalı ödeme desteği)
+    if data.get('role') == 'terminal':
+        emit('error', {'message': 'Yetki hatası: Kasa işlemi yapılamaz'})
+        return
+
     payments = data.get('payments', [])
     payment_type = data.get('type', 'Nakit') # Eski format desteği
     item_indices = data.get('item_indices', []) # YENİ: Seçili ürünlerin indexleri
+
+@socketio.on('kitchen_order_ready')
+def handle_kitchen_ready(data):
+    """Mutfak siparişi tamamladı"""
+    masa_adi = data.get('masa')
+    terminal_ids = data.get('terminal_ids', [])
+    
+    logger.info(f"👨‍🍳 Mutfak bildirdi: {masa_adi} hazır!")
+    
+    # İlgili terminallere bildir (sid: ile başlayanlara)
+    for t_id in terminal_ids:
+        if t_id.startswith('sid:'):
+            target_sid = t_id.split('sid:')[1]
+            socketio.emit('order_ready', {
+                'masa': masa_adi,
+                'message': f"{masa_adi} Siparişi Hazır!"
+            }, to=target_sid)
+        
+    # Genel sistem bildirimi (opsiyonel - istenirse tüm garsonlara gidebilir)
+    # socketio.emit('global_notification', {'title': 'Mutfak', 'message': f'{masa_adi} hazır!'})
+
 
     # Hangi kalemlerin ödendiğini belirle
     if item_indices:

@@ -91,6 +91,15 @@
                 newItem.textContent = `${data.adet}x ${data.urun}`;
                 itemsContainer.appendChild(newItem);
 
+                // Terminal IDs'i güncelle (kartta sakla)
+                if (data.terminal_id) {
+                    let tIds = JSON.parse(card.dataset.terminalIds || '[]');
+                    if (!tIds.includes(data.terminal_id)) {
+                        tIds.push(data.terminal_id);
+                        card.dataset.terminalIds = JSON.stringify(tIds);
+                    }
+                }
+
                 // Zamanı güncelle
                 card.querySelector('.order-card-time').textContent = data.saat;
 
@@ -103,6 +112,10 @@
                 card = document.createElement('div');
                 card.className = showNewEffect ? 'order-card new' : 'order-card';
                 card.dataset.masa = data.masa;
+                // Terminal IDs'i dizi olarak başlat
+                const initialTIds = data.terminal_id ? [data.terminal_id] : [];
+                card.dataset.terminalIds = JSON.stringify(initialTIds);
+
                 const cardId = `order-${data.masa.replace(/\s+/g, '-')}`; // Masa ismine göre ID
                 card.id = cardId;
 
@@ -129,6 +142,15 @@
         function completeOrder(id) {
             const card = document.getElementById(id);
             if (card) {
+                const masa = card.dataset.masa;
+                const terminalIds = JSON.parse(card.dataset.terminalIds || '[]');
+
+                // Sunucuya bildir
+                socket.emit('kitchen_order_ready', {
+                    masa: masa,
+                    terminal_ids: terminalIds
+                });
+
                 card.style.transform = 'scale(0.8)';
                 card.style.opacity = '0';
                 setTimeout(() => card.remove(), 300);

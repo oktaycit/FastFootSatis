@@ -106,7 +106,34 @@ function connectToServer() {
     socket.on('success', onSuccess);
     socket.on('error', onError);
 
+    // New: Order ready notification
+    socket.on('order_ready', (data) => {
+        showOrderReadyNotification(data);
+    });
+
     console.log('🔌 Connecting to server...');
+}
+
+/**
+ * Show notification for ready orders
+ */
+function showOrderReadyNotification(data) {
+    console.log('🔔 Order ready notification:', data);
+
+    // Play sound if possible
+    try {
+        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+        audio.play().catch(e => console.log('Audio play failed:', e));
+    } catch (e) {
+        console.warn('Notification sound failed');
+    }
+
+    // Show visual status
+    if (typeof showNotification === 'function') {
+        showNotification(data.message, 'success');
+    } else {
+        alert(data.message);
+    }
 }
 
 /**
@@ -135,10 +162,63 @@ function onInitialData(data) {
     menuData = data.menu || {};
     adisyonlar = data.adisyonlar || {};
 
+    // Check for terminal role override in URL or localStorage
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('role')) {
+        const role = urlParams.get('role');
+        localStorage.setItem('terminal_role', role);
+        console.log(`🎭 Role set from URL: ${role}`);
+    }
+
+    const currentRole = localStorage.getItem('terminal_role') || 'kasa';
+    const isTerminal = (currentRole === 'terminal');
+
     // Update UI
     updateSystemInfo();
     renderMenu();
     renderTables();
+
+    // Apply role restrictions
+    if (isTerminal) {
+        applyTerminalRestrictions();
+    }
+}
+
+/**
+ * Apply restrictions for non-kasa terminals
+ */
+function applyTerminalRestrictions() {
+    console.log('🛡️ Applying terminal restrictions (Checkout disabled)');
+
+    // Hide payment buttons
+    const paymentButtons = document.querySelector('.payment-buttons');
+    if (paymentButtons) paymentButtons.style.display = 'none';
+
+    // Hide management buttons
+    const managementToHide = ['btnCari', 'btnSettings', 'btnTerminals'];
+    managementToHide.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            const link = el.closest('a');
+            if (link) link.style.display = 'none';
+            else el.style.display = 'none';
+        }
+    });
+
+    // Hide split buttons
+    if (elements.splitButtonsArea) elements.splitButtonsArea.style.display = 'none';
+
+    // Update terminal text to show it's a terminal
+    if (elements.terminalId) {
+        elements.terminalId.textContent += ' (Sipariş Terminali)';
+        elements.terminalId.style.color = '#f39c12';
+    }
+
+    // Disable payment functions at code level
+    const originalOpenPaymentModal = window.openPaymentModal;
+    window.openPaymentModal = function () {
+        showNotification('Bu terminal yetkili değildir!', 'error');
+    };
 }
 
 function onMasaSelected(data) {
@@ -703,13 +783,33 @@ function finalizeSplitPayment() {
         payments.push({ type: 'Açık Hesap', amount: cari, customer: customer });
     }
 
-    const payload = { payments: payments };
+    const currentRole = localStorage.getItem('terminal_role') || 'kasa';
+    const payload = {
+        payments: payments,
+        role: currentRole
+    };
     if (isSelectivePayment) {
         payload.item_indices = selectedItemIndices;
     }
 
     socket.emit('finalize_payment', payload);
     closePaymentModal();
+}
+
+/**
+ * Handle direct payment buttons (non-modal legacy)
+ */
+function processPayment(type) {
+    if (!currentMasa) {
+        showNotification('Lütfen önce masa seçiniz!', 'warning');
+        return;
+    }
+    const currentRole = localStorage.getItem('terminal_role') || 'kasa';
+    if (currentRole === 'terminal') {
+        showNotification('Bu terminal yetkili değildir!', 'error');
+        return;
+    }
+    // ... rest of processPayment if needed, but the UI already hides it
 }
 
 /**
