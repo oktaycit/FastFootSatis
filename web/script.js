@@ -165,6 +165,18 @@ function onDisconnect() {
 function onError(error) {
     console.error('❌ Socket error:', error);
     showNotification(error.message || 'Bir hata oluştu', 'error');
+
+    // Re-enable payment button if failed
+    if (elements.btnFinalizePayment) {
+        elements.btnFinalizePayment.disabled = false;
+        elements.btnFinalizePayment.textContent = '✅ Ödemeyi Tamamla';
+    }
+}
+
+function onSystemInfo(data) {
+    console.log('📊 System info update:', data);
+    systemInfo = data;
+    updateSystemInfo();
 }
 
 function onInitialData(data) {
@@ -866,8 +878,15 @@ function finalizeSplitPayment() {
         payload.item_indices = selectedItemIndices;
     }
 
-    socket.emit('finalize_payment', payload);
-    closePaymentModal();
+    if (systemInfo.pos_enabled && kart > 0) {
+        elements.btnFinalizePayment.disabled = true;
+        elements.btnFinalizePayment.innerHTML = '⏳ POS Bekleniyor...';
+        socket.emit('finalize_payment', payload);
+        // Modal will be closed by onPaymentCompleted upon success
+    } else {
+        socket.emit('finalize_payment', payload);
+        closePaymentModal();
+    }
 }
 
 /**

@@ -22,6 +22,7 @@ import serial
 import serial.tools.list_ports
 from collections import defaultdict
 from integrations import IntegrationManager
+from pos_integration import POSManager
 
 # Database modülünü yükle
 try:
@@ -157,7 +158,11 @@ class RestaurantServer:
             "cid_port": "101",
             "cid_type": "tcp",
             "cid_serial_port": "COM3",
-            "cid_enabled": "EVET"
+            "cid_enabled": "EVET",
+            "pos_enabled": "HAYIR",
+            "pos_ip": "127.0.0.1",
+            "pos_port": "5000",
+            "pos_type": "demo"
         }
         
         if os.path.exists(SETTINGS_FILE):
@@ -180,6 +185,13 @@ class RestaurantServer:
         self.cid_type = defaults["cid_type"]
         self.cid_serial_port = defaults["cid_serial_port"]
         self.cid_enabled = (defaults["cid_enabled"] == "EVET")
+        
+        # POS Ayarları
+        self.pos_enabled = (defaults["pos_enabled"] == "EVET")
+        self.pos_ip = defaults["pos_ip"]
+        self.pos_port = int(defaults["pos_port"])
+        self.pos_type = defaults["pos_type"]
+        self.pos_manager = POSManager(self.pos_enabled, self.pos_ip, self.pos_port, self.pos_type)
     
     def save_settings(self):
         """Ayarları dosyaya kaydet"""
@@ -195,6 +207,10 @@ class RestaurantServer:
                 f.write(f"cid_type:{self.cid_type}\n")
                 f.write(f"cid_serial_port:{self.cid_serial_port}\n")
                 f.write(f"cid_enabled:{'EVET' if self.cid_enabled else 'HAYIR'}\n")
+                f.write(f"pos_enabled:{'EVET' if self.pos_enabled else 'HAYIR'}\n")
+                f.write(f"pos_ip:{self.pos_ip}\n")
+                f.write(f"pos_port:{self.pos_port}\n")
+                f.write(f"pos_type:{self.pos_type}\n")
             return True
         except Exception as e:
             logger.error(f"Ayar kaydetme hatası: {e}")
@@ -570,7 +586,9 @@ def system_info():
         'database': USE_DATABASE,
         'pdf': PDF_SUPPORT,
         'cid_enabled': server.cid_enabled,
-        'cid_type': server.cid_type
+        'cid_type': server.cid_type,
+        'pos_enabled': server.pos_enabled,
+        'pos_type': server.pos_type
     })
 
 @app.route('/api/settings', methods=['GET'])
@@ -586,6 +604,10 @@ def get_settings():
         'cid_type': server.cid_type,
         'cid_serial_port': server.cid_serial_port,
         'cid_enabled': server.cid_enabled,
+        'pos_enabled': server.pos_enabled,
+        'pos_ip': server.pos_ip,
+        'pos_port': server.pos_port,
+        'pos_type': server.pos_type,
         'ip':           get_local_ip()
     })
 
@@ -622,6 +644,14 @@ def save_settings():
     server.cid_type = data.get('cid_type', server.cid_type)
     server.cid_serial_port = data.get('cid_serial_port', server.cid_serial_port)
     server.cid_enabled = data.get('cid_enabled', server.cid_enabled)
+    
+    server.pos_enabled = data.get('pos_enabled', server.pos_enabled)
+    server.pos_ip = data.get('pos_ip', server.pos_ip)
+    server.pos_port = int(data.get('pos_port', server.pos_port))
+    server.pos_type = data.get('pos_type', server.pos_type)
+    
+    # POS Manager'ı güncelle
+    server.pos_manager = POSManager(server.pos_enabled, server.pos_ip, server.pos_port, server.pos_type)
 
     # Kaydet
     ok = server.save_settings()
@@ -1311,6 +1341,16 @@ def handle_payment(data):
                 if amount > 0:
                     db.save_cari_transaction(customer, 'borc', amount)
                     logger.info(f"📝 Cari Borç: {customer} | {amount:.2f} TL")
+
+        # POS İşlemi (Kart ödemesi varsa)
+        if server.pos_enabled:
+            card_amount = sum(p['amount'] for p in payments if p['type'] == 'Kredi Kartı')
+            if card_amount > 0:
+                logger.info(f"💳 POS Satış başlatılıyor: {card_amount:.2f} TL")
+                success, msg = server.pos_manager.sale(card_amount, masa_adi)
+                if not success:
+                    raise Exception(msg)
+                logger.info(f"✅ POS Satış başarılı: {msg}")
 
         # Satışları kaydet
         # Eğer birden fazla ödeme türü varsa 'Parçalı' olarak işaretle

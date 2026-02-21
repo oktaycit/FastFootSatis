@@ -27,7 +27,8 @@ class IntegrationManager:
             "yemeksepeti": {"enabled": False, "api_key": "", "store_id": ""},
             "trendyol": {"enabled": False, "api_key": "", "api_secret": "", "supplier_id": ""},
             "getir": {"enabled": False, "app_token": "", "restaurant_id": ""},
-            "migros": {"enabled": False, "api_key": "", "store_id": ""}
+            "migros": {"enabled": False, "api_key": "", "store_id": ""},
+            "whatsapp": {"enabled": False, "api_key": "", "service_name": ""}
         }
 
     def save_settings(self, new_settings):
@@ -52,6 +53,8 @@ class IntegrationManager:
             return self._map_getir(data)
         elif platform == "migros":
             return self._map_migros(data)
+        elif platform == "whatsapp":
+            return self._map_whatsapp(data)
         else:
             logger.warning(f"Unknown platform: {platform}")
             return None
@@ -145,3 +148,63 @@ class IntegrationManager:
         except Exception as e:
             logger.error(f"Error mapping Migros: {e}")
             return None
+
+    def _map_whatsapp(self, data):
+        """
+        Map WhatsApp message to internal order format.
+        Expecting data like: {'from': '905321234567', 'text': '2 Burger, 1 Kola', 'name': 'Ahmet'}
+        """
+        try:
+            phone = data.get('from', 'Unknown')
+            text = data.get('text', '')
+            customer = data.get('name', 'WhatsApp Müşteri')
+            
+            items = self._parse_whatsapp_message(text)
+            
+            if not items:
+                logger.warning(f"Could not parse WhatsApp message: {text}")
+                return None
+                
+            return {
+                "masa": f"WP-{phone[-4:]}",
+                "items": items,
+                "platform": "WhatsApp",
+                "external_id": f"WP-{datetime.datetime.now().strftime('%H%M%S')}",
+                "customer": f"{customer} ({phone})"
+            }
+        except Exception as e:
+            logger.error(f"Error mapping WhatsApp: {e}")
+            return None
+
+    def _parse_whatsapp_message(self, text):
+        """
+        Simple parser for WhatsApp messages.
+        Recognizes formats like:
+        - "2 Burger, 1 Kola"
+        - "3 Adet Lahmacun"
+        - "Pizza 2, Ayran 1"
+        """
+        import re
+        items = []
+        # Split by comma or newline
+        lines = re.split(r'[,|\n]', text)
+        
+        for line in lines:
+            line = line.strip()
+            if not line: continue
+            
+            # Pattern 1: "2 Burger" or "2 adet Burger"
+            match1 = re.search(r'(\d+)\s*(?:adet|x|u00d7)?\s*(.+)', line, re.IGNORECASE)
+            # Pattern 2: "Burger 2"
+            match2 = re.search(r'(.+?)\s*(\d+)', line)
+            
+            if match1:
+                adet = int(match1.group(1))
+                urun = match1.group(2).strip()
+                items.append({"urun": urun, "adet": adet, "fiyat": 0, "tip": "whatsapp"})
+            elif match2:
+                urun = match2.group(1).strip()
+                adet = int(match2.group(2))
+                items.append({"urun": urun, "adet": adet, "fiyat": 0, "tip": "whatsapp"})
+                
+        return items

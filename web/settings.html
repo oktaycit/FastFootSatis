@@ -620,6 +620,76 @@
                         </div>
                     </div>
                 </div>
+
+                <hr class="divider">
+
+                <!-- WhatsApp -->
+                <div class="integration-item">
+                    <div class="toggle-row">
+                        <div>
+                            <div class="toggle-label">WhatsApp Sipariş</div>
+                            <div class="toggle-desc">WhatsApp üzerinden gelen siparişleri otomatik al</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="int_wp_enabled">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="form-row" id="int_wp_fields"
+                        style="margin-top:10px; padding-left:10px; border-left:3px solid #eee;">
+                        <div class="form-group">
+                            <label>Servis Adı</label>
+                            <input type="text" id="int_wp_service_name" placeholder="Örn: Twilio, UltraMsg">
+                        </div>
+                        <div class="form-group">
+                            <label>API Key / Token</label>
+                            <input type="text" id="int_wp_api_key" placeholder="API Anahtarı">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 7. POS Entegrasyon Ayarları -->
+        <div class="settings-card">
+            <div class="card-header">💳 POS / ÖKC Entegrasyonu</div>
+            <div class="card-body">
+                <div class="toggle-row">
+                    <div>
+                        <div class="toggle-label">POS Servisi</div>
+                        <div class="toggle-desc">Kredi kartı ödemelerini otomatik POS cihazına gönder</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="posEnabled">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div id="posConfigArea" style="margin-top: 15px;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="posType">Cihaz Tipi</label>
+                            <select id="posType"
+                                style="padding: 11px; border: 2px solid #e0e0e0; border-radius: var(--radius-md); background: #f8f9fa;">
+                                <option value="demo">🧪 Demo / Simülatör</option>
+                                <option value="beko-json">📦 Beko (JSON API)</option>
+                                <option value="hugin">📦 Hugin (JSON API)</option>
+                                <option value="generic">📦 Genel (Generic JSON)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="posIp">IP Adresi</label>
+                            <input type="text" id="posIp" placeholder="127.0.0.1">
+                        </div>
+                        <div class="form-group">
+                            <label for="posPort">Port</label>
+                            <input type="number" id="posPort" placeholder="5000">
+                        </div>
+                    </div>
+                    <small style="color:var(--text-secondary);">
+                        Cihaz üzerinden TCP/IP bağlantısının aktif olduğundan emin olun.
+                    </small>
+                </div>
             </div>
         </div>
 
@@ -666,7 +736,16 @@
                 await loadSerialPorts();
                 document.getElementById('cidSerialPort').value = data.cid_serial_port || 'COM3';
 
+
                 toggleCidUI();
+
+                // POS
+                document.getElementById('posEnabled').checked = data.pos_enabled || false;
+                document.getElementById('posIp').value = data.pos_ip || '127.0.0.1';
+                document.getElementById('posPort').value = data.pos_port || 5000;
+                document.getElementById('posType').value = data.pos_type || 'demo';
+
+                togglePosUI();
 
                 // Header
                 document.getElementById('companyName').textContent = '⚙️ ' + (data.firma_ismi || 'AYARLAR');
@@ -708,6 +787,11 @@
                 document.getElementById('int_mg_store_id').value = settings.migros.store_id || '';
                 document.getElementById('int_mg_api_key').value = settings.migros.api_key || '';
 
+                // WhatsApp
+                document.getElementById('int_wp_enabled').checked = settings.whatsapp?.enabled || false;
+                document.getElementById('int_wp_service_name').value = settings.whatsapp?.service_name || '';
+                document.getElementById('int_wp_api_key').value = settings.whatsapp?.api_key || '';
+
                 updateIntegrationUI();
             } catch (e) {
                 console.warn('Entegrasyon ayarları yüklenemedi:', e);
@@ -715,7 +799,7 @@
         }
 
         function updateIntegrationUI() {
-            const platforms = ['ys', 'ty', 'gt', 'mg'];
+            const platforms = ['ys', 'ty', 'gt', 'mg', 'wp'];
             platforms.forEach(p => {
                 const enabled = document.getElementById(`int_${p}_enabled`).checked;
                 document.getElementById(`int_${p}_fields`).style.opacity = enabled ? '1' : '0.4';
@@ -767,6 +851,11 @@
             const paketSayisi = parseInt(document.getElementById('paketSayisi').value);
             const directPrint = document.getElementById('directPrint').checked;
 
+            const posEnabled = document.getElementById('posEnabled').checked;
+            const posIp = document.getElementById('posIp').value.trim();
+            const posPort = parseInt(document.getElementById('posPort').value);
+            const posType = document.getElementById('posType').value;
+
             const cidEnabled = document.getElementById('cidEnabled').checked;
             const cidType = document.getElementById('cidType').value;
             const cidPort = parseInt(document.getElementById('cidPort').value);
@@ -804,6 +893,10 @@
                 cid_type: cidType,
                 cid_port: cidPort,
                 cid_serial_port: cidSerialPort,
+                pos_enabled: posEnabled,
+                pos_ip: posIp,
+                pos_port: posPort,
+                pos_type: posType,
                 mevcut_sifre: mevcutSifre
             };
 
@@ -872,6 +965,11 @@
                     enabled: document.getElementById('int_mg_enabled').checked,
                     store_id: document.getElementById('int_mg_store_id').value.trim(),
                     api_key: document.getElementById('int_mg_api_key').value.trim()
+                },
+                whatsapp: {
+                    enabled: document.getElementById('int_wp_enabled').checked,
+                    service_name: document.getElementById('int_wp_service_name').value.trim(),
+                    api_key: document.getElementById('int_wp_api_key').value.trim()
                 }
             };
 
@@ -912,6 +1010,13 @@
             }
         }
 
+        function togglePosUI() {
+            const enabled = document.getElementById('posEnabled').checked;
+            document.getElementById('posConfigArea').style.display = enabled ? 'block' : 'none';
+        }
+
+        document.getElementById('posEnabled').addEventListener('change', togglePosUI);
+
         async function loadSerialPorts() {
             try {
                 const res = await fetch('/api/serial/ports');
@@ -940,7 +1045,7 @@
         document.getElementById('cidType').addEventListener('change', toggleCidUI);
         document.getElementById('cidEnabled').addEventListener('change', toggleCidUI);
 
-        ['ys', 'ty', 'gt', 'mg'].forEach(p => {
+        ['ys', 'ty', 'gt', 'mg', 'wp'].forEach(p => {
             document.getElementById(`int_${p}_enabled`).addEventListener('change', updateIntegrationUI);
         });
 
