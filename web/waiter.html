@@ -33,6 +33,61 @@
             height: 100vh;
         }
 
+        /* Login Screen */
+        .login-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--bg-dark);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 30px;
+        }
+
+        .login-box {
+            width: 100%;
+            max-width: 350px;
+            background: var(--panel-bg);
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .login-box h2 {
+            text-align: center;
+            color: var(--primary);
+            margin-bottom: 25px;
+        }
+
+        select,
+        input {
+            width: 100%;
+            padding: 15px;
+            margin-bottom: 20px;
+            background: #222;
+            border: 1px solid #333;
+            color: white;
+            border-radius: 8px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+
+        .btn-login {
+            width: 100%;
+            padding: 15px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
         /* Top Bar */
         .top-bar {
             background-color: var(--secondary);
@@ -218,11 +273,26 @@
 </head>
 
 <body>
-    <div class="app-container">
+    <!-- Login Screen -->
+    <div id="loginOverlay" class="login-screen">
+        <div class="login-box">
+            <h2>Garson Girişi</h2>
+            <select id="loginWaiterSelect">
+                <option value="">İsminizi Seçin</option>
+            </select>
+            <input type="password" id="loginPin" placeholder="PIN Kodunuz" pattern="\d*">
+            <button class="btn-login" onclick="attemptLogin()">GİRİŞ YAP</button>
+        </div>
+    </div>
+
+    <div class="app-container" id="mainApp" style="display: none;">
         <!-- Top Bar -->
         <div class="top-bar">
             <h1 onclick="showScreen('table-screen')">FastFoot 🤵</h1>
-            <div class="selected-table-info" id="activeTableName">MASA SEÇİN</div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span id="waiterDisplayName" style="color: #999; font-size: 12px;"></span>
+                <div class="selected-table-info" id="activeTableName">MASA SEÇİN</div>
+            </div>
         </div>
 
         <div class="viewport">
@@ -260,6 +330,47 @@
         let currentTable = null;
         let basket = [];
         let currentCategory = null;
+        let loggedWaiter = null;
+
+        // Sayfa yüklendiğinde garsonları çek
+        async function fetchWaiters() {
+            const res = await fetch('/api/waiters');
+            const waiters = await res.json();
+            const select = document.getElementById('loginWaiterSelect');
+            waiters.forEach(w => {
+                const opt = document.createElement('option');
+                opt.value = w.name;
+                opt.textContent = w.name;
+                select.appendChild(opt);
+            });
+        }
+        fetchWaiters();
+
+        async function attemptLogin() {
+            const name = document.getElementById('loginWaiterSelect').value;
+            const pin = document.getElementById('loginPin').value;
+            if (!name || !pin) { alert('Hepsini doldurun'); return; }
+
+            const res = await fetch('/api/waiters/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, pin })
+            });
+
+            if (res.ok) {
+                loggedWaiter = name;
+                document.getElementById('waiterDisplayName').textContent = '🤵 ' + name;
+                document.getElementById('loginOverlay').style.display = 'none';
+                document.getElementById('mainApp').style.display = 'flex';
+
+                // Login sonrası garson oturumunu sunucuya bildir
+                socket.emit('waiter_init', { name: loggedWaiter });
+
+                if (window.navigator.vibrate) window.navigator.vibrate([100, 50, 100]);
+            } else {
+                alert('Hatalı PIN!');
+            }
+        }
 
         socket.on('initial_data', (data) => {
             menuData = data.menu;
@@ -267,6 +378,36 @@
             renderTables();
             renderCategories();
         });
+
+        socket.on('order_ready', (data) => {
+            // Sipariş hazır bildirimi
+            if (window.navigator.vibrate) window.navigator.vibrate([300, 100, 300, 100, 300]);
+
+            // Modern bildirim göster
+            const toast = document.createElement('div');
+            toast.style.cssText = `
+                position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+                background: #27ae60; color: white; padding: 15px 25px;
+                border-radius: 50px; z-index: 2000; font-weight: bold;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+                animation: slideDown 0.5s ease;
+            `;
+            toast.textContent = `🔔 ${data.message}`;
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.animation = 'slideUp 0.5s ease';
+                setTimeout(() => toast.remove(), 500);
+            }, 5000);
+        });
+
+        // CSS animasyonları ekle
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideDown { from { top: -100px; } to { top: 20px; } }
+            @keyframes slideUp { from { top: 20px; } to { top: -100px; } }
+        `;
+        document.head.appendChild(style);
 
         function renderTables() {
             const tableCont = document.getElementById('tablesContainer');
@@ -376,20 +517,13 @@
         function sendOrder() {
             if (!currentTable || basket.length === 0) return;
 
-            // Waiter interface implementation needs to send each item to the server
-            // The current socket API (handle_add_item) usually handles one at a time from index.html
-            // But Term.py sends a bulk json. We'll simulate bulk sending or send multiple events.
-
-            // Option 1: Emulate what index.html does (one by one)
-            // But we need to make sure the server knows WHICH table we are targeting.
-            // In index.html, 'select_masa' sets the state for the 'sid'.
-
             socket.emit('select_masa', { masa: currentTable });
 
             basket.forEach(item => {
                 socket.emit('add_item', {
                     urun: item.name,
-                    fiyat: item.price
+                    fiyat: item.price,
+                    garson: loggedWaiter // Garson bilgisini de göndersin
                 });
             });
 

@@ -60,6 +60,7 @@ SETTINGS_FILE = os.path.join(SCRIPT_DIR, "config.txt")
 MENU_FILE = os.path.join(SCRIPT_DIR, "menu.txt")
 FIS_KLASORU = os.path.join(SCRIPT_DIR, "Fisler")
 COUNTER_FILE = os.path.join(SCRIPT_DIR, "sira_no.txt")
+WAITERS_FILE = os.path.join(SCRIPT_DIR, "waiters.json")
 SERVER_PORT = 5555
 
 # Klasörleri oluştur
@@ -110,8 +111,12 @@ class RestaurantServer:
         # Menu
         self.menu_data = {}
         
+        # Garsonlar
+        self.waiters = [] # [{"name": "Ahmet", "pin": "1234"}]
+        
         # Aktif bağlantılar
         self.active_connections = {}
+        self.waiter_sessions = defaultdict(set) # waiter_name -> set(sids)
         
         # Terminal sunucusu
         self.terminal_thread = None
@@ -119,6 +124,7 @@ class RestaurantServer:
         
         # Ayarları yükle
         self.load_settings()
+        self.load_waiters()
         self.refresh_adisyonlar()
         self.load_menu_data()
         
@@ -167,6 +173,29 @@ class RestaurantServer:
             return True
         except Exception as e:
             logger.error(f"Ayar kaydetme hatası: {e}")
+            return False
+
+    def load_waiters(self):
+        """Garson listesini yükle"""
+        if os.path.exists(WAITERS_FILE):
+            try:
+                with open(WAITERS_FILE, "r", encoding="utf-8") as f:
+                    self.waiters = json.load(f)
+                logger.info(f"✓ {len(self.waiters)} garson yüklendi")
+            except Exception as e:
+                logger.error(f"Garson yükleme hatası: {e}")
+                self.waiters = []
+        else:
+            self.waiters = []
+
+    def save_waiters(self):
+        """Garson listesini kaydet"""
+        try:
+            with open(WAITERS_FILE, "w", encoding="utf-8") as f:
+                json.dump(self.waiters, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception as e:
+            logger.error(f"Garson kaydetme hatası: {e}")
             return False
             
     def send_to_kitchen_legacy(self, masa_adi, urun_adi, adet=1):
@@ -373,15 +402,15 @@ def mutfak_page():
     """Mutfak sipariş takip sayfası"""
     return app.send_static_file('mutfak.html')
 
-@app.route('/terminal')
-def terminal_page():
-    """Terminal arayüzü"""
-    return app.send_static_file('terminal.html')
-
 @app.route('/waiter')
 def waiter_page():
     """Garson arayüzü"""
     return app.send_static_file('waiter.html')
+
+@app.route('/waiters_manage')
+def waiters_manage_page():
+    """Garson yönetimi sayfası"""
+    return app.send_static_file('waiters_manage.html')
 
 @app.route('/api/system/info')
 def system_info():
@@ -617,6 +646,51 @@ def delete_cari_hesap(cari_isim):
         logger.error(f"Cari hesap silme hatası: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# ==================== GARSON YÖNETİMİ API ====================
+
+@app.route('/api/waiters', methods=['GET'])
+def get_waiters():
+    """Tüm garsonları döndür"""
+    return jsonify(server.waiters)
+
+@app.route('/api/waiters', methods=['POST'])
+def add_waiter():
+    """Yeni garson ekle"""
+    data = request.get_json()
+    name = data.get('name', '').strip()
+    pin = data.get('pin', '').strip()
+    
+    if not name or not pin:
+        return jsonify({'success': False, 'error': 'İsim ve PIN gerekli'}), 400
+    
+    if any(w['name'] == name for w in server.waiters):
+        return jsonify({'success': False, 'error': 'Bu isimde bir garson zaten var'}), 400
+    
+    server.waiters.append({'name': name, 'pin': pin})
+    server.save_waiters()
+    logger.info(f"🤵 Yeni garson eklendi: {name}")
+    return jsonify({'success': True})
+
+@app.route('/api/waiters/<name>', methods=['DELETE'])
+def delete_waiter(name):
+    """Garsonu sil"""
+    server.waiters = [w for w in server.waiters if w['name'] != name]
+    server.save_waiters()
+    logger.info(f"🗑️ Garson silindi: {name}")
+    return jsonify({'success': True})
+
+@app.route('/api/waiters/login', methods=['POST'])
+def waiter_login_api():
+    """Garson girişi"""
+    data = request.get_json()
+    name = data.get('name', '')
+    pin = data.get('pin', '')
+    
+    waiter = next((w for w in server.waiters if w['name'] == name and w['pin'] == pin), None)
+    if waiter:
+        return jsonify({'success': True})
+    return jsonify({'success': False, 'error': 'Hatalı PIN!'}), 401
+
 # ==================== MENÜ ====================
 
 @app.route('/api/menu/save', methods=['POST'])
@@ -711,7 +785,22 @@ def handle_disconnect():
     sid = request.sid
     if sid in server.active_connections:
         info = server.active_connections.pop(sid)
+        # Garson session'larından temizle
+        for waiter_name in list(server.waiter_sessions.keys()):
+            if sid in server.waiter_sessions[waiter_name]:
+                server.waiter_sessions[waiter_name].remove(sid)
+                if not server.waiter_sessions[waiter_name]:
+                    del server.waiter_sessions[waiter_name]
         logger.info(f"❌ Client ayrıldı: {info['ip']} ({sid})")
+
+@socketio.on('waiter_init')
+def handle_waiter_init(data):
+    """Garson oturumunu kaydet"""
+    sid = request.sid
+    waiter_name = data.get('name')
+    if waiter_name:
+        server.waiter_sessions[waiter_name].add(sid)
+        logger.info(f"🤵 Garson oturumu kaydedildi: {waiter_name} ({sid})")
 
 @socketio.on('select_masa')
 def handle_select_masa(data):
@@ -747,6 +836,7 @@ def handle_add_item(data):
         'adet': 1,
         'fiyat': fiyat,
         'tip': 'normal',
+        'garson': data.get('garson', 'Bilinmiyor'),
         'saat': datetime.datetime.now().strftime("%H:%M:%S")
     }
     
@@ -768,11 +858,28 @@ def handle_add_item(data):
         'urun': urun,
         'adet': 1,
         'saat': datetime.datetime.now().strftime("%H:%M:%S"),
+        'garson': data.get('garson', 'Bilinmiyor'),
         'terminal_id': f"sid:{sid}"
     })
     
     # Legacy mutfak sistemine gönder
     server.send_to_kitchen_legacy(masa_adi, urun, 1)
+
+@socketio.on('kitchen_order_ready')
+def handle_kitchen_order_ready(data):
+    """Mutfaktan sipariş hazır bildirimi"""
+    masa = data.get('masa')
+    waiters = data.get('waiters', []) # ["Ahmet", "Mehmet"]
+    
+    logger.info(f"📢 Sipariş hazır: {masa} (Garsonlar: {waiters})")
+    
+    for waiter_name in waiters:
+        if waiter_name in server.waiter_sessions:
+            for sid in server.waiter_sessions[waiter_name]:
+                socketio.emit('order_ready', {
+                    'masa': masa,
+                    'message': f"{masa} siparişi hazır!"
+                }, room=sid)
 
 @socketio.on('remove_item')
 def handle_remove_item(data):
@@ -809,66 +916,6 @@ def handle_payment(data):
         emit('error', {'message': 'Sipariş yok'})
         return
 
-# ==================== TERMINAL SOCKET EVENTS ====================
-
-import pty
-import select
-
-terminal_processes = {} # {sid: {fd: fd, child_pid: pid}}
-
-@socketio.on('terminal_input')
-def handle_terminal_input(data):
-    """Terminalden gelen girdiyi işle"""
-    sid = request.sid
-    input_data = data.get('input', '')
-    
-    if sid in terminal_processes:
-        fd = terminal_processes[sid]['fd']
-        os.write(fd, input_data.encode())
-
-@socketio.on('terminal_connect')
-def handle_terminal_connect():
-    """Terminal oturumu başlat"""
-    sid = request.sid
-    
-    # Yeni bir pty (pseudo-terminal) aç
-    (master_fd, slave_fd) = pty.openpty()
-    
-    # Kabuğu başlat
-    shell = os.environ.get('SHELL', '/bin/sh')
-    p = subprocess.Popen([shell], 
-                         stdin=slave_fd, 
-                         stdout=slave_fd, 
-                         stderr=slave_fd, 
-                         preexec_fn=os.setsid)
-    
-    terminal_processes[sid] = {
-        'fd': master_fd,
-        'process': p
-    }
-    
-    def read_output(sid, fd):
-        while sid in terminal_processes:
-            try:
-                # master_fd'den oku (non-blocking için select kullanılabilir ama threading modda basit tutalım)
-                r, w, e = select.select([fd], [], [], 0.1)
-                if r:
-                    output = os.read(fd, 1024).decode('utf-8', errors='replace')
-                    if output:
-                        socketio.emit('terminal_output', {'output': output}, room=sid)
-            except Exception as e:
-                logger.error(f"Terminal okuma hatası: {e}")
-                break
-                
-    threading.Thread(target=read_output, args=(sid, master_fd), daemon=True).start()
-    logger.info(f"🐚 Terminal oturumu açıldı: {sid}")
-
-@socketio.on('terminal_resize')
-def handle_terminal_resize(data):
-    """Terminal boyutunu güncelle"""
-    # Gelecekte eklenebilir
-    pass
-
     # Ödeme listesini al (YENİ: Parçalı ödeme desteği)
     if data.get('role') == 'terminal':
         emit('error', {'message': 'Yetki hatası: Kasa işlemi yapılamaz'})
@@ -877,27 +924,6 @@ def handle_terminal_resize(data):
     payments = data.get('payments', [])
     payment_type = data.get('type', 'Nakit') # Eski format desteği
     item_indices = data.get('item_indices', []) # YENİ: Seçili ürünlerin indexleri
-
-@socketio.on('kitchen_order_ready')
-def handle_kitchen_ready(data):
-    """Mutfak siparişi tamamladı"""
-    masa_adi = data.get('masa')
-    terminal_ids = data.get('terminal_ids', [])
-    
-    logger.info(f"👨‍🍳 Mutfak bildirdi: {masa_adi} hazır!")
-    
-    # İlgili terminallere bildir (sid: ile başlayanlara)
-    for t_id in terminal_ids:
-        if t_id.startswith('sid:'):
-            target_sid = t_id.split('sid:')[1]
-            socketio.emit('order_ready', {
-                'masa': masa_adi,
-                'message': f"{masa_adi} Siparişi Hazır!"
-            }, to=target_sid)
-        
-    # Genel sistem bildirimi (opsiyonel - istenirse tüm garsonlara gidebilir)
-    # socketio.emit('global_notification', {'title': 'Mutfak', 'message': f'{masa_adi} hazır!'})
-
 
     # Hangi kalemlerin ödendiğini belirle
     if item_indices:

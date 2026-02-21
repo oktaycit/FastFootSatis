@@ -72,6 +72,7 @@
                             masa: masa,
                             urun: item.urun,
                             adet: item.adet,
+                            garson: item.garson,
                             saat: item.saat || '--:--:--'
                         }, false); // Yeni efekti verme
                     });
@@ -88,15 +89,15 @@
                 const itemsContainer = card.querySelector('.order-card-items');
                 const newItem = document.createElement('div');
                 newItem.className = 'order-card-item';
-                newItem.textContent = `${data.adet}x ${data.urun}`;
+                newItem.textContent = `${data.adet}x ${data.urun} (${data.garson || '?'})`;
                 itemsContainer.appendChild(newItem);
 
-                // Terminal IDs'i güncelle (kartta sakla)
-                if (data.terminal_id) {
-                    let tIds = JSON.parse(card.dataset.terminalIds || '[]');
-                    if (!tIds.includes(data.terminal_id)) {
-                        tIds.push(data.terminal_id);
-                        card.dataset.terminalIds = JSON.stringify(tIds);
+                // Garsonları güncelle (kartta sakla)
+                if (data.garson) {
+                    let waiters = JSON.parse(card.dataset.waiters || '[]');
+                    if (!waiters.includes(data.garson)) {
+                        waiters.push(data.garson);
+                        card.dataset.waiters = JSON.stringify(waiters);
                     }
                 }
 
@@ -112,9 +113,9 @@
                 card = document.createElement('div');
                 card.className = showNewEffect ? 'order-card new' : 'order-card';
                 card.dataset.masa = data.masa;
-                // Terminal IDs'i dizi olarak başlat
-                const initialTIds = data.terminal_id ? [data.terminal_id] : [];
-                card.dataset.terminalIds = JSON.stringify(initialTIds);
+                // Garsonları dizi olarak başlat
+                const initialWaiters = data.garson ? [data.garson] : [];
+                card.dataset.waiters = JSON.stringify(initialWaiters);
 
                 const cardId = `order-${data.masa.replace(/\s+/g, '-')}`; // Masa ismine göre ID
                 card.id = cardId;
@@ -125,7 +126,7 @@
                         <span class="order-card-time">${data.saat}</span>
                     </div>
                     <div class="order-card-items">
-                        <div class="order-card-item">${data.adet}x ${data.urun}</div>
+                        <div class="order-card-item">${data.adet}x ${data.urun} (${data.garson || '?'})</div>
                     </div>
                     <div class="order-card-actions">
                         <button class="btn btn-kitchen-done" onclick="completeOrder('${cardId}')">TAMAMLANDI</button>
@@ -143,12 +144,12 @@
             const card = document.getElementById(id);
             if (card) {
                 const masa = card.dataset.masa;
-                const terminalIds = JSON.parse(card.dataset.terminalIds || '[]');
+                const waiters = JSON.parse(card.dataset.waiters || '[]');
 
                 // Sunucuya bildir
                 socket.emit('kitchen_order_ready', {
                     masa: masa,
-                    terminal_ids: terminalIds
+                    waiters: waiters
                 });
 
                 card.style.transform = 'scale(0.8)';

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Garson Yönetimi</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            background-color: #121212;
+            color: #fff;
+            padding: 20px;
+            font-family: sans-serif;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: #1e1e1e;
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        h1 {
+            color: #3498db;
+            margin-top: 0;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #999;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            background: #222;
+            border: 1px solid #333;
+            color: #fff;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .btn-add {
+            background: #2ecc71;
+            color: #fff;
+            width: 100%;
+        }
+
+        .waiter-list {
+            margin-top: 20px;
+            border-top: 1px solid #333;
+            padding-top: 20px;
+        }
+
+        .waiter-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: #2a2a2a;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+
+        .btn-delete {
+            background: #e74c3c;
+            color: #fff;
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #3498db;
+            text-decoration: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <a href="/" class="back-link">⬅ Geri Dön</a>
+        <h1>🤵 Garson Yönetimi</h1>
+
+        <div class="form-group">
+            <label>Garson İsmi</label>
+            <input type="text" id="waiterName" placeholder="Örn: Ahmet">
+        </div>
+        <div class="form-group">
+            <label>Giriş Şifresi (PIN)</label>
+            <input type="password" id="waiterPin" placeholder="4 Haneli Şifre">
+        </div>
+        <button class="btn btn-add" onclick="addWaiter()">Garson Ekle</button>
+
+        <div class="waiter-list" id="waiterList">
+            <!-- Garsonlar buraya yüklenecek -->
+        </div>
+    </div>
+
+    <script>
+        async function loadWaiters() {
+            const res = await fetch('/api/waiters');
+            const waiters = await res.json();
+            const list = document.getElementById('waiterList');
+            list.innerHTML = '';
+
+            waiters.forEach(w => {
+                const div = document.createElement('div');
+                div.className = 'waiter-item';
+                div.innerHTML = `
+                    <span>${w.name} (PIN: ****)</span>
+                    <button class="btn btn-delete" onclick="deleteWaiter('${w.name}')">Sil</button>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        async function addWaiter() {
+            const name = document.getElementById('waiterName').value;
+            const pin = document.getElementById('waiterPin').value;
+
+            if (!name || !pin) { alert('Tüm alanları doldurun'); return; }
+
+            const res = await fetch('/api/waiters', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, pin })
+            });
+
+            if (res.ok) {
+                document.getElementById('waiterName').value = '';
+                document.getElementById('waiterPin').value = '';
+                loadWaiters();
+            } else {
+                const data = await res.json();
+                alert(data.error);
+            }
+        }
+
+        async function deleteWaiter(name) {
+            if (!confirm(name + ' silinecek. Emin misiniz?')) return;
+            const res = await fetch(`/api/waiters/${name}`, { method: 'DELETE' });
+            if (res.ok) loadWaiters();
+        }
+
+        loadWaiters();
+    </script>
+</body>
+
+</html>
