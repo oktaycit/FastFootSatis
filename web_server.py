@@ -823,7 +823,8 @@ def handle_select_masa(data):
 def handle_add_item(data):
     """Sipariş ekle"""
     sid = request.sid
-    masa_adi = server.current_selections.get(sid)
+    # Masayı önce gelen veriden al, yoksa session'dan bak
+    masa_adi = data.get('masa') or server.current_selections.get(sid)
     
     if not masa_adi or masa_adi not in server.adisyonlar:
         emit('error', {'message': 'Lütfen önce masa seçiniz'})

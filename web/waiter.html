@@ -409,6 +409,13 @@
             renderTables();
         });
 
+        socket.on('masa_selected', (data) => {
+            if (currentTable === data.masa) {
+                serverItems = data.items || [];
+                updateBasketDisplay();
+            }
+        });
+
         function renderTables() {
             const tableCont = document.getElementById('tablesContainer');
             const paketCont = document.getElementById('paketsContainer');
@@ -473,9 +480,12 @@
 
         function selectMainTable(name) {
             currentTable = name;
+            serverItems = []; // Temizle
+            basket = []; // Sepeti de temizle
             document.getElementById('activeTableName').textContent = name;
             showScreen('order-screen');
             document.getElementById('basketPanel').style.display = 'flex';
+            updateBasketDisplay();
             socket.emit('select_masa', { masa: name });
         }
 
@@ -564,6 +574,7 @@
             if (!currentTable || basket.length === 0) return;
             basket.forEach(item => {
                 socket.emit('add_item', {
+                    masa: currentTable, // Masayı açıkça gönder
                     urun: item.name,
                     fiyat: item.price,
                     garson: loggedWaiter
