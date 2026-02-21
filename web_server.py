@@ -378,6 +378,11 @@ def terminal_page():
     """Terminal arayüzü"""
     return app.send_static_file('terminal.html')
 
+@app.route('/waiter')
+def waiter_page():
+    """Garson arayüzü"""
+    return app.send_static_file('waiter.html')
+
 @app.route('/api/system/info')
 def system_info():
     """Sistem bilgileri"""
