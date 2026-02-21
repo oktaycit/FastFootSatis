@@ -17,6 +17,7 @@ import logging
 import socket
 import subprocess
 import platform
+import uuid
 from collections import defaultdict
 
 # Database modülünü yükle
@@ -831,12 +832,16 @@ def handle_add_item(data):
     urun = data.get('urun')
     fiyat = float(data.get('fiyat', 0))
     
+    # Her siparişe benzersiz ID ve durum ekle
+    siparis_id = str(uuid.uuid4())[:8]
     siparis = {
+        'uid': siparis_id,
         'urun': urun,
         'adet': 1,
         'fiyat': fiyat,
         'tip': 'normal',
         'garson': data.get('garson', 'Bilinmiyor'),
+        'durum': 'mutfakta',
         'saat': datetime.datetime.now().strftime("%H:%M:%S")
     }
     
@@ -854,6 +859,7 @@ def handle_add_item(data):
     
     # Mutfak bildirimi gönder
     socketio.emit('kitchen_new_order', {
+        'uid': siparis_id,
         'masa': masa_adi,
         'urun': urun,
         'adet': 1,
@@ -869,17 +875,70 @@ def handle_add_item(data):
 def handle_kitchen_order_ready(data):
     """Mutfaktan sipariş hazır bildirimi"""
     masa = data.get('masa')
-    waiters = data.get('waiters', []) # ["Ahmet", "Mehmet"]
+    waiters = data.get('waiters', [])
+    items_uids = data.get('items_uids', []) # Mutfaktan gelen hazır ürün ID'leri
     
-    logger.info(f"📢 Sipariş hazır: {masa} (Garsonlar: {waiters})")
+    logger.info(f"📢 Sipariş hazır: {masa} (UIDs: {items_uids})")
     
+    # Adisyondaki ürünlerin durumunu güncelle
+    if masa in server.adisyonlar:
+        for item in server.adisyonlar[masa]:
+            if item.get('uid') in items_uids:
+                item['durum'] = 'hazir'
+
+    # Garsonlara bildir
     for waiter_name in waiters:
         if waiter_name in server.waiter_sessions:
             for sid in server.waiter_sessions[waiter_name]:
                 socketio.emit('order_ready', {
                     'masa': masa,
+                    'items_uids': items_uids,
                     'message': f"{masa} siparişi hazır!"
                 }, room=sid)
+    
+    # Tüm masayı güncelle (durum değişikliği için)
+    items = server.adisyonlar.get(masa, [])
+    total = sum(item['adet'] * item['fiyat'] for item in items)
+    socketio.emit('masa_update', {'masa': masa, 'items': items, 'total': total})
+
+@socketio.on('cancel_item')
+def handle_cancel_item(data):
+    """Garson siparişi iptal eder"""
+    sid = request.sid
+    masa_adi = data.get('masa')
+    item_uid = data.get('uid')
+    
+    if not masa_adi or not item_uid: return
+
+    if masa_adi in server.adisyonlar:
+        # Ürünü bul
+        item_idx = -1
+        for i, item in enumerate(server.adisyonlar[masa_adi]):
+            if item.get('uid') == item_uid:
+                if item.get('durum') == 'hazir':
+                    emit('error', {'message': 'Hazır olan sipariş iptal edilemez!'})
+                    return
+                item_idx = i
+                break
+        
+        if item_idx != -1:
+            cancelled_item = server.adisyonlar[masa_adi].pop(item_idx)
+            logger.info(f"🗑️ Sipariş iptal edildi: {masa_adi} - {cancelled_item['urun']}")
+            
+            # Mutfak ekranına bildir
+            socketio.emit('kitchen_cancel_order', {
+                'masa': masa_adi,
+                'uid': item_uid
+            })
+            
+            # Masa güncellemesini herkese duyur
+            items = server.adisyonlar[masa_adi]
+            total = sum(item['adet'] * item['fiyat'] for item in items)
+            socketio.emit('masa_update', {
+                'masa': masa_adi,
+                'items': items,
+                'total': total
+            })
 
 @socketio.on('remove_item')
 def handle_remove_item(data):

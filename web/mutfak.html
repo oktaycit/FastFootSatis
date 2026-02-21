@@ -58,6 +58,25 @@
             playNotificationSound();
         });
 
+        socket.on('kitchen_cancel_order', (data) => {
+            console.log('Order cancelled:', data);
+            const card = document.querySelector(`.order-card[data-masa="${data.masa}"]`);
+            if (card) {
+                const itemElem = card.querySelector(`.order-card-item[data-uid="${data.uid}"]`);
+                if (itemElem) {
+                    itemElem.style.textDecoration = 'line-through';
+                    itemElem.style.opacity = '0.5';
+                    setTimeout(() => {
+                        itemElem.remove();
+                        // Eğer kartta ürün kalmadıysa kartı sil
+                        if (card.querySelectorAll('.order-card-item').length === 0) {
+                            card.remove();
+                        }
+                    }, 1000);
+                }
+            }
+        });
+
         socket.on('initial_data', (data) => {
             console.log('Initial data received:', data);
             kitchenGrid.innerHTML = ''; // Temizle
@@ -68,13 +87,16 @@
                 if (items && items.length > 0) {
                     // Masadaki her ürün için karta ekle
                     items.forEach(item => {
-                        addOrderToGrid({
-                            masa: masa,
-                            urun: item.urun,
-                            adet: item.adet,
-                            garson: item.garson,
-                            saat: item.saat || '--:--:--'
-                        }, false); // Yeni efekti verme
+                        if (item.durum !== 'hazir') { // Sadece hazır olmayanları göster
+                            addOrderToGrid({
+                                uid: item.uid,
+                                masa: masa,
+                                urun: item.urun,
+                                adet: item.adet,
+                                garson: item.garson,
+                                saat: item.saat || '--:--:--'
+                            }, false);
+                        }
                     });
                 }
             }
@@ -89,10 +111,11 @@
                 const itemsContainer = card.querySelector('.order-card-items');
                 const newItem = document.createElement('div');
                 newItem.className = 'order-card-item';
+                newItem.dataset.uid = data.uid;
                 newItem.textContent = `${data.adet}x ${data.urun} (${data.garson || '?'})`;
                 itemsContainer.appendChild(newItem);
 
-                // Garsonları güncelle (kartta sakla)
+                // Garsonları güncelle
                 if (data.garson) {
                     let waiters = JSON.parse(card.dataset.waiters || '[]');
                     if (!waiters.includes(data.garson)) {
@@ -113,11 +136,10 @@
                 card = document.createElement('div');
                 card.className = showNewEffect ? 'order-card new' : 'order-card';
                 card.dataset.masa = data.masa;
-                // Garsonları dizi olarak başlat
                 const initialWaiters = data.garson ? [data.garson] : [];
                 card.dataset.waiters = JSON.stringify(initialWaiters);
 
-                const cardId = `order-${data.masa.replace(/\s+/g, '-')}`; // Masa ismine göre ID
+                const cardId = `order-${data.masa.replace(/\s+/g, '-')}`;
                 card.id = cardId;
 
                 card.innerHTML = `
@@ -126,7 +148,7 @@
                         <span class="order-card-time">${data.saat}</span>
                     </div>
                     <div class="order-card-items">
-                        <div class="order-card-item">${data.adet}x ${data.urun} (${data.garson || '?'})</div>
+                        <div class="order-card-item" data-uid="${data.uid}">${data.adet}x ${data.urun} (${data.garson || '?'})</div>
                     </div>
                     <div class="order-card-actions">
                         <button class="btn btn-kitchen-done" onclick="completeOrder('${cardId}')">TAMAMLANDI</button>
@@ -145,11 +167,13 @@
             if (card) {
                 const masa = card.dataset.masa;
                 const waiters = JSON.parse(card.dataset.waiters || '[]');
+                const itemsUids = Array.from(card.querySelectorAll('.order-card-item')).map(el => el.dataset.uid);
 
                 // Sunucuya bildir
                 socket.emit('kitchen_order_ready', {
                     masa: masa,
-                    waiters: waiters
+                    waiters: waiters,
+                    items_uids: itemsUids
                 });
 
                 card.style.transform = 'scale(0.8)';

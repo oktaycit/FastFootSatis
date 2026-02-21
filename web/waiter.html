@@ -33,7 +33,6 @@
             height: 100vh;
         }
 
-        /* Login Screen */
         .login-screen {
             position: fixed;
             top: 0;
@@ -88,7 +87,6 @@
             font-size: 18px;
         }
 
-        /* Top Bar */
         .top-bar {
             background-color: var(--secondary);
             padding: 10px 15px;
@@ -112,7 +110,6 @@
             border-radius: 20px;
         }
 
-        /* Main Viewport */
         .viewport {
             flex-grow: 1;
             overflow-y: auto;
@@ -120,7 +117,6 @@
             -webkit-overflow-scrolling: touch;
         }
 
-        /* Section Title */
         .section-title {
             font-size: 16px;
             margin-bottom: 12px;
@@ -131,7 +127,6 @@
             padding-bottom: 5px;
         }
 
-        /* Grid Layouts */
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
@@ -166,12 +161,6 @@
             margin-top: 5px;
         }
 
-        .btn-item.active {
-            background: var(--primary);
-            border-color: #5dade2;
-        }
-
-        /* Categories */
         .category-tabs {
             display: flex;
             overflow-x: auto;
@@ -199,7 +188,6 @@
             border-color: var(--primary);
         }
 
-        /* Basket Panel */
         .basket-panel {
             background: #1a1a1a;
             border-top: 2px solid #333;
@@ -219,7 +207,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 8px 0;
+            padding: 10px 0;
             border-bottom: 1px solid #222;
         }
 
@@ -227,6 +215,7 @@
             color: var(--danger);
             font-size: 20px;
             padding: 0 10px;
+            cursor: pointer;
         }
 
         .basket-footer {
@@ -251,7 +240,6 @@
             font-size: 16px;
         }
 
-        /* Screens */
         .screen {
             display: none;
         }
@@ -260,7 +248,6 @@
             display: block;
         }
 
-        /* Utility */
         .badge {
             background: var(--danger);
             color: white;
@@ -268,6 +255,17 @@
             padding: 2px 7px;
             font-size: 12px;
             margin-left: 5px;
+        }
+
+        .btn-cancel {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 11px;
+            font-weight: bold;
+            cursor: pointer;
         }
     </style>
 </head>
@@ -328,7 +326,8 @@
         let menuData = {};
         let sysInfo = {};
         let currentTable = null;
-        let basket = [];
+        let basket = []; // Henüz gönderilmemiş yerel sepet
+        let serverItems = []; // Sunucudan gelen aktif siparişler
         let currentCategory = null;
         let loggedWaiter = null;
 
@@ -363,9 +362,7 @@
                 document.getElementById('loginOverlay').style.display = 'none';
                 document.getElementById('mainApp').style.display = 'flex';
 
-                // Login sonrası garson oturumunu sunucuya bildir
                 socket.emit('waiter_init', { name: loggedWaiter });
-
                 if (window.navigator.vibrate) window.navigator.vibrate([100, 50, 100]);
             } else {
                 alert('Hatalı PIN!');
@@ -380,10 +377,7 @@
         });
 
         socket.on('order_ready', (data) => {
-            // Sipariş hazır bildirimi
             if (window.navigator.vibrate) window.navigator.vibrate([300, 100, 300, 100, 300]);
-
-            // Modern bildirim göster
             const toast = document.createElement('div');
             toast.style.cssText = `
                 position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
@@ -394,24 +388,31 @@
             `;
             toast.textContent = `🔔 ${data.message}`;
             document.body.appendChild(toast);
-
             setTimeout(() => {
                 toast.style.animation = 'slideUp 0.5s ease';
                 setTimeout(() => toast.remove(), 500);
             }, 5000);
         });
 
-        // CSS animasyonları ekle
-        const style = document.createElement('style');
-        style.textContent = `
+        const styleAnimate = document.createElement('style');
+        styleAnimate.textContent = `
             @keyframes slideDown { from { top: -100px; } to { top: 20px; } }
             @keyframes slideUp { from { top: 20px; } to { top: -100px; } }
         `;
-        document.head.appendChild(style);
+        document.head.appendChild(styleAnimate);
+
+        socket.on('masa_update', (data) => {
+            if (currentTable === data.masa) {
+                serverItems = data.items || [];
+                updateBasketDisplay();
+            }
+            renderTables();
+        });
 
         function renderTables() {
             const tableCont = document.getElementById('tablesContainer');
             const paketCont = document.getElementById('paketsContainer');
+            if (!tableCont || !paketCont) return;
             tableCont.innerHTML = '';
             paketCont.innerHTML = '';
 
@@ -436,6 +437,7 @@
 
         function renderCategories() {
             const cont = document.getElementById('categoryContainer');
+            if (!cont) return;
             cont.innerHTML = '';
             Object.keys(menuData).forEach((cat, index) => {
                 const tab = document.createElement('div');
@@ -457,6 +459,7 @@
 
         function renderMenuItems() {
             const cont = document.getElementById('menuItemsContainer');
+            if (!cont) return;
             cont.innerHTML = '';
             const items = menuData[currentCategory] || [];
             items.forEach(item => {
@@ -473,6 +476,7 @@
             document.getElementById('activeTableName').textContent = name;
             showScreen('order-screen');
             document.getElementById('basketPanel').style.display = 'flex';
+            socket.emit('select_masa', { masa: name });
         }
 
         function showScreen(id) {
@@ -480,57 +484,93 @@
             document.getElementById(id).classList.add('active');
             if (id === 'table-screen') {
                 document.getElementById('basketPanel').style.display = 'none';
+                basket = [];
             }
         }
 
         function addToBasket(name, price) {
             basket.push({ name, price });
             if (window.navigator.vibrate) window.navigator.vibrate(50);
-            updateBasket();
+            updateBasketDisplay();
         }
 
         function removeFromBasket(index) {
             basket.splice(index, 1);
-            updateBasket();
+            updateBasketDisplay();
         }
 
-        function updateBasket() {
+        function updateBasketDisplay() {
             const list = document.getElementById('basketList');
             const totalEl = document.getElementById('basketTotal');
             const countEl = document.getElementById('basketCount');
-
+            if (!list) return;
             list.innerHTML = '';
             let total = 0;
 
-            basket.forEach((item, index) => {
-                total += parseFloat(item.price);
+            // 1. Aktif Siparişler (Mutfakta/Hazır)
+            serverItems.forEach((item) => {
                 const div = document.createElement('div');
                 div.className = 'basket-item';
-                div.innerHTML = `<span>${item.name}</span><span>${item.price} TL <span class="remove" onclick="removeFromBasket(${index})">×</span></span>`;
+                let statusBadge = '';
+                if (item.durum === 'hazir') {
+                    statusBadge = '<span style="color: #2ecc71; font-size: 10px; margin-right: 5px; font-weight: bold;">[HAZIR]</span>';
+                } else {
+                    statusBadge = '<span style="color: #f39c12; font-size: 10px; margin-right: 5px; font-weight: bold;">[MUTFAKTA]</span>';
+                }
+                div.innerHTML = `
+                    <div style="flex-grow: 1;">
+                        ${statusBadge}
+                        <span class="basket-item-name">${item.urun}</span>
+                        <br/><span style="font-size: 10px; color: #999;">${item.fiyat} TL</span>
+                    </div>
+                    <div>
+                        ${item.durum !== 'hazir' ? `<button class="btn-cancel" onclick="cancelItem('${item.uid}')">İPTAL</button>` : ''}
+                    </div>
+                `;
                 list.appendChild(div);
+                total += item.adet * item.fiyat;
             });
 
-            totalEl.textContent = total.toFixed(2) + ' TL';
-            countEl.textContent = basket.length;
+            // 2. Yeni Siparişler (Sepettekiler)
+            basket.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = 'basket-item';
+                div.style.borderLeft = '3px solid #3498db';
+                div.innerHTML = `
+                    <div style="flex-grow: 1;">
+                        <span style="color: #3498db; font-size: 10px; font-weight: bold;">[YENİ]</span>
+                        <span class="basket-item-name">${item.name}</span>
+                        <br/><span style="font-size: 10px; color: #999;">${item.price} TL</span>
+                    </div>
+                    <div class="basket-item-actions">
+                        <span class="remove" onclick="removeFromBasket(${index})">×</span>
+                    </div>
+                `;
+                list.appendChild(div);
+                total += parseFloat(item.price);
+            });
+
+            if (totalEl) totalEl.textContent = total.toFixed(2) + ' TL';
+            if (countEl) countEl.textContent = serverItems.length + basket.length;
+        }
+
+        function cancelItem(uid) {
+            if (confirm('Bu siparişi iptal etmek istediğinize emin misiniz?')) {
+                socket.emit('cancel_item', { masa: currentTable, uid: uid });
+            }
         }
 
         function sendOrder() {
             if (!currentTable || basket.length === 0) return;
-
-            socket.emit('select_masa', { masa: currentTable });
-
             basket.forEach(item => {
                 socket.emit('add_item', {
                     urun: item.name,
                     fiyat: item.price,
-                    garson: loggedWaiter // Garson bilgisini de göndersin
+                    garson: loggedWaiter
                 });
             });
-
-            alert('Sipariş Gönderildi!');
             basket = [];
-            updateBasket();
-            showScreen('table-screen');
+            updateBasketDisplay();
         }
     </script>
 </body>
