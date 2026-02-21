@@ -83,9 +83,15 @@ class Database:
                 CREATE TABLE IF NOT EXISTS cari_hesaplar (
                     id SERIAL PRIMARY KEY,
                     cari_isim TEXT NOT NULL UNIQUE,
+                    telefon TEXT,
+                    adres TEXT,
                     olusturma_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            
+            # Tablo zaten varsa kolonları ekle (migration)
+            cursor.execute("ALTER TABLE cari_hesaplar ADD COLUMN IF NOT EXISTS telefon TEXT")
+            cursor.execute("ALTER TABLE cari_hesaplar ADD COLUMN IF NOT EXISTS adres TEXT")
             
             # CARİ HAREKETLER TABLOSU
             cursor.execute("""
@@ -212,6 +218,41 @@ class Database:
             """, (cari_isim,))
             return cursor.fetchone()['id']
     
+    def update_cari_details(self, cari_isim, telefon=None, adres=None):
+        """Cari detaylarını güncelle"""
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                UPDATE cari_hesaplar
+                SET telefon = COALESCE(%s, telefon),
+                    adres = COALESCE(%s, adres)
+                WHERE cari_isim = %s
+            """, (telefon, adres, cari_isim))
+
+    def get_cari_by_phone(self, telefon):
+        """Telefon numarasına göre cari getir"""
+        with self.get_cursor() as cursor:
+            cursor.execute("SELECT * FROM cari_hesaplar WHERE telefon = %s", (telefon,))
+            return cursor.fetchone()
+    
+    def get_customer_order_history(self, cari_isim, limit=5):
+        """Müşterinin geçmiş siparişlerini getir"""
+        with self.get_cursor() as cursor:
+            # Cari ismin adisyonlardaki masa veya paket adı olarak geçebileceği veya 
+            # satışlar tablosunda bir şekilde (masa alanında olabilir) saklanmış olabileceği 
+            # varsayımıyla satislar tablosuna bakıyoruz.
+            # Not: Mevcut sistemde paket servisler 'Paket 1' vb. olarak tutuluyor.
+            # Eğer ödeme aşamasında 'Açık Hesap' seçildiyse cari_hareketler'e bakabiliriz.
+            # Ancak ürün bazlı geçmiş için satislar tablosunda 'masa' alanında cari ismi
+            # saklamak daha mantıklı olacaktır.
+            cursor.execute("""
+                SELECT urun, adet, fiyat, tarih_saat, odeme
+                FROM satislar
+                WHERE masa = %s
+                ORDER BY tarih_saat DESC
+                LIMIT %s
+            """, (cari_isim, limit))
+            return cursor.fetchall()
+    
     def save_cari_transaction(self, cari_isim, islem, tutar):
         """Cari hesap hareketi ekle"""
         with self.get_cursor() as cursor:
@@ -241,11 +282,13 @@ class Database:
                 SELECT 
                     ch.id,
                     ch.cari_isim,
+                    ch.telefon,
+                    ch.adres,
                     ch.olusturma_tarihi,
                     COALESCE(SUM(chr.tutar), 0) as bakiye
                 FROM cari_hesaplar ch
                 LEFT JOIN cari_hareketler chr ON ch.id = chr.cari_id
-                GROUP BY ch.id, ch.cari_isim, ch.olusturma_tarihi
+                GROUP BY ch.id, ch.cari_isim, ch.telefon, ch.adres, ch.olusturma_tarihi
                 ORDER BY ch.cari_isim
             """)
             return cursor.fetchall()

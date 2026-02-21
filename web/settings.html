@@ -416,7 +416,56 @@
             </div>
         </div>
 
-        <!-- 4. Yazıcı & Sistem -->
+        <!-- 4. Caller ID Ayarları -->
+        <div class="settings-card">
+            <div class="card-header">📞 Caller ID Ayarları</div>
+            <div class="card-body">
+                <div class="toggle-row">
+                    <div>
+                        <div class="toggle-label">Caller ID Servisi</div>
+                        <div class="toggle-desc">Gelen çağrıları dinle ve ekranda göster</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="cidEnabled">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div id="cidConfigArea" style="margin-top: 15px;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="cidType">Bağlantı Türü</label>
+                            <select id="cidType"
+                                style="padding: 11px; border: 2px solid #e0e0e0; border-radius: var(--radius-md); background: #f8f9fa;">
+                                <option value="tcp">🏢 Ethernet (TCP/IP)</option>
+                                <option value="serial">🔌 USB / Seri Port</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="cidTcpGroup">
+                            <label for="cidPort">TCP Port</label>
+                            <input type="number" id="cidPort" placeholder="101">
+                        </div>
+                        <div class="form-group" id="cidSerialGroup" style="display:none;">
+                            <label for="cidSerialPort">Seri Port (COM)</label>
+                            <div style="display: flex; gap: 8px;">
+                                <select id="cidSerialPort"
+                                    style="flex: 1; padding: 11px; border: 2px solid #e0e0e0; border-radius: var(--radius-md); background: #f8f9fa;">
+                                    <option value="COM3">COM3</option>
+                                </select>
+                                <button class="btn-settings btn-info-s" onclick="loadSerialPorts()" title="Yenile"
+                                    style="padding: 0 12px; height: 44px; margin: 0;">🔄</button>
+                            </div>
+                        </div>
+                    </div>
+                    <small style="color:var(--text-secondary);" id="cidHint">
+                        TCP: Signal 7 standardı için 101 portunu kullanın. Serial: PTTAVM/Modem cihazları için COM
+                        portunu seçin.
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. Yazıcı & Sistem -->
         <div class="settings-card">
             <div class="card-header">🖨️ Yazıcı &amp; Sistem</div>
             <div class="card-body">
@@ -454,10 +503,121 @@
                         <div class="s-value" id="sv-ip">---</div>
                         <div class="s-sub">Yerel ağ</div>
                     </div>
-                    <div class="status-item ok" id="si-masa">
-                        <div class="s-label">Aktif Masa</div>
-                        <div class="s-value" id="sv-masa">---</div>
-                        <div class="s-sub">Toplam masa + paket</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 6. Entegrasyonlar -->
+        <div class="settings-card">
+            <div class="card-header">🚀 Online Platform Entegrasyonları</div>
+            <div class="card-body">
+                <!-- Yemeksepeti -->
+                <div class="integration-item">
+                    <div class="toggle-row">
+                        <div>
+                            <div class="toggle-label">Yemeksepeti</div>
+                            <div class="toggle-desc">Yemeksepeti siparişlerini otomatik al</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="int_ys_enabled">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="form-row" id="int_ys_fields"
+                        style="margin-top:10px; padding-left:10px; border-left:3px solid #eee;">
+                        <div class="form-group">
+                            <label>Store ID</label>
+                            <input type="text" id="int_ys_store_id" placeholder="Mağaza Kodu">
+                        </div>
+                        <div class="form-group">
+                            <label>API Key</label>
+                            <input type="text" id="int_ys_api_key" placeholder="API Anahtarı">
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="divider">
+
+                <!-- Trendyol -->
+                <div class="integration-item">
+                    <div class="toggle-row">
+                        <div>
+                            <div class="toggle-label">Trendyol Yemek</div>
+                            <div class="toggle-desc">Trendyol siparişlerini otomatik al</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="int_ty_enabled">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="form-row" id="int_ty_fields"
+                        style="margin-top:10px; padding-left:10px; border-left:3px solid #eee;">
+                        <div class="form-group">
+                            <label>Supplier ID</label>
+                            <input type="text" id="int_ty_supplier_id" placeholder="Satıcı ID">
+                        </div>
+                        <div class="form-group">
+                            <label>API Key</label>
+                            <input type="text" id="int_ty_api_key" placeholder="API Key">
+                        </div>
+                        <div class="form-group">
+                            <label>API Secret</label>
+                            <input type="text" id="int_ty_api_secret" placeholder="API Secret">
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="divider">
+
+                <!-- Getir -->
+                <div class="integration-item">
+                    <div class="toggle-row">
+                        <div>
+                            <div class="toggle-label">Getir Yemek</div>
+                            <div class="toggle-desc">Getir siparişlerini otomatik al</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="int_gt_enabled">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="form-row" id="int_gt_fields"
+                        style="margin-top:10px; padding-left:10px; border-left:3px solid #eee;">
+                        <div class="form-group">
+                            <label>Restaurant ID</label>
+                            <input type="text" id="int_gt_restaurant_id" placeholder="Restoran ID">
+                        </div>
+                        <div class="form-group">
+                            <label>App Token</label>
+                            <input type="text" id="int_gt_app_token" placeholder="Uygulama Tokeni">
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="divider">
+
+                <!-- Migros -->
+                <div class="integration-item">
+                    <div class="toggle-row">
+                        <div>
+                            <div class="toggle-label">Migros Yemek</div>
+                            <div class="toggle-desc">Migros siparişlerini otomatik al</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="int_mg_enabled">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="form-row" id="int_mg_fields"
+                        style="margin-top:10px; padding-left:10px; border-left:3px solid #eee;">
+                        <div class="form-group">
+                            <label>Store ID</label>
+                            <input type="text" id="int_mg_store_id" placeholder="Mağaza Kodu">
+                        </div>
+                        <div class="form-group">
+                            <label>API Key</label>
+                            <input type="text" id="int_mg_api_key" placeholder="API Anahtarı">
+                        </div>
                     </div>
                 </div>
             </div>
@@ -498,16 +658,69 @@
                 document.getElementById('paketSayisi').value = data.paket_sayisi ?? '';
                 document.getElementById('directPrint').checked = data.direct_print || false;
 
+                document.getElementById('cidEnabled').checked = data.cid_enabled || false;
+                document.getElementById('cidType').value = data.cid_type || 'tcp';
+                document.getElementById('cidPort').value = data.cid_port || 101;
+
+                // Seri portu listele ve seç
+                await loadSerialPorts();
+                document.getElementById('cidSerialPort').value = data.cid_serial_port || 'COM3';
+
+                toggleCidUI();
+
                 // Header
                 document.getElementById('companyName').textContent = '⚙️ ' + (data.firma_ismi || 'AYARLAR');
 
-                // Sistem durumu
-                document.getElementById('sv-ip').textContent = data.ip || '---';
-                document.getElementById('sv-masa').textContent = (data.masa_sayisi || 0) + ' / ' + (data.paket_sayisi || 0);
+                document.getElementById('si-con').classList.add('ok');
+
+                // Entegrasyon Ayarlarını Yükle
+                loadIntegrationSettings();
 
             } catch (e) {
                 showToast('Ayarlar yüklenemedi: ' + e.message, 'error');
             }
+        }
+
+        async function loadIntegrationSettings() {
+            try {
+                const res = await fetch('/api/integration/settings');
+                if (!res.ok) return;
+                const settings = await res.json();
+
+                // Yemeksepeti
+                document.getElementById('int_ys_enabled').checked = settings.yemeksepeti.enabled;
+                document.getElementById('int_ys_store_id').value = settings.yemeksepeti.store_id || '';
+                document.getElementById('int_ys_api_key').value = settings.yemeksepeti.api_key || '';
+
+                // Trendyol
+                document.getElementById('int_ty_enabled').checked = settings.trendyol.enabled;
+                document.getElementById('int_ty_supplier_id').value = settings.trendyol.supplier_id || '';
+                document.getElementById('int_ty_api_key').value = settings.trendyol.api_key || '';
+                document.getElementById('int_ty_api_secret').value = settings.trendyol.api_secret || '';
+
+                // Getir
+                document.getElementById('int_gt_enabled').checked = settings.getir.enabled;
+                document.getElementById('int_gt_restaurant_id').value = settings.getir.restaurant_id || '';
+                document.getElementById('int_gt_app_token').value = settings.getir.app_token || '';
+
+                // Migros
+                document.getElementById('int_mg_enabled').checked = settings.migros.enabled;
+                document.getElementById('int_mg_store_id').value = settings.migros.store_id || '';
+                document.getElementById('int_mg_api_key').value = settings.migros.api_key || '';
+
+                updateIntegrationUI();
+            } catch (e) {
+                console.warn('Entegrasyon ayarları yüklenemedi:', e);
+            }
+        }
+
+        function updateIntegrationUI() {
+            const platforms = ['ys', 'ty', 'gt', 'mg'];
+            platforms.forEach(p => {
+                const enabled = document.getElementById(`int_${p}_enabled`).checked;
+                document.getElementById(`int_${p}_fields`).style.opacity = enabled ? '1' : '0.4';
+                document.getElementById(`int_${p}_fields`).style.pointerEvents = enabled ? 'all' : 'none';
+            });
         }
 
         async function loadSystemInfo() {
@@ -553,6 +766,12 @@
             const masaSayisi = parseInt(document.getElementById('masaSayisi').value);
             const paketSayisi = parseInt(document.getElementById('paketSayisi').value);
             const directPrint = document.getElementById('directPrint').checked;
+
+            const cidEnabled = document.getElementById('cidEnabled').checked;
+            const cidType = document.getElementById('cidType').value;
+            const cidPort = parseInt(document.getElementById('cidPort').value);
+            const cidSerialPort = document.getElementById('cidSerialPort').value;
+
             const mevcutSifre = document.getElementById('mevcutSifre').value;
             const yeniSifre = document.getElementById('yeniSifre').value;
             const yeniSifreTekrar = document.getElementById('yeniSifreTekrar').value;
@@ -581,6 +800,10 @@
                 masa_sayisi: masaSayisi,
                 paket_sayisi: paketSayisi,
                 direct_print: directPrint,
+                cid_enabled: cidEnabled,
+                cid_type: cidType,
+                cid_port: cidPort,
+                cid_serial_port: cidSerialPort,
                 mevcut_sifre: mevcutSifre
             };
 
@@ -615,6 +838,9 @@
                 // Header güncelle
                 document.getElementById('companyName').textContent = '⚙️ ' + firmaIsmi;
 
+                // Entegrasyon ayarlarını ayrıca kaydet
+                await saveIntegrationSettings();
+
             } catch (e) {
                 showToast('Hata: ' + e.message, 'error');
             } finally {
@@ -624,12 +850,99 @@
             }
         }
 
+        async function saveIntegrationSettings() {
+            const settings = {
+                yemeksepeti: {
+                    enabled: document.getElementById('int_ys_enabled').checked,
+                    store_id: document.getElementById('int_ys_store_id').value.trim(),
+                    api_key: document.getElementById('int_ys_api_key').value.trim()
+                },
+                trendyol: {
+                    enabled: document.getElementById('int_ty_enabled').checked,
+                    supplier_id: document.getElementById('int_ty_supplier_id').value.trim(),
+                    api_key: document.getElementById('int_ty_api_key').value.trim(),
+                    api_secret: document.getElementById('int_ty_api_secret').value.trim()
+                },
+                getir: {
+                    enabled: document.getElementById('int_gt_enabled').checked,
+                    restaurant_id: document.getElementById('int_gt_restaurant_id').value.trim(),
+                    app_token: document.getElementById('int_gt_app_token').value.trim()
+                },
+                migros: {
+                    enabled: document.getElementById('int_mg_enabled').checked,
+                    store_id: document.getElementById('int_mg_store_id').value.trim(),
+                    api_key: document.getElementById('int_mg_api_key').value.trim()
+                }
+            };
+
+            try {
+                const res = await fetch('/api/integration/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(settings)
+                });
+                if (!res.ok) throw new Error('Entegrasyon ayarları kaydedilemedi');
+            } catch (e) {
+                console.error(e);
+                showToast('Entegrasyon ayarları kaydedilemedi!', 'error');
+            }
+        }
+
         function showToast(msg, type = 'info') {
             const toast = document.getElementById('toast');
             toast.textContent = msg;
             toast.className = 'show ' + type;
             setTimeout(() => { toast.className = ''; }, 3500);
         }
+
+        // Caller ID UI Toggle
+        function toggleCidUI() {
+            const type = document.getElementById('cidType').value;
+            const enabled = document.getElementById('cidEnabled').checked;
+
+            document.getElementById('cidConfigArea').style.display = enabled ? 'block' : 'none';
+            document.getElementById('cidTcpGroup').style.display = type === 'tcp' ? 'block' : 'none';
+            document.getElementById('cidSerialGroup').style.display = type === 'serial' ? 'block' : 'none';
+
+            const hint = document.getElementById('cidHint');
+            if (type === 'tcp') {
+                hint.textContent = 'TCP: Signal 7 standardı için 101 portunu kullanın.';
+            } else {
+                hint.textContent = 'Serial: PTTAVM/Modem cihazları için COM portunu seçin (9600 Baud).';
+            }
+        }
+
+        async function loadSerialPorts() {
+            try {
+                const res = await fetch('/api/serial/ports');
+                const ports = await res.json();
+                const select = document.getElementById('cidSerialPort');
+                const currentVal = select.value;
+
+                select.innerHTML = '';
+                if (ports.length === 0) {
+                    select.innerHTML = '<option value="">Port Bulunamadı</option>';
+                } else {
+                    ports.forEach(p => {
+                        const opt = document.createElement('option');
+                        opt.value = p.device;
+                        opt.textContent = p.device + (p.description ? ` (${p.description})` : '');
+                        select.appendChild(opt);
+                    });
+                }
+
+                if (currentVal) select.value = currentVal;
+            } catch (e) {
+                console.error('Portlar yüklenemedi:', e);
+            }
+        }
+
+        document.getElementById('cidType').addEventListener('change', toggleCidUI);
+        document.getElementById('cidEnabled').addEventListener('change', toggleCidUI);
+
+        ['ys', 'ty', 'gt', 'mg'].forEach(p => {
+            document.getElementById(`int_${p}_enabled`).addEventListener('change', updateIntegrationUI);
+        });
 
         // Enter tuşuna basınca kaydet
         document.addEventListener('keydown', (e) => {

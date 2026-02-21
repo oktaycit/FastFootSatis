@@ -18,7 +18,10 @@ import socket
 import subprocess
 import platform
 import uuid
+import serial
+import serial.tools.list_ports
 from collections import defaultdict
+from integrations import IntegrationManager
 
 # Database modülünü yükle
 try:
@@ -62,6 +65,7 @@ MENU_FILE = os.path.join(SCRIPT_DIR, "menu.txt")
 FIS_KLASORU = os.path.join(SCRIPT_DIR, "Fisler")
 COUNTER_FILE = os.path.join(SCRIPT_DIR, "sira_no.txt")
 WAITERS_FILE = os.path.join(SCRIPT_DIR, "waiters.json")
+INTEGRATION_CONFIG = os.path.join(SCRIPT_DIR, "integrations.json")
 SERVER_PORT = 5555
 
 # Klasörleri oluştur
@@ -105,6 +109,14 @@ class RestaurantServer:
         self.paket_sayisi = 5
         self.direct_print = False
         
+        # Entegrasyonlar
+        self.integration_manager = IntegrationManager(INTEGRATION_CONFIG)
+
+        self.cid_port = 101 # Caller ID Port (Signal 7 standardı)
+        self.cid_type = 'tcp' # 'tcp' veya 'serial'
+        self.cid_serial_port = 'COM3'
+        self.cid_enabled = True
+        
         # Adisyon durumları
         self.adisyonlar = {}
         self.current_selections = {}  # {sid: masa_adi}
@@ -141,7 +153,11 @@ class RestaurantServer:
             "masa_sayisi": "30",
             "paket_sayisi": "5",
             "firma_ismi": "RESTORAN OTOMASYON",
-            "terminal_id": "1"
+            "terminal_id": "1",
+            "cid_port": "101",
+            "cid_type": "tcp",
+            "cid_serial_port": "COM3",
+            "cid_enabled": "EVET"
         }
         
         if os.path.exists(SETTINGS_FILE):
@@ -160,6 +176,10 @@ class RestaurantServer:
         self.paket_sayisi = int(defaults["paket_sayisi"])
         self.company_name = defaults["firma_ismi"]
         self.terminal_id = defaults["terminal_id"]
+        self.cid_port = int(defaults["cid_port"])
+        self.cid_type = defaults["cid_type"]
+        self.cid_serial_port = defaults["cid_serial_port"]
+        self.cid_enabled = (defaults["cid_enabled"] == "EVET")
     
     def save_settings(self):
         """Ayarları dosyaya kaydet"""
@@ -171,6 +191,10 @@ class RestaurantServer:
                 f.write(f"paket_sayisi:{self.paket_sayisi}\n")
                 f.write(f"firma_ismi:{self.company_name}\n")
                 f.write(f"terminal_id:{self.terminal_id}\n")
+                f.write(f"cid_port:{self.cid_port}\n")
+                f.write(f"cid_type:{self.cid_type}\n")
+                f.write(f"cid_serial_port:{self.cid_serial_port}\n")
+                f.write(f"cid_enabled:{'EVET' if self.cid_enabled else 'HAYIR'}\n")
             return True
         except Exception as e:
             logger.error(f"Ayar kaydetme hatası: {e}")
@@ -363,6 +387,127 @@ class RestaurantServer:
         finally:
             client_sock.close()
 
+    def start_caller_id_listener(self):
+        """Caller ID (Signal 7 veya Seri Port) dinleyicisini başlat"""
+        if not self.cid_enabled:
+            logger.info("🚫 Caller ID sistemi devre dışı.")
+            return
+
+        if self.cid_type == 'tcp':
+            def run_cid_listener():
+                try:
+                    cid_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    cid_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    try:
+                        cid_sock.bind(('0.0.0.0', self.cid_port))
+                    except Exception as e:
+                        logger.error(f"❌ Caller ID portu ({self.cid_port}) bağlanamadı: {e}")
+                        return
+
+                    cid_sock.listen(5)
+                    logger.info(f"📡 TCP Caller ID Dinleyici başladı: Port {self.cid_port}")
+
+                    while self.running:
+                        try:
+                            client, addr = cid_sock.accept()
+                            logger.info(f"📞 Caller ID cihazı bağlandı: {addr}")
+                            threading.Thread(target=self.handle_cid_data, args=(client,), daemon=True).start()
+                        except:
+                            if not self.running: break
+                except Exception as e:
+                    logger.error(f"❌ TCP Caller ID hatası: {e}")
+            threading.Thread(target=run_cid_listener, daemon=True).start()
+        
+        elif self.cid_type == 'serial':
+            def run_serial_cid():
+                logger.info(f"🔌 Seri Port Caller ID Dinleyici başlatılıyor: {self.cid_serial_port}")
+                while self.running:
+                    try:
+                        # PTTAVM 2'li modem ve benzeri cihazlar genelde 9600 baud kullanır
+                        with serial.Serial(self.cid_serial_port, 9600, timeout=1) as ser:
+                            logger.info(f"✅ Seri Port bağlandı: {self.cid_serial_port}")
+                            while self.running:
+                                line = ser.readline().decode('utf-8', errors='ignore').strip()
+                                if line:
+                                    logger.info(f"☎️ Seri Port Verisi: {line}")
+                                    # PTTAVM 2'li modem formatı: "01 N 0532..."
+                                    phone = ""
+                                    if " N " in line:
+                                        phone = line.split(" N ")[1].strip()
+                                    elif line.isdigit():
+                                        phone = line
+                                    else:
+                                        phone = ''.join(filter(str.isdigit, line))[-10:]
+                                    
+                                    if phone:
+                                        self.process_incoming_call(phone)
+                    except Exception as e:
+                        if self.running:
+                            logger.error(f"❌ Seri Port hatası ({self.cid_serial_port}): {e}. 10 saniye sonra tekrar denenecek...")
+                            time.sleep(10)
+                        else:
+                            break
+            threading.Thread(target=run_serial_cid, daemon=True).start()
+
+    def handle_cid_data(self, client):
+        """Gelen Caller ID verisini çöz ve yayınla"""
+        try:
+            # Signal 7 formatı genelde: 
+            # "ID=1,NO=05321234567,DATE=21/02/2026,TIME=16:15" vb. 
+            # veya sadece numara gönderir.
+            data = client.recv(1024).decode('utf-8', errors='ignore').strip()
+            if not data: return
+            
+            logger.info(f"☎️ Gelen Çağrı Verisi: {data}")
+            
+            # Telefon numarasını ayıkla (Basit bir regex veya split)
+            phone = ""
+            if "NO=" in data:
+                phone = data.split("NO=")[1].split(",")[0].strip()
+            elif data.isdigit():
+                phone = data
+            else:
+                # Genel bir temizlik
+                phone = ''.join(filter(str.isdigit, data))[-10:] # Son 10 hane (TR formatı)
+
+            if phone:
+                self.process_incoming_call(phone)
+        except Exception as e:
+            logger.error(f"❌ CID Veri işleme hatası: {e}")
+        finally:
+            client.close()
+
+    def process_incoming_call(self, phone):
+        """Gelen aramayı işle ve frontend'e gönder"""
+        customer = None
+        history = []
+        
+        if USE_DATABASE:
+            customer = db.get_cari_by_phone(phone)
+            if customer:
+                history = db.get_customer_order_history(customer['cari_isim'])
+                # Balance ekle
+                customer['bakiye'] = db.get_cari_balance(customer['cari_isim'])
+        
+        # SocketIO ile tüm ekranlara (özellikle kasaya) bildir
+        payload = {
+            'phone': phone,
+            'customer': customer,
+            'history': [
+                {
+                    'urun': h['urun'], 
+                    'adet': h['adet'], 
+                    'fiyat': float(h['fiyat']), 
+                    'tarih': str(h['tarih_saat']),
+                    'odeme': h['odeme']
+                } for h in history
+            ],
+            'timestamp': datetime.datetime.now().strftime("%H:%M:%S")
+        }
+        
+        socketio.emit('incoming_call', payload)
+        logger.info(f"🔔 Arama bildirildi: {phone} {'(' + customer['cari_isim'] + ')' if customer else '(Yeni Müşteri)'}")
+
 # Global server instance
 server = RestaurantServer()
 
@@ -423,7 +568,9 @@ def system_info():
         'masa_sayisi': server.masa_sayisi,
         'paket_sayisi': server.paket_sayisi,
         'database': USE_DATABASE,
-        'pdf': PDF_SUPPORT
+        'pdf': PDF_SUPPORT,
+        'cid_enabled': server.cid_enabled,
+        'cid_type': server.cid_type
     })
 
 @app.route('/api/settings', methods=['GET'])
@@ -435,6 +582,10 @@ def get_settings():
         'masa_sayisi':  server.masa_sayisi,
         'paket_sayisi': server.paket_sayisi,
         'direct_print': server.direct_print,
+        'cid_port': server.cid_port,
+        'cid_type': server.cid_type,
+        'cid_serial_port': server.cid_serial_port,
+        'cid_enabled': server.cid_enabled,
         'ip':           get_local_ip()
     })
 
@@ -466,6 +617,11 @@ def save_settings():
     masa_degisti = (yeni_masa != server.masa_sayisi or yeni_paket != server.paket_sayisi)
     server.masa_sayisi   = yeni_masa
     server.paket_sayisi  = yeni_paket
+    
+    server.cid_port = int(data.get('cid_port', server.cid_port))
+    server.cid_type = data.get('cid_type', server.cid_type)
+    server.cid_serial_port = data.get('cid_serial_port', server.cid_serial_port)
+    server.cid_enabled = data.get('cid_enabled', server.cid_enabled)
 
     # Kaydet
     ok = server.save_settings()
@@ -484,6 +640,18 @@ def save_settings():
 
     logger.info(f"✅ Ayarlar güncellendi: {server.company_name} / Masa:{server.masa_sayisi} Paket:{server.paket_sayisi}")
     return jsonify({'success': True})
+
+@app.route('/api/serial/ports')
+def get_serial_ports():
+    """Mevcut seri portları listele"""
+    ports = serial.tools.list_ports.comports()
+    result = []
+    for p in ports:
+        result.append({
+            'device': p.device,
+            'description': p.description
+        })
+    return jsonify(result)
 
 # ==================== GÜN SONU API ====================
 
@@ -647,6 +815,56 @@ def delete_cari_hesap(cari_isim):
         logger.error(f"Cari hesap silme hatası: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/cari/lookup/<phone>')
+def lookup_customer(phone):
+    """Telefona göre müşteri bul"""
+    if not USE_DATABASE:
+        return jsonify({'success': False, 'error': 'Veri tabanı bağlantısı yok'})
+    try:
+        customer = db.get_cari_by_phone(phone)
+        if customer:
+            history = db.get_customer_order_history(customer['cari_isim'])
+            bakiye = db.get_cari_balance(customer['cari_isim'])
+            return jsonify({
+                'success': True, 
+                'customer': {
+                    'cari_isim': customer['cari_isim'],
+                    'telefon': customer['telefon'],
+                    'adres': customer['adres'],
+                    'bakiye': bakiye
+                },
+                'history': [
+                    {
+                        'urun': h['urun'], 
+                        'adet': h['adet'], 
+                        'fiyat': float(h['fiyat']), 
+                        'tarih': str(h['tarih_saat'])
+                    } for h in history
+                ]
+            })
+        return jsonify({'success': True, 'customer': None})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/cari/update_details', methods=['POST'])
+def update_cari_details_api():
+    """Müşteri detaylarını (tel/adres) güncelle"""
+    if not USE_DATABASE:
+        return jsonify({'success': False, 'error': 'Veri tabanı bağlantısı yok'})
+    data = request.get_json()
+    cari_isim = data.get('cari_isim')
+    telefon = data.get('telefon')
+    adres = data.get('adres')
+    
+    if not cari_isim:
+        return jsonify({'success': False, 'error': 'Müşteri adı gerekli'})
+        
+    try:
+        db.update_cari_details(cari_isim, telefon, adres)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
 # ==================== GARSON YÖNETİMİ API ====================
 
 @app.route('/api/waiters', methods=['GET'])
@@ -691,6 +909,84 @@ def waiter_login_api():
     if waiter:
         return jsonify({'success': True})
     return jsonify({'success': False, 'error': 'Hatalı PIN!'}), 401
+
+# ==================== ENTEGRASYONLAR API ====================
+
+@app.route('/api/integration/settings', methods=['GET'])
+def get_integration_settings():
+    """Entegrasyon ayarlarını döndür"""
+    return jsonify(server.integration_manager.settings)
+
+@app.route('/api/integration/settings', methods=['POST'])
+def save_integration_settings():
+    """Entegrasyon ayarlarını kaydet"""
+    data = request.get_json()
+    if server.integration_manager.save_settings(data):
+        return jsonify({'success': True})
+    return jsonify({'success': False, 'error': 'Ayarlar kaydedilemedi'}), 500
+
+@app.route('/api/integration/webhook/<platform>', methods=['POST'])
+def integration_webhook(platform):
+    """Platformlardan gelen siparişleri karşıla"""
+    data = request.get_json()
+    logger.info(f"📥 {platform.upper()} Webhook: {data}")
+    
+    order = server.integration_manager.process_webhook(platform, data)
+    if not order:
+        return jsonify({'success': False, 'error': 'Sipariş işlenemedi'}), 400
+        
+    masa_adi = order.get('masa')
+    items = order.get('items', [])
+    
+    # Adisyon alanını kontrol et veya oluştur
+    if masa_adi not in server.adisyonlar:
+        server.adisyonlar[masa_adi] = []
+        
+    # Siparişleri ekle
+    for item in items:
+        siparis_id = str(uuid.uuid4())[:8]
+        siparis = {
+            'uid': siparis_id,
+            'urun': item['urun'],
+            'adet': item['adet'],
+            'fiyat': item['fiyat'],
+            'tip': item['tip'],
+            'garson': order.get('platform', 'Online'),
+            'durum': 'mutfakta',
+            'saat': datetime.datetime.now().strftime("%H:%M:%S")
+        }
+        server.adisyonlar[masa_adi].append(siparis)
+        
+        # Mutfak bildirimi
+        socketio.emit('kitchen_new_order', {
+            'uid': siparis_id,
+            'masa': masa_adi,
+            'urun': item['urun'],
+            'adet': item['adet'],
+            'saat': siparis['saat'],
+            'garson': siparis['garson'],
+            'terminal_id': f"API:{platform}"
+        })
+        
+        # Legacy mutfak
+        server.send_to_kitchen_legacy(masa_adi, item['urun'], item['adet'])
+        
+    # Tüm clientlara bildir
+    socketio.emit('masa_update', {
+        'masa': masa_adi,
+        'items': server.adisyonlar[masa_adi],
+        'total': sum(i['adet'] * i['fiyat'] for i in server.adisyonlar[masa_adi]),
+        'source': platform
+    })
+    
+    # Yeni sipariş uyarısı
+    socketio.emit('new_online_order', {
+        'platform': order.get('platform'),
+        'masa': masa_adi,
+        'customer': order.get('customer')
+    })
+    
+    return jsonify({'success': True})
 
 # ==================== MENÜ ====================
 
@@ -1157,6 +1453,9 @@ def handle_print_receipt(data):
 if __name__ == '__main__':
     # Terminal sunucusunu başlat
     server.start_terminal_server()
+    
+    # Caller ID sunucusunu başlat
+    server.start_caller_id_listener()
     
     # Web sunucuyu başlat
     logger.info(f"🌐 Web sunucu başlatılıyor: http://{get_local_ip()}:8000")

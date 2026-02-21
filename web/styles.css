@@ -938,3 +938,247 @@ body {
         width: 80mm;
     }
 }
+
+/* Caller ID Popup Styles */
+.cid-popup-overlay {
+    display: none;
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    width: 380px;
+    background: linear-gradient(135deg, #1e293b, #334155);
+    border-radius: 16px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: white;
+    overflow: hidden;
+    animation: slideInRight 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.cid-popup-header {
+    background: linear-gradient(90deg, #6366f1, #8b5cf6);
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.cid-popup-header h3 {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.cid-close {
+    cursor: pointer;
+    font-size: 20px;
+    opacity: 0.8;
+}
+
+.cid-close:hover {
+    opacity: 1;
+}
+
+.cid-body {
+    padding: 20px;
+}
+
+.cid-caller-info {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-bottom: 20px;
+}
+
+.cid-name {
+    font-size: 22px;
+    font-weight: 800;
+    color: #a5b4fc;
+}
+
+.cid-phone {
+    font-size: 16px;
+    color: #94a3b8;
+    font-family: monospace;
+}
+
+.cid-address {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 12px;
+    border-radius: 10px;
+    font-size: 14px;
+    border-left: 4px solid #6366f1;
+    margin-top: 10px;
+    line-height: 1.5;
+}
+
+.cid-history-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #94a3b8;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.cid-history-list {
+    max-height: 180px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.cid-history-item {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 8px 12px;
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+}
+
+.cid-history-date {
+    color: #64748b;
+    font-size: 11px;
+}
+
+.cid-history-price {
+    font-weight: 700;
+    color: #10b981;
+}
+
+.cid-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+}
+
+.btn-cid-action {
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #6366f1;
+    color: white;
+}
+
+.btn-cid-action:hover {
+    background: #4f46e5;
+    transform: translateY(-2px);
+}
+
+/* Online Order Popup */
+.oo-popup {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 320px;
+    background: white;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    z-index: 3000;
+    transform: translateX(400px);
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    overflow: hidden;
+    border-top: 5px solid var(--accent-color);
+}
+
+.oo-popup.show {
+    transform: translateX(0);
+}
+
+.oo-header {
+    padding: 12px 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #eee;
+}
+
+.oo-header h3 {
+    font-size: 14px;
+    margin: 0;
+    color: var(--text-primary);
+}
+
+.oo-close {
+    cursor: pointer;
+    font-size: 20px;
+    color: var(--text-secondary);
+}
+
+.oo-body {
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.oo-platform {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 20px;
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 5px;
+}
+
+.oo-platform.yemeksepeti {
+    background-color: #e21a23;
+}
+
+.oo-platform.trendyol {
+    background-color: #f27a1a;
+}
+
+.oo-platform.getir {
+    background-color: #5d3ebc;
+}
+
+.oo-platform.migros {
+    background-color: #ff6d00;
+}
+
+.oo-customer {
+    font-size: 18px;
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+.oo-masa {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.oo-footer {
+    padding: 10px 15px;
+    background: #f8f9fa;
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-align: center;
+    font-style: italic;
+}

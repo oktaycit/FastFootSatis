@@ -204,6 +204,49 @@
             </div>
         </div>
 
+        <!-- Caller ID Popup -->
+        <div id="cidPopup" class="cid-popup-overlay">
+            <div class="cid-popup-header">
+                <h3>📞 GELEN ÇAĞRI</h3>
+                <span class="cid-close" onclick="closeCidPopup()">&times;</span>
+            </div>
+            <div class="cid-body">
+                <div class="cid-caller-info">
+                    <div id="cidName" class="cid-name">Yeni Müşteri</div>
+                    <div id="cidPhone" class="cid-phone">05XX XXX XX XX</div>
+                    <div id="cidAddress" class="cid-address">Adres bilgisi bulunamadı.</div>
+                </div>
+
+                <div class="cid-history-title">
+                    GEÇMİŞ SİPARİŞLER
+                    <span id="cidBalance" style="color: #fca5a5;"></span>
+                </div>
+                <div id="cidHistoryList" class="cid-history-list">
+                    <!-- History items will be loaded here -->
+                </div>
+
+                <div class="cid-actions">
+                    <button class="btn-cid-action" id="btnCidCreateOrder">🛵 PAKET SİPARİŞİ OLUŞTUR</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Online Order Popup -->
+        <div id="onlineOrderPopup" class="oo-popup">
+            <div class="oo-header">
+                <h3>🌐 YENİ ONLİNE SİPARİŞ</h3>
+                <span class="oo-close" onclick="closeOnlineOrderPopup()">&times;</span>
+            </div>
+            <div class="oo-body">
+                <div id="ooPlatform" class="oo-platform">PLATFORM</div>
+                <div id="ooCustomer" class="oo-customer">Müşteri Adı</div>
+                <div id="ooMasa" class="oo-masa">Masa / Paket No</div>
+            </div>
+            <div class="oo-footer">
+                Sipariş mutfak ekranına gönderildi.
+            </div>
+        </div>
+
         <!-- Main Script -->
         <script src="script.js"></script>
 </body>

@@ -59,7 +59,16 @@ const elements = {
     btnPaySelected: null,
     splitButtonsArea: null,
     selectedCount: null,
-    btnSplitEqually: null
+    btnSplitEqually: null,
+
+    // Caller ID Popup
+    cidPopup: null,
+    cidName: null,
+    cidPhone: null,
+    cidAddress: null,
+    cidHistoryList: null,
+    cidBalance: null,
+    btnCidCreateOrder: null
 };
 
 /**
@@ -99,12 +108,16 @@ function connectToServer() {
     socket.on('error', onError);
 
     // Data events
-    socket.on('initial_data', onInitialData);
+    socket.on('system_info', onSystemInfo);
+    socket.on('menu_data', onMenuData);
+    socket.on('adisyonlar_update', onAdisyonlarUpdate);
     socket.on('masa_selected', onMasaSelected);
     socket.on('masa_update', onMasaUpdate);
     socket.on('payment_completed', onPaymentCompleted);
+    socket.on('incoming_call', onIncomingCall);
     socket.on('success', onSuccess);
     socket.on('error', onError);
+    socket.on('new_online_order', onNewOnlineOrder);
 
     // New: Order ready notification
     socket.on('order_ready', (data) => {
@@ -272,6 +285,40 @@ function onPaymentCompleted(data) {
     updateTableButton(data.masa);
 
     showNotification(`${data.type} ödemesi başarıyla alındı!`, 'success');
+}
+
+function onNewOnlineOrder(data) {
+    console.log('🌐 New online order:', data);
+
+    // Play notification sound
+    try {
+        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+        audio.play().catch(e => console.log('Audio play failed:', e));
+    } catch (e) { }
+
+    showOnlineOrderPopup(data);
+}
+
+function showOnlineOrderPopup(data) {
+    const popup = document.getElementById('onlineOrderPopup');
+    if (!popup) return;
+
+    document.getElementById('ooPlatform').textContent = data.platform.toUpperCase();
+    document.getElementById('ooPlatform').className = `oo-platform ${data.platform.toLowerCase()}`;
+    document.getElementById('ooCustomer').textContent = data.customer || 'Bilinmeyen Müşteri';
+    document.getElementById('ooMasa').textContent = data.masa;
+
+    popup.classList.add('show');
+
+    // Auto close after 10 seconds
+    setTimeout(() => {
+        popup.classList.remove('show');
+    }, 10000);
+}
+
+function closeOnlineOrderPopup() {
+    const popup = document.getElementById('onlineOrderPopup');
+    if (popup) popup.classList.remove('show');
 }
 
 function onSuccess(data) {
@@ -998,3 +1045,97 @@ function showNotification(message, type = 'info') {
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', init);
+/**
+ * Handle incoming call from Caller ID
+ */
+function onIncomingCall(data) {
+    console.log('📞 Incoming call:', data);
+
+    const { phone, customer, history } = data;
+
+    // Update Popup UI
+    elements.cidPhone.innerText = formatPhone(phone);
+
+    if (customer) {
+        elements.cidName.innerText = customer.cari_isim;
+        elements.cidAddress.innerText = customer.adres || 'Adres bilgisi bulunamadı.';
+        elements.cidBalance.innerText = customer.bakiye !== undefined ? `BAKİYE: ${customer.bakiye.toFixed(2)} TL` : '';
+    } else {
+        elements.cidName.innerText = 'Yeni Müşteri';
+        elements.cidAddress.innerText = 'Adres bilgisi bulunamadı.';
+        elements.cidBalance.innerText = '';
+    }
+
+    // Update History
+    elements.cidHistoryList.innerHTML = '';
+    if (history && history.length > 0) {
+        history.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'cid-history-item';
+            div.innerHTML = `
+                <div>
+                    <div>${item.urun} (x${item.adet})</div>
+                    <div class="cid-history-date">${item.tarih}</div>
+                </div>
+                <div class="cid-history-price">${item.fiyat.toFixed(2)} TL</div>
+            `;
+            elements.cidHistoryList.appendChild(div);
+        });
+    } else {
+        elements.cidHistoryList.innerHTML = '<div style="text-align:center; padding: 20px; color: #64748b; font-size: 13px;">Geçmiş sipariş bulunamadı.</div>';
+    }
+
+    // Setup Action
+    elements.btnCidCreateOrder.onclick = () => createPaketOrderFromCid(phone, customer);
+
+    // Show Popup
+    elements.cidPopup.style.display = 'block';
+
+    // Auto-close after 30 seconds
+    if (window.cidTimeout) clearTimeout(window.cidTimeout);
+    window.cidTimeout = setTimeout(closeCidPopup, 30000);
+}
+
+function closeCidPopup() {
+    elements.cidPopup.style.display = 'none';
+    if (window.cidTimeout) clearTimeout(window.cidTimeout);
+}
+
+function formatPhone(phone) {
+    if (!phone) return '';
+    phone = phone.replace(/\D/g, '');
+    if (phone.length === 10) {
+        return `0 (${phone.substring(0, 3)}) ${phone.substring(3, 6)} ${phone.substring(6, 8)} ${phone.substring(8, 10)}`;
+    }
+    return phone;
+}
+
+function createPaketOrderFromCid(phone, customer) {
+    // Boş bir paket slotu bul
+    const paketItems = elements.paketGrid.querySelectorAll('.table-btn');
+    let emptyPaket = null;
+
+    for (let btn of paketItems) {
+        if (!btn.classList.contains('occupied')) {
+            emptyPaket = btn;
+            break;
+        }
+    }
+
+    if (emptyPaket) {
+        // Paketi seç
+        emptyPaket.click();
+        closeCidPopup();
+
+        // Eğer müşteri kayıtlıysa, adisyon notuna veya başka bir yere bilgi eklenebilir
+        // Ancak mevcut sistemde not alanı yok. 
+        showToast(`${emptyPaket.innerText} seçildi. Sipariş alabilirsiniz.`, 'success');
+
+        // Ödeme kısmında bu müşteriyi otomatik seçmek için bir ipucu bırakabiliriz
+        if (customer) {
+            window.activeCallCustomer = customer;
+        }
+    } else {
+        showToast('Boş paket slotu bulunamadı!', 'error');
+    }
+}

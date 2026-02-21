@@ -772,6 +772,8 @@
                     <div class="detail-header">
                         <div>
                             <div class="detail-title" id="detailName">-</div>
+                            <div id="detailContact" style="font-size: 13px; color: var(--muted); margin-top: 4px;">
+                            </div>
                             <div class="detail-bakiye" id="detailBakiye">0.00 TL</div>
                         </div>
                         <div class="action-buttons">
@@ -807,6 +809,14 @@
             <div class="form-group">
                 <label>Ad Soyad / Firma</label>
                 <input type="text" id="newCariIsim" placeholder="Örn: Ahmet Yılmaz" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label>Telefon</label>
+                <input type="text" id="newCariTelefon" placeholder="05XX XXX XX XX" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label>Adres</label>
+                <input type="text" id="newCariAdres" placeholder="Müşteri adresi..." autocomplete="off">
             </div>
             <div class="modal-actions">
                 <button class="btn-cancel" onclick="closeModal('addModal')">İptal</button>
@@ -906,11 +916,12 @@
 
         // ── Hesap Seç ──
         async function selectCari(isim) {
-            selectedCari = isim;
             renderList(allHesaplar.filter(h => {
                 const q = document.getElementById('searchInput').value.toLowerCase();
-                return h.cari_isim.toLowerCase().includes(q);
+                return h.cari_isim.toLowerCase().includes(q) || (h.telefon && h.telefon.includes(q));
             }));
+
+            const customer = allHesaplar.find(h => h.cari_isim === isim);
 
             try {
                 const r = await fetch(`/api/cari/hareketler/${encodeURIComponent(isim)}`);
@@ -922,6 +933,13 @@
                 dc.style.display = 'flex';
 
                 document.getElementById('detailName').textContent = isim;
+
+                // İletişim bilgileri
+                const contactEl = document.getElementById('detailContact');
+                contactEl.innerHTML = '';
+                if (customer.telefon) contactEl.innerHTML += `📞 ${customer.telefon} `;
+                if (customer.adres) contactEl.innerHTML += `<br>🏠 ${customer.adres}`;
+
                 const b = d.bakiye;
                 const bEl = document.getElementById('detailBakiye');
                 if (b > 0) { bEl.textContent = `📌 ${formatTL(b)} BORÇLU`; bEl.style.color = '#fca5a5'; }
@@ -957,21 +975,37 @@
         // ── Yeni Müşteri ──
         function showAddModal() {
             document.getElementById('newCariIsim').value = '';
+            document.getElementById('newCariTelefon').value = '';
+            document.getElementById('newCariAdres').value = '';
             document.getElementById('addModal').classList.add('show');
             setTimeout(() => document.getElementById('newCariIsim').focus(), 100);
         }
 
         async function addHesap() {
             const isim = document.getElementById('newCariIsim').value.trim();
+            const telefon = document.getElementById('newCariTelefon').value.trim();
+            const adres = document.getElementById('newCariAdres').value.trim();
+
             if (!isim) { showToast('Müşteri adı boş olamaz', 'error'); return; }
             try {
+                // 1. Hesabı oluştur
                 const r = await fetch('/api/cari/hesap', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ cari_isim: isim })
                 });
                 const d = await r.json();
+
                 if (d.success) {
+                    // 2. Detayları güncelle (varsa)
+                    if (telefon || adres) {
+                        await fetch('/api/cari/update_details', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ cari_isim: isim, telefon, adres })
+                        });
+                    }
+
                     showToast(`"${isim}" eklendi`, 'success');
                     closeModal('addModal');
                     await loadHesaplar();
