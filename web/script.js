@@ -108,8 +108,8 @@ function connectToServer() {
     socket.on('error', onError);
 
     // Data events
+    socket.on('initial_data', onInitialData);
     socket.on('system_info', onSystemInfo);
-    socket.on('menu_data', onMenuData);
     socket.on('adisyonlar_update', onAdisyonlarUpdate);
     socket.on('masa_selected', onMasaSelected);
     socket.on('masa_update', onMasaUpdate);
