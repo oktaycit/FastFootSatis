@@ -456,12 +456,25 @@ function updateOrderDisplay() {
 
             const itemTotal = item.adet * item.fiyat;
             const isIkram = item.tip === 'ikram';
+            const isHazir = item.durum === 'hazir';
 
             orderItem.innerHTML = `
-                <div class="order-item-info">
-                    <div class="order-item-name">${item.adet}x ${item.urun}${isIkram ? ' (İKRAM)' : ''}</div>
+                <div class="order-item-info" style="flex-grow: 1;">
+                    <div class="order-item-name">
+                        ${isHazir ? '<span style="color: #2ecc71; font-weight: bold; font-size: 10px;">[HAZIR] </span>' : ''}
+                        ${item.adet}x ${item.urun}${isIkram ? ' (İKRAM)' : ''}
+                    </div>
+                    <div style="font-size: 10px; color: #777;">${item.garson || 'Bilinmiyor'} - ${item.saat || ''}</div>
                 </div>
-                <div class="order-item-price">${itemTotal.toFixed(2)} TL</div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div class="order-item-price">${itemTotal.toFixed(2)} TL</div>
+                    ${!isHazir && item.uid ? `
+                        <button class="btn-cancel-small" onclick="cancelItem('${item.uid}', event)" 
+                                style="background: #e74c3c; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 10px; cursor: pointer;">
+                            İPTAL
+                        </button>
+                    ` : ''}
+                </div>
             `;
 
             if (selectedItemIndices.includes(index)) {
@@ -469,7 +482,7 @@ function updateOrderDisplay() {
             }
 
             orderItem.onclick = (e) => {
-                if (e.target.closest('.order-item')) {
+                if (!e.target.closest('button')) {
                     toggleItemSelection(index);
                 }
             };
@@ -501,6 +514,20 @@ function addItemToOrder(urun, fiyat) {
 
 function removeItemFromOrder(index) {
     socket.emit('remove_item', { index: index });
+}
+
+function cancelItem(uid, event) {
+    if (event) event.stopPropagation();
+
+    if (!currentMasa) return;
+
+    if (confirm('Bu siparişi iptal etmek istediğinize emin misiniz?')) {
+        console.log(`🗑️ Cancelling item ${uid} for ${currentMasa}`);
+        socket.emit('cancel_item', {
+            masa: currentMasa,
+            uid: uid
+        });
+    }
 }
 
 function toggleItemSelection(index) {
