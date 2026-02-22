@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kasa ve Vardiya Yönetimi - FastFootSatış</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --accent-color: #3b82f6;
+            --accent-hover: #2563eb;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --success: #22c55e;
+            --danger: #ef4444;
+            --border: #334155;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .back-btn {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: 0.3s;
+        }
+
+        .back-btn:hover {
+            background: var(--border);
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 20px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid var(--border);
+        }
+
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Kasa Listesi */
+        .kasa-item {
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .kasa-item:hover {
+            border-color: var(--accent-color);
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .kasa-item.active {
+            border-color: var(--accent-color);
+            background: rgba(59, 130, 246, 0.2);
+        }
+
+        /* Vardiya Durumu */
+        .shift-status {
+            text-align: center;
+            padding: 30px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+
+        .status-open {
+            background: rgba(34, 197, 94, 0.2);
+            color: var(--success);
+        }
+
+        .status-closed {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--danger);
+        }
+
+        /* Formlar */
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            color: var(--text-secondary);
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+        }
+
+        input {
+            width: 100%;
+            background: var(--bg-color);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px;
+            color: white;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: var(--accent-color);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.3s;
+            margin-top: 10px;
+        }
+
+        .btn-primary {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        /* Reports Table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th {
+            text-align: left;
+            color: var(--text-secondary);
+            padding: 10px;
+            font-size: 0.85rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        td {
+            padding: 12px 10px;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.9rem;
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .stat-box {
+            background: var(--bg-color);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .stat-value {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-top: 5px;
+        }
+
+        @media (max-width: 768px) {
+            .layout {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h1><i class="fas fa-cash-register"></i> Kasa ve Vardiya</h1>
+        <a href="index.html" class="back-btn"><i class="fas fa-arrow-left"></i> Geri Dön</a>
+    </div>
+
+    <div class="layout">
+        <!-- Sol Panel: Kasa Seçimi -->
+        <div class="card">
+            <div class="card-title"><i class="fas fa-list"></i> Kasalar</div>
+            <div id="kasaListesi">
+                <!-- Kasalar buraya gelecek -->
+            </div>
+            <hr style="border: none; border-top: 1px solid var(--border); margin: 20px 0;">
+            <div class="form-group">
+                <label>Yeni Kasa Ekle</label>
+                <input type="text" id="yeniKasaAd" placeholder="Kasa Adı (örn: Kasa 1)">
+                <button class="btn btn-primary" onclick="kasaEkle()">Kasa Ekle</button>
+            </div>
+        </div>
+
+        <!-- Sağ Panel: Vardiya Kontrolü -->
+        <div class="card">
+            <div id="vardiyaDetay">
+                <div class="shift-status">
+                    <i class="fas fa-info-circle fa-3x" style="color: var(--text-secondary); margin-bottom: 15px;"></i>
+                    <p>Lütfen işlem yapmak istediğiniz kasayı seçin.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" style="margin-top: 20px;">
+        <div class="card-title"><i class="fas fa-history"></i> Vardiya Geçmişi</div>
+        <div id="gecmisVardiyalar">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Tarih / Kasa</th>
+                        <th>Kasiyer</th>
+                        <th>Açılış</th>
+                        <th>Kapanış Nakit</th>
+                        <th>Kapanış Kart</th>
+                        <th>Durum</th>
+                        <th>İşlem</th>
+                    </tr>
+                </thead>
+                <tbody id="gecmisBody">
+                    <!-- Geçmiş buraya gelecek -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        let currentKasa = null;
+        let activeShift = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            kasalariYukle();
+            gecmisYukle();
+
+            const savedKasaId = localStorage.getItem('kasa_id');
+            if (savedKasaId) {
+                currentKasa = { id: parseInt(savedKasaId) };
+            }
+        });
+
+        async function kasalariYukle() {
+            const res = await fetch('/api/kasa/liste');
+            const kasalar = await res.json();
+            const container = document.getElementById('kasaListesi');
+            container.innerHTML = '';
+
+            kasalar.forEach(k => {
+                const div = document.createElement('div');
+                div.className = `kasa-item ${currentKasa?.id === k.id ? 'active' : ''}`;
+                div.innerHTML = `<span><i class="fas fa-terminal"></i> ${k.ad}</span><i class="fas fa-chevron-right"></i>`;
+                div.onclick = () => kasaSec(k);
+                container.appendChild(div);
+
+                if (currentKasa?.id === k.id) {
+                    currentKasa = k;
+                    vardiyaDurumSorgula();
+                }
+            });
+        }
+
+        function kasaSec(kasa) {
+            currentKasa = kasa;
+            localStorage.setItem('kasa_id', kasa.id);
+            localStorage.setItem('kasa_ad', kasa.ad);
+            document.querySelectorAll('.kasa-item').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.kasa-item').forEach(el => {
+                if (el.innerText.includes(kasa.ad)) el.classList.add('active');
+            });
+            vardiyaDurumSorgula();
+        }
+
+        async function kasaEkle() {
+            const ad = document.getElementById('yeniKasaAd').value;
+            if (!ad) return;
+            const res = await fetch('/api/kasa/ekle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ad })
+            });
+            const data = await res.json();
+            if (data.success) {
+                document.getElementById('yeniKasaAd').value = '';
+                kasalariYukle();
+            } else {
+                alert("Hata: " + data.error);
+            }
+        }
+
+        async function vardiyaDurumSorgula() {
+            const res = await fetch(`/api/vardiya/durum?kasa_id=${currentKasa.id}`);
+            activeShift = await res.json();
+            ekranGuncelle();
+        }
+
+        function ekranGuncelle() {
+            const container = document.getElementById('vardiyaDetay');
+            if (!activeShift) {
+                container.innerHTML = `
+                    <div class="card-title"><i class="fas fa-door-open"></i> Vardiya Aç - ${currentKasa.ad}</div>
+                    <div class="status-badge status-closed">Vardiya Kapalı</div>
+                    <div class="form-group">
+                        <label>Kasiyer Adı</label>
+                        <input type="text" id="kasiyerAd" placeholder="İsminizi yazın">
+                    </div>
+                    <div class="form-group">
+                        <label>Açılış Bakiyesi (TL)</label>
+                        <input type="number" id="acilisBakiye" value="0">
+                    </div>
+                    <button class="btn btn-primary" onclick="vardiyaAc()">VARDİYAYI BAŞLAT</button>
+                `;
+            } else {
+                container.innerHTML = `
+                    <div class="card-title"><i class="fas fa-user-clock"></i> Aktif Vardiya - ${currentKasa.ad}</div>
+                    <div class="status-badge status-open">Vardiya Açık</div>
+                    
+                    <div class="stat-grid">
+                        <div class="stat-box">
+                            <div class="stat-label">Kasiyer</div>
+                            <div class="stat-value">${activeShift.kasiyer}</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">Başlangıç</div>
+                            <div class="stat-value">${new Date(activeShift.acilis_zamani).toLocaleString()}</div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 20px;">
+                        <div class="form-group">
+                            <label>Teslim Edilen Nakit (TL)</label>
+                            <input type="number" id="kapanisNakit" placeholder="Kasayı sayın ve yazın">
+                        </div>
+                        <div class="form-group">
+                            <label>Z-Raporu Kart Toplamı (TL)</label>
+                            <input type="number" id="kapanisKart" placeholder="Pos cihazından bakın">
+                        </div>
+                        <button class="btn btn-danger" onclick="vardiyaKapat()">VARDİYAYI KAPAT VE TESLİM ET</button>
+                    </div>
+                `;
+            }
+        }
+
+        async function vardiyaAc() {
+            const kasiyer = document.getElementById('kasiyerAd').value;
+            const bakiye = document.getElementById('acilisBakiye').value;
+            if (!kasiyer) return alert("Kasiyer adı gerekli");
+
+            const res = await fetch('/api/vardiya/ac', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    kasa_id: currentKasa.id,
+                    kasiyer: kasiyer,
+                    acilis_bakiyesi: bakiye
+                })
+            });
+            const data = await res.json();
+            if (data.success) {
+                vardiyaDurumSorgula();
+                gecmisYukle();
+            } else {
+                alert("Hata: " + data.error);
+            }
+        }
+
+        async function vardiyaKapat() {
+            if (!confirm("Vardiyayı kapatmak istediğinize emin misiniz?")) return;
+
+            const nakit = document.getElementById('kapanisNakit').value;
+            const kart = document.getElementById('kapanisKart').value;
+
+            const res = await fetch('/api/vardiya/kapat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    shift_id: activeShift.id,
+                    nakit: nakit,
+                    kart: kart
+                })
+            });
+            const data = await res.json();
+            if (data.success) {
+                activeShift = null;
+                ekranGuncelle();
+                gecmisYukle();
+            } else {
+                alert("Hata: " + data.error);
+            }
+        }
+
+        async function gecmisYukle() {
+            const res = await fetch('/api/vardiya/gecmis');
+            const shifts = await res.json();
+            const body = document.getElementById('gecmisBody');
+            body.innerHTML = '';
+
+            shifts.forEach(s => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>
+                        <div style="font-weight:600">${s.kasa_adi}</div>
+                        <div style="font-size:0.75rem; color:var(--text-secondary)">${new Date(s.acilis_zamani).toLocaleDateString()}</div>
+                    </td>
+                    <td>${s.kasiyer}</td>
+                    <td>${s.acilis_bakiyesi} TL</td>
+                    <td>${s.kapanis_nakit || '-'} TL</td>
+                    <td>${s.kapanis_kart || '-'} TL</td>
+                    <td><span class="status-badge ${s.durum === 'acik' ? 'status-open' : 'status-closed'}">${s.durum.toUpperCase()}</span></td>
+                    <td>
+                        <button class="back-btn" onclick="detayGoster(${s.id})" style="padding:5px 10px; font-size:0.8rem">
+                            <i class="fas fa-file-invoice-dollar"></i> Özet
+                        </button>
+                    </td>
+                `;
+                body.appendChild(tr);
+            });
+        }
+
+        async function detayGoster(id) {
+            const res = await fetch(`/api/vardiya/ozet/${id}`);
+            const data = await res.json();
+            if (data.success) {
+                let msg = `Vardiya Özeti (${data.info.kasa_adi} - ${data.info.kasiyer})\n`;
+                msg += `Açılış: ${data.info.acilis_bakiyesi} TL\n\nSistem Kayıtları:\n`;
+                data.summary.forEach(s => {
+                    msg += `- ${s.odeme}: ${s.toplam} TL\n`;
+                });
+                if (data.info.durum === 'kapali') {
+                    msg += `\nKapanış Beyanı:\nNakit: ${data.info.kapanis_nakit} TL\nKart: ${data.info.kapanis_kart} TL`;
+                }
+                alert(msg);
+            }
+        }
+    </script>
+</body>
+
+</html>

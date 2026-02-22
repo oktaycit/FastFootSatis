@@ -1,0 +1,27 @@
+{
+    "yemeksepeti": {
+        "enabled": true,
+        "api_key": "test_key",
+        "store_id": "test_store",
+        "markup": 10
+    },
+    "trendyol": {
+        "enabled": true,
+        "api_key": "test_key",
+        "api_secret": "test_secret",
+        "supplier_id": "test_supplier",
+        "markup": 15
+    },
+    "getir": {
+        "enabled": true,
+        "app_token": "test_token",
+        "restaurant_id": "test_id",
+        "markup": 12
+    },
+    "migros": {
+        "enabled": true,
+        "api_key": "test_key",
+        "store_id": "test_store",
+        "markup": 20
+    }
+}

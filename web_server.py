@@ -20,6 +20,7 @@ import platform
 import uuid
 import serial
 import serial.tools.list_ports
+import urllib.parse
 from collections import defaultdict
 from integrations import IntegrationManager
 from pos_integration import POSManager
@@ -27,6 +28,7 @@ from pos_integration import POSManager
 # Database modülünü yükle
 try:
     from database import db
+    from courier_integration import CourierIntegration
     USE_DATABASE = True
     print("✓ PostgreSQL veri tabanı modülü yüklendi")
 except Exception as e:
@@ -67,6 +69,7 @@ FIS_KLASORU = os.path.join(SCRIPT_DIR, "Fisler")
 COUNTER_FILE = os.path.join(SCRIPT_DIR, "sira_no.txt")
 WAITERS_FILE = os.path.join(SCRIPT_DIR, "waiters.json")
 INTEGRATION_CONFIG = os.path.join(SCRIPT_DIR, "integrations.json")
+SALONS_FILE = os.path.join(SCRIPT_DIR, "salons.json")
 SERVER_PORT = 5555
 
 # Klasörleri oluştur
@@ -106,12 +109,20 @@ class RestaurantServer:
         self.company_name = "RESTORAN"
         self.terminal_id = "1"
         self.admin_password = "1234"
-        self.masa_sayisi = 30
         self.paket_sayisi = 5
         self.direct_print = False
+        self.salons = []
         
         # Entegrasyonlar
         self.integration_manager = IntegrationManager(INTEGRATION_CONFIG)
+        if USE_DATABASE:
+            try:
+                self.courier_manager = CourierIntegration(db)
+            except NameError:
+                self.courier_manager = None
+        else:
+            self.courier_manager = None
+        self.pos_manager = POSManager()
 
         self.cid_port = 101 # Caller ID Port (Signal 7 standardı)
         self.cid_type = 'tcp' # 'tcp' veya 'serial'
@@ -138,9 +149,13 @@ class RestaurantServer:
         
         # Ayarları yükle
         self.load_settings()
+        self.load_salons()
         self.load_waiters()
         self.refresh_adisyonlar()
         self.load_menu_data()
+        
+        # Sid -> Kasa ID haritalaması (Vardiya işlemleri için)
+        self.sid_kasa_map = {} # {sid: kasa_id}
         
         logger.info("🚀 RestaurantServer initialized")
         logger.info(f"📊 Masa: {self.masa_sayisi}, Paket: {self.paket_sayisi}")
@@ -216,6 +231,13 @@ class RestaurantServer:
             logger.error(f"Ayar kaydetme hatası: {e}")
             return False
 
+    def get_sid_active_shift(self, sid):
+        """Socket SID'ine bağlı aktif vardiyayı getir"""
+        if not USE_DATABASE: return None
+        kasa_id = self.sid_kasa_map.get(sid)
+        if not kasa_id: return None
+        return db.get_active_shift_by_kasa(kasa_id)
+
     def load_waiters(self):
         """Garson listesini yükle"""
         if os.path.exists(WAITERS_FILE):
@@ -243,9 +265,6 @@ class RestaurantServer:
         """Mevcut mutfak.py (port 5556) sistemine sipariş gönderir"""
         def task():
             try:
-                # Ayarları yükle (Kitchen IP/Port her seferinde kontrol edilebilir veya tek seferlik yüklenebilir)
-                # Buradaki self.kitchen_ip ve self.kitchen_port varsayılan olarak sipariscari.py'den gelebilir
-                # web_server.py'de henüz bu ayarlar yok, ekleyelim.
                 kitchen_ip = getattr(self, 'kitchen_ip', '127.0.0.1')
                 kitchen_port = getattr(self, 'kitchen_port', 5556)
                 
@@ -256,7 +275,7 @@ class RestaurantServer:
                 payload = {
                     "islem": "yeni_siparis",
                     "masa": masa_adi,
-                    "siparisler": [{"urun": urun_adi, "adet": adet}], # mutfak.py bu formatı bekliyor olabilir
+                    "siparisler": [{"urun": urun_adi, "adet": adet}],
                     "saat": datetime.datetime.now().strftime("%H:%M:%S"),
                     "terminal": self.terminal_id
                 }
@@ -268,16 +287,38 @@ class RestaurantServer:
                 logger.error(f"⚠ Legacy Mutfak ekranına bağlanılamadı: {e}")
                 
         threading.Thread(target=task, daemon=True).start()
-    
+
+    def load_salons(self):
+        """Salon listesini yükle"""
+        if os.path.exists(SALONS_FILE):
+            try:
+                with open(SALONS_FILE, "r", encoding="utf-8") as f:
+                    self.salons = json.load(f)
+                logger.info(f"✓ {len(self.salons)} salon yüklendi")
+            except Exception as e:
+                logger.error(f"Salon yükleme hatası: {e}")
+                self.salons = []
+        else:
+            self.salons = []
+
     def refresh_adisyonlar(self):
         """Masa/paket yapısını yeniden oluştur"""
         self.adisyonlar = {}
-        if self.masa_sayisi > 0:
+        
+        # Salon masaları
+        if self.salons:
+            for salon in self.salons:
+                for table in salon.get('tables', []):
+                    self.adisyonlar[table] = []
+        elif self.masa_sayisi > 0:
             for i in range(1, self.masa_sayisi + 1):
                 self.adisyonlar[f"Masa {i}"] = []
+                
+        # Paketler
         if self.paket_sayisi > 0:
             for i in range(1, self.paket_sayisi + 1):
                 self.adisyonlar[f"Paket {i}"] = []
+        
         if not self.adisyonlar:
             self.adisyonlar["Genel"] = []
         
@@ -310,11 +351,17 @@ class RestaurantServer:
             with open(MENU_FILE, "r", encoding="utf-8") as f:
                 for line in f:
                     parts = line.strip().split(";")
-                    if len(parts) == 3:
+                    if len(parts) >= 3:
                         cat, item, price = parts[0].strip(), parts[1].strip(), parts[2].strip()
+                        # Parse platform percentages if they exist
+                        oran_ys = float(parts[3]) if len(parts) > 3 else 0
+                        oran_ty = float(parts[4]) if len(parts) > 4 else 0
+                        oran_gt = float(parts[5]) if len(parts) > 5 else 0
+                        oran_mg = float(parts[6]) if len(parts) > 6 else 0
+                        
                         if cat not in self.menu_data:
                             self.menu_data[cat] = []
-                        self.menu_data[cat].append([item, float(price)])
+                        self.menu_data[cat].append([item, float(price), oran_ys, oran_ty, oran_gt, oran_mg])
             logger.info(f"✓ Menü dosyadan yüklendi: {len(self.menu_data)} kategori")
         except Exception as e:
             logger.error(f"Menü yükleme hatası: {e}")
@@ -811,6 +858,80 @@ def add_cari_islem():
         logger.error(f"Cari işlem hatası: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+# ==================== KASA VE VARDIYA API ====================
+
+@app.route('/api/kasa/liste')
+def api_kasa_liste():
+    if not USE_DATABASE: return jsonify([])
+    return jsonify(db.get_kasalar())
+
+@app.route('/api/kasa/ekle', methods=['POST'])
+def api_kasa_ekle():
+    if not USE_DATABASE: return jsonify({'success': False, 'error': 'DB yok'})
+    data = request.json
+    ad = data.get('ad')
+    if not ad: return jsonify({'success': False, 'error': 'İsim gerekli'})
+    try:
+        kasa_id = db.add_kasa(ad)
+        return jsonify({'success': True, 'id': kasa_id})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/vardiya/durum')
+def api_vardiya_durum():
+    if not USE_DATABASE: return jsonify(None)
+    kasa_id = request.args.get('kasa_id')
+    if not kasa_id: return jsonify(None)
+    shift = db.get_active_shift_by_kasa(kasa_id)
+    return jsonify(shift)
+
+@app.route('/api/vardiya/ac', methods=['POST'])
+def api_vardiya_ac():
+    if not USE_DATABASE: return jsonify({'success': False, 'error': 'DB yok'})
+    data = request.json
+    kasa_id = data.get('kasa_id')
+    kasiyer = data.get('kasiyer')
+    bakiye = float(data.get('acilis_bakiyesi', 0))
+    if not kasa_id or not kasiyer: return jsonify({'success': False, 'error': 'Eksik bilgi'})
+    try:
+        shift_id = db.open_shift(kasa_id, kasiyer, bakiye)
+        return jsonify({'success': True, 'id': shift_id})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/vardiya/kapat', methods=['POST'])
+def api_vardiya_kapat():
+    if not USE_DATABASE: return jsonify({'success': False, 'error': 'DB yok'})
+    data = request.json
+    shift_id = data.get('shift_id')
+    nakit = float(data.get('nakit', 0))
+    kart = float(data.get('kart', 0))
+    if not shift_id: return jsonify({'success': False, 'error': 'Vardiya ID gerekli'})
+    try:
+        db.close_shift(shift_id, nakit, kart)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/vardiya/ozet/<int:shift_id>')
+def api_vardiya_ozet(shift_id):
+    if not USE_DATABASE: return jsonify({'success': False})
+    try:
+        summary = db.get_shift_totals(shift_id)
+        info = db.get_shift_by_id(shift_id)
+        return jsonify({
+            'success': True,
+            'summary': summary,
+            'info': info
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/vardiya/gecmis')
+def api_vardiya_gecmis():
+    if not USE_DATABASE: return jsonify([])
+    return jsonify(db.get_all_shifts())
+
 @app.route('/api/cari/hesap', methods=['POST'])
 def add_cari_hesap():
     """Yeni cari hesap oluştur"""
@@ -940,6 +1061,73 @@ def waiter_login_api():
         return jsonify({'success': True})
     return jsonify({'success': False, 'error': 'Hatalı PIN!'}), 401
 
+# ==================== KURYE YÖNETİMİ API ====================
+
+@app.route('/api/couriers', methods=['GET'])
+def get_couriers_api():
+    if not USE_DATABASE: return jsonify([])
+    return jsonify(db.get_all_kuryeler())
+
+@app.route('/api/couriers', methods=['POST'])
+def add_courier_api():
+    if not USE_DATABASE: return jsonify({'success': False, 'error': 'DB yok'})
+    data = request.json
+    try:
+        courier_id = db.add_kurye(
+            ad=data.get('ad'),
+            telefon=data.get('telefon'),
+            plaka=data.get('plaka'),
+            firma_id=data.get('firma_id')
+        )
+        return jsonify({'success': True, 'id': courier_id})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/couriers/<int:courier_id>', methods=['PUT'])
+def update_courier_api(courier_id):
+    if not USE_DATABASE: return jsonify({'success': False, 'error': 'DB yok'})
+    data = request.json
+    try:
+        db.update_kurye(
+            courier_id,
+            ad=data.get('ad'),
+            telefon=data.get('telefon'),
+            plaka=data.get('plaka'),
+            firma_id=data.get('firma_id'),
+            aktif=data.get('aktif')
+        )
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/couriers/<int:courier_id>', methods=['DELETE'])
+def delete_courier_api(courier_id):
+    if not USE_DATABASE: return jsonify({'success': False, 'error': 'DB yok'})
+    try:
+        db.delete_kurye(courier_id)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/courier-firms', methods=['GET'])
+def get_courier_firms_api():
+    if not USE_DATABASE: return jsonify([])
+    return jsonify(db.get_kurye_firmalari())
+
+@app.route('/api/courier-firms', methods=['POST'])
+def add_courier_firm_api():
+    if not USE_DATABASE: return jsonify({'success': False, 'error': 'DB yok'})
+    data = request.json
+    try:
+        firm_id = db.add_kurye_firmasi(
+            ad=data.get('ad'),
+            api_key=data.get('api_key'),
+            ayarlar=data.get('ayarlar')
+        )
+        return jsonify({'success': True, 'id': firm_id})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
 # ==================== ENTEGRASYONLAR API ====================
 
 @app.route('/api/integration/settings', methods=['GET'])
@@ -961,7 +1149,7 @@ def integration_webhook(platform):
     data = request.get_json()
     logger.info(f"📥 {platform.upper()} Webhook: {data}")
     
-    order = server.integration_manager.process_webhook(platform, data)
+    order = server.integration_manager.process_webhook(platform, data, server.menu_data)
     if not order:
         return jsonify({'success': False, 'error': 'Sipariş işlenemedi'}), 400
         
@@ -1034,7 +1222,15 @@ def save_menu_api():
         with open(MENU_FILE, "w", encoding="utf-8") as f:
             for cat, items in new_menu.items():
                 for item in items:
-                    f.write(f"{cat};{item[0]};{item[1]}\n")
+                    # item structure: [name, price, ys, ty, gt, mg]
+                    name = item[0]
+                    price = item[1]
+                    # Default percentages to 0 if not provided
+                    ys = item[2] if len(item) > 2 else 0
+                    ty = item[3] if len(item) > 3 else 0
+                    gt = item[4] if len(item) > 4 else 0
+                    mg = item[5] if len(item) > 5 else 0
+                    f.write(f"{cat};{name};{price};{ys};{ty};{gt};{mg}\n")
         
         # 2. Veri tabanını güncelle (eğer kullanılıyorsa)
         if USE_DATABASE:
@@ -1102,8 +1298,10 @@ def handle_connect():
             'terminal_id': server.terminal_id,
             'ip': get_local_ip(),
             'masa_sayisi': server.masa_sayisi,
-            'paket_sayisi': server.paket_sayisi
-        }
+            'paket_sayisi': server.paket_sayisi,
+            'salons': server.salons
+        },
+        'active_shift': server.get_sid_active_shift(sid)
     })
 
 @socketio.on('disconnect')
@@ -1128,6 +1326,17 @@ def handle_waiter_init(data):
     if waiter_name:
         server.waiter_sessions[waiter_name].add(sid)
         logger.info(f"🤵 Garson oturumu kaydedildi: {waiter_name} ({sid})")
+
+@socketio.on('set_kasa')
+def handle_set_kasa(data):
+    """Kasa ID'sini bu session için ata"""
+    sid = request.sid
+    kasa_id = data.get('kasa_id')
+    if kasa_id:
+        server.sid_kasa_map[sid] = kasa_id
+        logger.info(f"📟 Kasa atandı: {kasa_id} ({sid})")
+        # Aktif vardiya bilgisini geri gönder
+        emit('vardiya_update', server.get_sid_active_shift(sid))
 
 @socketio.on('select_masa')
 def handle_select_masa(data):
@@ -1267,6 +1476,123 @@ def handle_cancel_item(data):
                 'total': total
             })
 
+@socketio.on('transfer_table')
+def handle_transfer_table(data):
+    """Bir masadaki siparişleri başka bir masaya taşı"""
+    source_masa = data.get('source_masa')
+    target_masa = data.get('target_masa')
+    
+    if not source_masa or not target_masa:
+        emit('error', {'message': 'Kaynak ve hedef masa bilgisi eksik'})
+        return
+        
+    if source_masa == target_masa:
+        emit('error', {'message': 'Kaynak ve hedef masa aynı olamaz'})
+        return
+        
+    if source_masa not in server.adisyonlar or target_masa not in server.adisyonlar:
+        emit('error', {'message': 'Geçersiz masa adı'})
+        return
+        
+    items_to_move = server.adisyonlar[source_masa]
+    if not items_to_move:
+        emit('error', {'message': 'Kaynak masada sipariş bulunmuyor'})
+        return
+        
+    # Taşıma işlemi
+    server.adisyonlar[target_masa].extend(items_to_move)
+    server.adisyonlar[source_masa] = []
+    
+    logger.info(f"🔄 Masa taşıma: {source_masa} ➔ {target_masa} ({len(items_to_move)} ürün)")
+    
+    # Her iki masa için de güncellemeleri tüm clientlara bildir
+    for masa_adi in [source_masa, target_masa]:
+        items = server.adisyonlar[masa_adi]
+        total = sum(item['adet'] * item['fiyat'] for item in items)
+        socketio.emit('masa_update', {
+            'masa': masa_adi,
+            'items': items,
+            'total': total,
+            'source': 'transfer'
+        })
+    
+    emit('success', {'message': f'{source_masa} masası {target_masa} masasına başarıyla taşındı'})
+
+@socketio.on('assign_courier')
+def handle_assign_courier(data):
+    """Siparişe kurye ata"""
+    masa_adi = data.get('masa')
+    kurye_id = data.get('kurye_id')
+    kurye_ad = data.get('kurye_ad')
+    
+    if not masa_adi or not kurye_id:
+        emit('error', {'message': 'Eksik bilgi'})
+        return
+        
+    if masa_adi not in server.adisyonlar:
+        emit('error', {'message': 'Masa bulunamadı'})
+        return
+        
+    # Adisyona kurye bilgisini ekle
+    # Not: server.adisyonlar bir liste değil, bi sözlük. Değerleri liste.
+    # Kurye bilgisini adisyon seviyesinde tutmak için bi metadata alanı yok current yapıda.
+    # Şimdilik adisyon listesine bi 'kurye' entry'si ekleyelim ya da masa bazlı tutalım.
+    # En iyisi her sipariş kalemine kurye_id eklemek or masa bazlı bi meta store.
+    
+    # Masa bazlı kurye atamasını socketio ile duyur
+    socketio.emit('courier_assigned', {
+        'masa': masa_adi,
+        'kurye_id': kurye_id,
+        'kurye_ad': kurye_ad
+    })
+    
+    logger.info(f"🛵 Kurye atandı: {masa_adi} -> {kurye_ad}")
+
+@socketio.on('send_courier_info')
+def handle_send_courier_info(data):
+    """Kuryeye sipariş bilgilerini gönder (WhatsApp linki vb.)"""
+    masa_adi = data.get('masa')
+    kurye_tel = data.get('kurye_tel')
+    
+    if not masa_adi or not kurye_tel:
+        emit('error', {'message': 'Eksik bilgi'})
+        return
+        
+    adisyon = {
+        'masa': masa_adi,
+        'items': server.adisyonlar.get(masa_adi, []),
+        'total': sum(i['adet'] * i['fiyat'] for i in server.adisyonlar.get(masa_adi, []))
+    }
+    
+    # Müşteri bilgisini bul (Paket adından telefon çekmeye çalışalım)
+    # Örn: "0532..." gibi bi isim varsa
+    customer_info = {
+        'cari_isim': masa_adi,
+        'telefon': '',
+        'adres': ''
+    }
+    
+    if USE_DATABASE:
+        # Eğer masa adı bi telefon ise cari'den bul
+        import re
+        phone_match = re.search(r'(\d{10,11})', masa_adi)
+        if phone_match:
+            customer = db.get_cari_by_phone(phone_match.group(1))
+            if customer:
+                customer_info = customer
+        else:
+            # Cari ismi olarak ara
+            # Cari adı genellikle Paket X olur ama Caller ID ile müşteri adı atanmış olabilir
+            pass
+
+    message, maps_link = server.courier_manager.generate_courier_message(adisyon, customer_info)
+    
+    emit('courier_message_ready', {
+        'message': message,
+        'maps_link': maps_link,
+        'whatsapp_url': f"https://wa.me/{kurye_tel}?text={urllib.parse.quote(message)}"
+    })
+
 @socketio.on('remove_item')
 def handle_remove_item(data):
     """Sipariş kaldır"""
@@ -1329,6 +1655,10 @@ def handle_payment(data):
         total_amount = sum(item['adet'] * item['fiyat'] for item in items)
         payments = [{'type': payment_type, 'amount': total_amount}]
     
+    # Aktif vardiya bilgisini al
+    active_shift = server.get_sid_active_shift(sid)
+    vardiya_id = active_shift['id'] if active_shift else None
+    
     # Database'e kaydet
     try:
         timestamp = datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
@@ -1366,7 +1696,8 @@ def handle_payment(data):
                 'tip': item.get('tip', 'normal'),
                 'Tarih_Saat': timestamp,
                 'masa': masa_adi,
-                'terminal_id': server.terminal_id
+                'terminal_id': server.terminal_id,
+                'vardiya_id': vardiya_id
             })
         
         if USE_DATABASE:
@@ -1409,6 +1740,29 @@ def handle_payment(data):
             msg = f"Parçalı ödeme alındı: {details}"
             
         emit('success', {'message': msg})
+        
+        # --- MUHASEBE ENTEGRASYONU ---
+        try:
+            order_data = {
+                'masa': masa_adi,
+                'customer': payments[0].get('customer', 'Genel Müşteri'),
+                'items': [{
+                    'urun': i['urun'],
+                    'adet': i['adet'],
+                    'fiyat': i['fiyat']
+                } for i in items],
+                'total': sum(i['adet'] * i['fiyat'] for i in items),
+                'payment_type': final_payment_label,
+                'timestamp': timestamp
+            }
+            # Arka planda gönder (Arayüzü bekletme)
+            threading.Thread(
+                target=server.integration_manager.send_to_accounting,
+                args=(order_data,),
+                daemon=True
+            ).start()
+        except Exception as ae:
+            logger.error(f"Muhasebe gönderim hazırlık hatası: {ae}")
         
     except Exception as e:
         logger.error(f"Ödeme hatası: {e}")

@@ -15,6 +15,7 @@
             <h1 class="company-name" id="companyName">RESTORAN</h1>
             <div class="header-info">
                 <span class="status-indicator" id="connectionStatus">●</span>
+                <span id="vardiyaStatus" style="margin-right: 10px;"></span>
                 <span id="terminalId">Terminal 1</span>
                 <span class="ip-address" id="ipAddress">IP: ---</span>
             </div>
@@ -90,6 +91,11 @@
                     🖨️ FİŞ YAZDIR
                 </button>
 
+                <!-- Transfer Table Button -->
+                <button class="btn" id="btnTransfer" style="background: #e67e22; color: white;">
+                    🔄 MASA TAŞI
+                </button>
+
                 <!-- Bill Split Buttons -->
                 <div id="splitButtonsArea" style="display: none; margin-bottom: 8px;">
                     <button class="btn" id="btnPaySelected"
@@ -109,6 +115,13 @@
                     <a href="/cari" style="text-decoration:none;">
                         <button class="btn btn-secondary" id="btnCari">💰 CARİ</button>
                     </a>
+                    <a href="/kasa_yonetimi.html" style="text-decoration:none;">
+                        <button class="btn" style="background: #34495e; color: white;"><i
+                                class="fas fa-cash-register"></i> KASA / VARDİYA</button>
+                    </a>
+                    <a href="/kurye_yonetimi.html" style="text-decoration:none;">
+                        <button class="btn" style="background: #27ae60; color: white;">🛵 KURYE YÖNETİMİ</button>
+                    </a>
                     <a href="/settings" style="text-decoration:none;">
                         <button class="btn btn-secondary" id="btnSettings">⚙️ AYARLAR</button>
                     </a>
@@ -125,6 +138,27 @@
                     <a href="/waiters_manage" style="text-decoration:none;">
                         <button class="btn" style="background: #8e44ad; color: white;">👥 GARSON YÖNETİMİ</button>
                     </a>
+                </div>
+            </div>
+
+            <!-- Courier Assignment (Dynamic) -->
+            <div id="courierAssignmentArea"
+                style="display: none; padding: 15px; background: #2c3e50; margin-top: 10px; border-radius: 8px;">
+                <h4 style="margin: 0 0 10px 0; color: #f1c40f;">🛵 Kurye Atama</h4>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <select id="courierSelect"
+                        style="flex-grow: 1; padding: 8px; border-radius: 4px; border: none; background: #1a252f; color: white;">
+                        <option value="">Kurye Seçiniz...</option>
+                    </select>
+                    <button class="btn" id="btnAssignCourier"
+                        style="width: auto; background: #2ecc71; color: white; padding: 8px 15px;">ATA</button>
+                </div>
+                <div id="assignedCourierInfo"
+                    style="margin-top: 10px; display: none; background: #34495e; padding: 10px; border-radius: 4px;">
+                    <span id="assignedCourierName" style="font-weight: bold;"></span>
+                    <button class="btn-cid-action" id="btnSendCourierInfo"
+                        style="margin-top: 5px; font-size: 12px; background: #3498db;">Kuryeye Bilgi Gönder
+                        (WhatsApp)</button>
                 </div>
             </div>
 
@@ -244,6 +278,25 @@
             </div>
             <div class="oo-footer">
                 Sipariş mutfak ekranına gönderildi.
+            </div>
+        </div>
+
+        <!-- Transfer Table Modal -->
+        <div id="transferModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>🔄 MASA TAŞIMA</h2>
+                    <span class="close-modal" id="closeTransferModal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <p style="margin-bottom: 20px; font-weight: 600;">Hedef masayı seçiniz:</p>
+                    <div id="transferTargetGrid" class="tables-grid">
+                        <!-- Target table buttons will be loaded here -->
+                    </div>
+                    <div class="modal-actions" style="margin-top: 20px;">
+                        <button class="btn btn-vazgec" id="btnCancelTransfer">VAZGEÇ</button>
+                    </div>
+                </div>
             </div>
         </div>
 

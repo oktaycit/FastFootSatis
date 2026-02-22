@@ -125,28 +125,91 @@ class Database:
                     kategori TEXT NOT NULL,
                     urun_adi TEXT NOT NULL,
                     fiyat DECIMAL(10, 2) NOT NULL,
-                    sira INTEGER DEFAULT 0
+                    sira INTEGER DEFAULT 0,
+                    oran_ys DECIMAL(5, 2) DEFAULT 0,
+                    oran_ty DECIMAL(5, 2) DEFAULT 0,
+                    oran_gt DECIMAL(5, 2) DEFAULT 0,
+                    oran_mg DECIMAL(5, 2) DEFAULT 0
                 )
             """)
+            
+            # Migrations for existing menu table
+            cursor.execute("ALTER TABLE menu ADD COLUMN IF NOT EXISTS oran_ys DECIMAL(5, 2) DEFAULT 0")
+            cursor.execute("ALTER TABLE menu ADD COLUMN IF NOT EXISTS oran_ty DECIMAL(5, 2) DEFAULT 0")
+            cursor.execute("ALTER TABLE menu ADD COLUMN IF NOT EXISTS oran_gt DECIMAL(5, 2) DEFAULT 0")
+            cursor.execute("ALTER TABLE menu ADD COLUMN IF NOT EXISTS oran_mg DECIMAL(5, 2) DEFAULT 0")
+            
+            # KASALAR TABLOSU
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS kasalar (
+                    id SERIAL PRIMARY KEY,
+                    ad TEXT NOT NULL UNIQUE
+                )
+            """)
+            
+            # VARDIYALAR TABLOSU
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS vardiyalar (
+                    id SERIAL PRIMARY KEY,
+                    kasa_id INTEGER NOT NULL,
+                    kasiyer TEXT NOT NULL,
+                    acilis_zamani TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    kapanis_zamani TIMESTAMP,
+                    acilis_bakiyesi DECIMAL(10, 2) NOT NULL DEFAULT 0,
+                    kapanis_nakit DECIMAL(10, 2),
+                    kapanis_kart DECIMAL(10, 2),
+                    durum TEXT NOT NULL DEFAULT 'acik',
+                    FOREIGN KEY (kasa_id) REFERENCES kasalar(id) ON DELETE CASCADE
+                )
+            """)
+
+            # KURYELER TABLOSU
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS kuryeler (
+                    id SERIAL PRIMARY KEY,
+                    ad TEXT NOT NULL,
+                    telefon TEXT,
+                    plaka TEXT,
+                    aktif BOOLEAN DEFAULT TRUE,
+                    firma_id INTEGER
+                )
+            """)
+
+            # KURYE FIRMALARI TABLOSU
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS kurye_firmalari (
+                    id SERIAL PRIMARY KEY,
+                    ad TEXT NOT NULL UNIQUE,
+                    api_key TEXT,
+                    ayarlar JSONB DEFAULT '{}'
+                )
+            """)
+
+            # SATIŞLAR TABLOSUNA VARDIYA_ID VE KURYE_ID EKLE
+            cursor.execute("ALTER TABLE satislar ADD COLUMN IF NOT EXISTS vardiya_id INTEGER")
+            cursor.execute("ALTER TABLE satislar ADD COLUMN IF NOT EXISTS kurye_id INTEGER")
             
             # İNDEXLER
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_satislar_tarih ON satislar(tarih_saat)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_satislar_tip ON satislar(tip)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_satislar_vardiya ON satislar(vardiya_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_satislar_kurye ON satislar(kurye_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_cari_hareketler_cari ON cari_hareketler(cari_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_menu_kategori ON menu(kategori)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_vardiyalar_durum ON vardiyalar(durum)")
             
             print("✓ Veri tabanı şeması oluşturuldu")
     
     # ==================== SATIŞ İŞLEMLERİ ====================
     
-    def save_sale(self, urun, adet, fiyat, odeme, tip='normal', masa=None, terminal_id=None):
+    def save_sale(self, urun, adet, fiyat, odeme, tip='normal', masa=None, terminal_id=None, vardiya_id=None):
         """Satış kaydı ekle"""
         with self.get_cursor() as cursor:
             cursor.execute("""
-                INSERT INTO satislar (urun, adet, fiyat, odeme, tip, masa, terminal_id)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO satislar (urun, adet, fiyat, odeme, tip, masa, terminal_id, vardiya_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
-            """, (urun, adet, fiyat, odeme, tip, masa, terminal_id))
+            """, (urun, adet, fiyat, odeme, tip, masa, terminal_id, vardiya_id))
             return cursor.fetchone()['id']
     
     def save_sales_batch(self, sales_list):
@@ -154,8 +217,8 @@ class Database:
         with self.get_cursor() as cursor:
             for sale in sales_list:
                 cursor.execute("""
-                    INSERT INTO satislar (urun, adet, fiyat, odeme, tip, tarih_saat, masa, terminal_id)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO satislar (urun, adet, fiyat, odeme, tip, tarih_saat, masa, terminal_id, vardiya_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     sale.get('urun'),
                     sale.get('adet', 1),
@@ -164,7 +227,8 @@ class Database:
                     sale.get('tip', 'normal'),
                     sale.get('Tarih_Saat', datetime.now()),
                     sale.get('masa'),
-                    sale.get('terminal_id')
+                    sale.get('terminal_id'),
+                    sale.get('vardiya_id')
                 ))
     
     def get_sales_by_date(self, tarih=None):
@@ -377,12 +441,18 @@ class Database:
             with open(menu_file, "r", encoding="utf-8") as f:
                 for line in f:
                     parts = line.strip().split(";")
-                    if len(parts) == 3:
-                        kategori, urun_adi, fiyat = parts
+                    if len(parts) >= 3:
+                        kategori, urun_adi, fiyat = parts[:3]
+                        # Parse platform percentages if they exist
+                        oran_ys = float(parts[3]) if len(parts) > 3 else 0
+                        oran_ty = float(parts[4]) if len(parts) > 4 else 0
+                        oran_gt = float(parts[5]) if len(parts) > 5 else 0
+                        oran_mg = float(parts[6]) if len(parts) > 6 else 0
+
                         cursor.execute("""
-                            INSERT INTO menu (kategori, urun_adi, fiyat, sira)
-                            VALUES (%s, %s, %s, %s)
-                        """, (kategori.strip(), urun_adi.strip(), float(fiyat.strip()), sira))
+                            INSERT INTO menu (kategori, urun_adi, fiyat, sira, oran_ys, oran_ty, oran_gt, oran_mg)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        """, (kategori.strip(), urun_adi.strip(), float(fiyat.strip()), sira, oran_ys, oran_ty, oran_gt, oran_mg))
                         sira += 1
             
             print(f"✓ {sira} ürün menu.txt'den yüklendi")
@@ -390,7 +460,7 @@ class Database:
     def get_menu_by_category(self):
         """Kategoriye göre menüyü getir (dictionary)"""
         with self.get_cursor() as cursor:
-            cursor.execute("SELECT kategori, urun_adi, fiyat FROM menu ORDER BY sira")
+            cursor.execute("SELECT kategori, urun_adi, fiyat, oran_ys, oran_ty, oran_gt, oran_mg FROM menu ORDER BY sira")
             rows = cursor.fetchall()
             
             menu_dict = {}
@@ -398,20 +468,189 @@ class Database:
                 kategori = row['kategori']
                 if kategori not in menu_dict:
                     menu_dict[kategori] = []
-                menu_dict[kategori].append([row['urun_adi'], float(row['fiyat'])])
+                menu_dict[kategori].append([
+                    row['urun_adi'], 
+                    float(row['fiyat']),
+                    float(row.get('oran_ys', 0)),
+                    float(row.get('oran_ty', 0)),
+                    float(row.get('oran_gt', 0)),
+                    float(row.get('oran_mg', 0))
+                ])
             
             return menu_dict
     
     def save_menu_to_file(self, menu_file="menu.txt"):
         """Menüyü menu.txt dosyasına kaydet"""
         with self.get_cursor() as cursor:
-            cursor.execute("SELECT kategori, urun_adi, fiyat FROM menu ORDER BY sira")
+            cursor.execute("SELECT kategori, urun_adi, fiyat, oran_ys, oran_ty, oran_gt, oran_mg FROM menu ORDER BY sira")
             rows = cursor.fetchall()
             
             with open(menu_file, "w", encoding="utf-8") as f:
                 for row in rows:
-                    f.write(f"{row['kategori']};{row['urun_adi']};{row['fiyat']}\n")
+                    line = f"{row['kategori']};{row['urun_adi']};{row['fiyat']};{row['oran_ys']};{row['oran_ty']};{row['oran_gt']};{row['oran_mg']}\n"
+                    f.write(line)
+
+    # ==================== KASA VE VARDIYA İŞLEMLERİ ====================
+
+    def get_kasalar(self):
+        """Tüm kasaları getir"""
+        with self.get_cursor() as cursor:
+            cursor.execute("SELECT * FROM kasalar ORDER BY ad")
+            return cursor.fetchall()
+
+    def add_kasa(self, ad):
+        """Yeni kasa ekle"""
+        with self.get_cursor() as cursor:
+            cursor.execute("INSERT INTO kasalar (ad) VALUES (%s) RETURNING id", (ad,))
+            return cursor.fetchone()['id']
+
+    def delete_kasa(self, kasa_id):
+        """Kasayı sil"""
+        with self.get_cursor() as cursor:
+            cursor.execute("DELETE FROM kasalar WHERE id = %s", (kasa_id,))
+
+    def get_active_shift_by_kasa(self, kasa_id):
+        """Bir kasanın aktif vardiyasını getir"""
+        with self.get_cursor() as cursor:
+            cursor.execute("SELECT * FROM vardiyalar WHERE kasa_id = %s AND durum = 'acik'", (kasa_id,))
+            return cursor.fetchone()
+
+    def open_shift(self, kasa_id, kasiyer, acilis_bakiyesi):
+        """Vardiya aç"""
+        # Önce aktif vardiya var mı kontrol et
+        active = self.get_active_shift_by_kasa(kasa_id)
+        if active:
+            raise Exception("Bu kasa için zaten açık bir vardiya var")
+        
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO vardiyalar (kasa_id, kasiyer, acilis_bakiyesi, durum)
+                VALUES (%s, %s, %s, 'acik')
+                RETURNING id
+            """, (kasa_id, kasiyer, acilis_bakiyesi))
+            return cursor.fetchone()['id']
+
+    def close_shift(self, shift_id, kapanis_nakit, kapanis_kart):
+        """Vardiya kapat"""
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                UPDATE vardiyalar
+                SET kapanis_zamani = CURRENT_TIMESTAMP,
+                    kapanis_nakit = %s,
+                    kapanis_kart = %s,
+                    durum = 'kapali'
+                WHERE id = %s
+            """, (kapanis_nakit, kapanis_kart, shift_id))
+
+    def get_shift_totals(self, shift_id):
+        """Vardiya toplamlarını hesapla"""
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                SELECT 
+                    odeme,
+                    SUM(fiyat * adet) as toplam
+                FROM satislar
+                WHERE vardiya_id = %s
+                GROUP BY odeme
+            """, (shift_id,))
+            return cursor.fetchall()
     
+    def get_shift_by_id(self, shift_id):
+        """ID'ye göre vardiya bilgilerini getir"""
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                SELECT v.*, k.ad as kasa_adi 
+                FROM vardiyalar v 
+                JOIN kasalar k ON v.kasa_id = k.id 
+                WHERE v.id = %s
+            """, (shift_id,))
+            return cursor.fetchone()
+
+    def get_all_shifts(self, limit=50):
+        """Tüm vardiyaları getir"""
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                SELECT v.*, k.ad as kasa_adi 
+                FROM vardiyalar v 
+                JOIN kasalar k ON v.kasa_id = k.id 
+                ORDER BY acilis_zamani DESC 
+                LIMIT %s
+            """, (limit,))
+            return cursor.fetchall()
+    
+    # ==================== KURYE İŞLEMLERİ ====================
+
+    def get_all_kuryeler(self):
+        """Tüm kuryeleri getir"""
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                SELECT k.*, f.ad as firma_adi 
+                FROM kuryeler k 
+                LEFT JOIN kurye_firmalari f ON k.firma_id = f.id
+                ORDER BY k.ad
+            """)
+            return cursor.fetchall()
+
+    def add_kurye(self, ad, telefon=None, plaka=None, firma_id=None):
+        """Yeni kurye ekle"""
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO kuryeler (ad, telefon, plaka, firma_id)
+                VALUES (%s, %s, %s, %s) RETURNING id
+            """, (ad, telefon, plaka, firma_id))
+            return cursor.fetchone()['id']
+
+    def update_kurye(self, kurye_id, ad=None, telefon=None, plaka=None, firma_id=None, aktif=None):
+        """Kurye bilgilerini güncelle"""
+        with self.get_cursor() as cursor:
+            updates = []
+            params = []
+            if ad is not None:
+                updates.append("ad = %s")
+                params.append(ad)
+            if telefon is not None:
+                updates.append("telefon = %s")
+                params.append(telefon)
+            if plaka is not None:
+                updates.append("plaka = %s")
+                params.append(plaka)
+            if firma_id is not None:
+                updates.append("firma_id = %s")
+                params.append(firma_id)
+            if aktif is not None:
+                updates.append("aktif = %s")
+                params.append(aktif)
+            
+            if not updates: return False
+            
+            params.append(kurye_id)
+            cursor.execute(f"UPDATE kuryeler SET {', '.join(updates)} WHERE id = %s", tuple(params))
+            return True
+
+    def delete_kurye(self, kurye_id):
+        """Kuryeyi sil"""
+        with self.get_cursor() as cursor:
+            cursor.execute("DELETE FROM kuryeler WHERE id = %s", (kurye_id,))
+            return True
+
+    def get_kurye_firmalari(self):
+        """Tüm kurye firmalarını getir"""
+        with self.get_cursor() as cursor:
+            cursor.execute("SELECT * FROM kurye_firmalari ORDER BY ad")
+            return cursor.fetchall()
+
+    def add_kurye_firmasi(self, ad, api_key=None, ayarlar=None):
+        """Yeni kurye firması ekle"""
+        with self.get_cursor() as cursor:
+            import json
+            cursor.execute("""
+                INSERT INTO kurye_firmalari (ad, api_key, ayarlar)
+                VALUES (%s, %s, %s) RETURNING id
+            """, (ad, api_key, json.dumps(ayarlar or {})))
+            return cursor.fetchone()['id']
+
+    # ==================== GENEL ====================
+
     def close_pool(self):
         """Bağlantı havuzunu kapat"""
         if self._pool:

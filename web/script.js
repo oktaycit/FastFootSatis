@@ -13,6 +13,7 @@ let currentItems = [];
 let currentTotal = 0;
 let selectedItemIndices = [];
 let isSelectivePayment = false;
+let activeShift = null;
 
 // DOM Elements
 const elements = {
@@ -68,7 +69,22 @@ const elements = {
     cidAddress: null,
     cidHistoryList: null,
     cidBalance: null,
-    btnCidCreateOrder: null
+    btnCidCreateOrder: null,
+
+    // Transfer Modal
+    transferModal: null,
+    closeTransferModal: null,
+    transferTargetGrid: null,
+    btnCancelTransfer: null,
+    btnTransfer: null,
+
+    // Courier Assignment
+    courierAssignmentArea: null,
+    courierSelect: null,
+    btnAssignCourier: null,
+    assignedCourierInfo: null,
+    assignedCourierName: null,
+    btnSendCourierInfo: null
 };
 
 /**
@@ -118,11 +134,15 @@ function connectToServer() {
     socket.on('success', onSuccess);
     socket.on('error', onError);
     socket.on('new_online_order', onNewOnlineOrder);
+    socket.on('vardiya_update', onVardiyaUpdate);
 
     // New: Order ready notification
     socket.on('order_ready', (data) => {
         showOrderReadyNotification(data);
     });
+
+    socket.on('courier_assigned', onCourierAssigned);
+    socket.on('courier_message_ready', onCourierMessageReady);
 
     console.log('🔌 Connecting to server...');
 }
@@ -149,12 +169,15 @@ function showOrderReadyNotification(data) {
     }
 }
 
-/**
- * Socket event handlers
- */
 function onConnect() {
     console.log('✅ Connected to server');
     updateConnectionStatus(true);
+
+    // Kasa ID'sini bildir
+    const kasaId = localStorage.getItem('kasa_id');
+    if (kasaId) {
+        socket.emit('set_kasa', { kasa_id: parseInt(kasaId) });
+    }
 }
 
 function onDisconnect() {
@@ -253,6 +276,7 @@ function onMasaSelected(data) {
     currentTotal = data.total || 0;
 
     updateOrderDisplay();
+    updateCourierArea();
 }
 
 function onMasaUpdate(data) {
@@ -337,6 +361,28 @@ function onSuccess(data) {
     showNotification(data.message, 'success');
 }
 
+function onVardiyaUpdate(data) {
+    console.log('⏳ Vardiya update:', data);
+    activeShift = data;
+    updateVardiyaUI();
+}
+
+function updateVardiyaUI() {
+    const statusEl = document.getElementById('vardiyaStatus');
+    if (!statusEl) return;
+
+    if (activeShift) {
+        statusEl.innerHTML = `<span style="color:#2ecc71"><i class="fas fa-clock"></i> ${activeShift.kasiyer} (Açık)</span>`;
+    } else {
+        const isTerminal = localStorage.getItem('terminal_role') === 'terminal';
+        if (isTerminal) {
+            statusEl.innerHTML = ``;
+        } else {
+            statusEl.innerHTML = `<span style="color:#e74c3c"><i class="fas fa-exclamation-triangle"></i> VARDİYA KAPALI</span>`;
+        }
+    }
+}
+
 /**
  * Update UI functions
  */
@@ -363,9 +409,7 @@ function updateSystemInfo() {
         elements.footerIp.textContent = `📡 IP: ${systemInfo.ip}`;
     }
 
-    if (elements.footerTerminal && systemInfo.terminal_id) {
-        elements.footerTerminal.textContent = `🆔 Terminal ${systemInfo.terminal_id}`;
-    }
+    updateVardiyaUI();
 }
 
 function renderMenu() {
@@ -419,8 +463,36 @@ function renderTables() {
         }
     }
 
-    // Masa section
-    if (systemInfo.masa_sayisi > 0) {
+    // Salon section (Grouped or Flat)
+    if (systemInfo.salons && systemInfo.salons.length > 0) {
+        elements.masaSection.style.display = 'block';
+        elements.masaGrid.innerHTML = '';
+
+        // Remove individual table section if using salons
+        elements.masaSection.innerHTML = '';
+
+        systemInfo.salons.forEach(salon => {
+            const salonDiv = document.createElement('div');
+            salonDiv.className = 'tables-section';
+            salonDiv.style.padding = '10px 0';
+
+            const title = document.createElement('h3');
+            title.className = 'section-title';
+            title.textContent = `🪑 ${salon.name}`;
+            salonDiv.appendChild(title);
+
+            const grid = document.createElement('div');
+            grid.className = 'tables-grid';
+
+            salon.tables.forEach(table => {
+                const btn = createTableButton(table, false);
+                grid.appendChild(btn);
+            });
+
+            salonDiv.appendChild(grid);
+            elements.masaSection.appendChild(salonDiv);
+        });
+    } else if (systemInfo.masa_sayisi > 0) {
         elements.masaSection.style.display = 'block';
         elements.masaGrid.innerHTML = '';
 
@@ -575,6 +647,73 @@ function removeItemFromOrder(index) {
     socket.emit('remove_item', { index: index });
 }
 
+/**
+ * Table Transfer logic
+ */
+function openTransferModal() {
+    if (!currentMasa || currentItems.length === 0) {
+        showNotification('Taşınacak aktif bir sipariş bulunmuyor!', 'warning');
+        return;
+    }
+
+    elements.transferTargetGrid.innerHTML = '';
+
+    // Render all available tables in the modal
+    // Salons
+    if (systemInfo.salons && systemInfo.salons.length > 0) {
+        systemInfo.salons.forEach(salon => {
+            const groupHeader = document.createElement('div');
+            groupHeader.style.gridColumn = '1 / -1';
+            groupHeader.style.padding = '10px';
+            groupHeader.style.fontWeight = 'bold';
+            groupHeader.style.borderBottom = '1px solid #eee';
+            groupHeader.textContent = salon.name;
+            elements.transferTargetGrid.appendChild(groupHeader);
+
+            salon.tables.forEach(table => {
+                if (table === currentMasa) return; // Skip current
+                const btn = document.createElement('button');
+                btn.className = 'table-btn';
+                btn.style.minHeight = '60px';
+                btn.textContent = table;
+                btn.onclick = () => confirmTransfer(table);
+                elements.transferTargetGrid.appendChild(btn);
+            });
+        });
+    } else {
+        // Flat tables
+        for (let i = 1; i <= systemInfo.masa_sayisi; i++) {
+            const table = `Masa ${i}`;
+            if (table === currentMasa) continue;
+            const btn = document.createElement('button');
+            btn.className = 'table-btn';
+            btn.style.minHeight = '60px';
+            btn.textContent = table;
+            btn.onclick = () => confirmTransfer(table);
+            elements.transferTargetGrid.appendChild(btn);
+        }
+    }
+
+    elements.transferModal.style.display = 'block';
+}
+
+function confirmTransfer(targetMasa) {
+    if (!confirm(`${currentMasa} masasını ${targetMasa} masasına taşımak istediğinize emin misiniz?`)) {
+        return;
+    }
+
+    socket.emit('transfer_table', {
+        source_masa: currentMasa,
+        target_masa: targetMasa
+    });
+
+    closeTransferModal();
+}
+
+function closeTransferModal() {
+    elements.transferModal.style.display = 'none';
+}
+
 function cancelItem(uid, event) {
     if (event) event.stopPropagation();
 
@@ -587,6 +726,22 @@ function cancelItem(uid, event) {
             uid: uid
         });
     }
+}
+
+/**
+ * Split Payment Modal Functions
+ */
+function checkVardiya() {
+    const isTerminal = localStorage.getItem('terminal_role') === 'terminal';
+    if (isTerminal) return true; // Terminal restricts checkout via UI anyway
+
+    if (!activeShift) {
+        if (confirm("Kasa açık değil! Vardiya başlatmak için Kasa Yönetimi sayfasına gitmek ister misiniz?")) {
+            window.location.href = 'kasa_yonetimi.html';
+        }
+        return false;
+    }
+    return true;
 }
 
 function toggleItemSelection(index) {
@@ -651,6 +806,8 @@ function openPaymentModal(prefillType = null, isSelective = false) {
         showNotification('Lütfen önce masa seçiniz!', 'warning');
         return;
     }
+
+    if (!checkVardiya()) return;
 
     const itemsToPay = isSelective ? currentItems.filter((_, i) => selectedItemIndices.includes(i)) : currentItems;
 
@@ -955,7 +1112,7 @@ function setupEventListeners() {
 
     if (elements.btnReports) {
         elements.btnReports.onclick = () => {
-            showNotification('Rapor özelliği yakında eklenecek!', 'info');
+            window.location.href = 'kasa_yonetimi.html';
         };
     }
 
@@ -1003,6 +1160,19 @@ function setupEventListeners() {
         };
         elements.paymentKart.onfocus = () => handlePaymentInputFocus(elements.paymentKart);
     }
+
+    // Transfer Modal Events
+    if (elements.btnTransfer) {
+        elements.btnTransfer.onclick = () => openTransferModal();
+    }
+
+    if (elements.closeTransferModal) {
+        elements.closeTransferModal.onclick = () => closeTransferModal();
+    }
+
+    if (elements.btnCancelTransfer) {
+        elements.btnCancelTransfer.onclick = () => closeTransferModal();
+    }
     if (elements.paymentCari) {
         elements.paymentCari.oninput = () => {
             balancePaymentInputs(elements.paymentCari);
@@ -1028,6 +1198,104 @@ function setupEventListeners() {
             closePaymentModal();
         }
     };
+
+    // Courier Assignment
+    if (elements.btnAssignCourier) {
+        elements.btnAssignCourier.onclick = () => assignCourier();
+    }
+    if (elements.btnSendCourierInfo) {
+        elements.btnSendCourierInfo.onclick = () => sendCourierInfo();
+    }
+}
+
+/**
+ * Courier Assignment logic
+ */
+function updateCourierArea() {
+    if (!elements.courierAssignmentArea) return;
+
+    if (currentMasa && currentMasa.startsWith('Paket')) {
+        elements.courierAssignmentArea.style.display = 'block';
+        fetchCouriers();
+
+        // Reset assigned info
+        elements.assignedCourierInfo.style.display = 'none';
+        elements.assignedCourierName.textContent = '';
+    } else {
+        elements.courierAssignmentArea.style.display = 'none';
+    }
+}
+
+async function fetchCouriers() {
+    if (!elements.courierSelect) return;
+
+    try {
+        const resp = await fetch('/api/couriers');
+        const data = await resp.json();
+
+        // Clear current options except first
+        while (elements.courierSelect.options.length > 1) {
+            elements.courierSelect.remove(1);
+        }
+
+        data.forEach(k => {
+            if (!k.aktif) return;
+            const opt = document.createElement('option');
+            opt.value = k.id;
+            opt.textContent = `${k.ad}${k.plaka ? ' (' + k.plaka + ')' : ''}`;
+            opt.dataset.tel = k.telefon;
+            elements.courierSelect.appendChild(opt);
+        });
+    } catch (err) {
+        console.error('Error fetching couriers:', err);
+    }
+}
+
+function assignCourier() {
+    if (!currentMasa || !elements.courierSelect.value) {
+        showNotification('Lütfen kurye seçiniz!', 'warning');
+        return;
+    }
+
+    const sel = elements.courierSelect;
+    const courierId = sel.value;
+    const courierAd = sel.options[sel.selectedIndex].text;
+    const courierTel = sel.options[sel.selectedIndex].dataset.tel;
+
+    socket.emit('assign_courier', {
+        masa: currentMasa,
+        kurye_id: courierId,
+        kurye_ad: courierAd,
+        kurye_tel: courierTel
+    });
+}
+
+function onCourierAssigned(data) {
+    if (data.masa === currentMasa) {
+        elements.assignedCourierInfo.style.display = 'block';
+        elements.assignedCourierName.textContent = `Atanan: ${data.kurye_ad}`;
+        elements.assignedCourierName.dataset.tel = data.kurye_tel || '';
+        showNotification(`${data.masa} için ${data.kurye_ad} atandı.`, 'success');
+    }
+}
+
+function sendCourierInfo() {
+    const tel = elements.assignedCourierName.dataset.tel;
+    if (!tel) {
+        showNotification('Kurye telefon bilgisi bulunamadı!', 'error');
+        return;
+    }
+
+    socket.emit('send_courier_info', {
+        masa: currentMasa,
+        kurye_tel: tel
+    });
+}
+
+function onCourierMessageReady(data) {
+    console.log('📱 WhatsApp message ready:', data);
+    // WhatsApp'ı yeni pencerede aç
+    window.open(data.whatsapp_url, '_blank');
 }
 
 /**

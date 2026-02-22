@@ -61,11 +61,18 @@
 
         .item-row {
             display: grid;
-            grid-template-columns: 1fr 150px 80px;
-            gap: 15px;
+            grid-template-columns: 1fr 100px 70px 70px 70px 70px 50px;
+            gap: 10px;
             padding: 10px 0;
             border-bottom: 1px solid #f1f1f1;
             align-items: center;
+        }
+
+        .item-row .platform-hint {
+            font-size: 10px;
+            color: #7f8c8d;
+            text-align: center;
+            margin-bottom: -5px;
         }
 
         .item-row:last-child {
@@ -229,14 +236,29 @@
                         <span class="category-name">${cat}</span>
                         <button class="btn-icon" onclick="removeCategory('${cat}')" title="Kategoriyi Sil">🗑️</button>
                     </div>
-                    <div class="item-list" id="list-${cat}">
-                        ${menuData[cat].map((item, idx) => `
-                            <div class="item-row">
-                                <input type="text" value="${item[0]}" placeholder="Ürün Adı" onchange="updateItem('${cat}', ${idx}, 0, this.value)">
-                                <input type="number" value="${item[1]}" placeholder="Fiyat" step="0.01" onchange="updateItem('${cat}', ${idx}, 1, this.value)">
-                                <button class="btn-icon" onclick="removeItem('${cat}', ${idx})">❌</button>
-                            </div>
-                        `).join('')}
+                    <div class="item-list">
+                        <div class="item-row" style="border-bottom: 2px solid #eee; font-weight: bold; font-size: 11px; color: #777;">
+                            <div>Ürün Adı</div>
+                            <div style="text-align:center;">Fiyat</div>
+                            <div style="text-align:center;">YS %</div>
+                            <div style="text-align:center;">TY %</div>
+                            <div style="text-align:center;">GT %</div>
+                            <div style="text-align:center;">MG %</div>
+                            <div></div>
+                        </div>
+                        <div id="list-${cat}">
+                            ${menuData[cat].map((item, idx) => `
+                                <div class="item-row">
+                                    <input type="text" value="${item[0]}" placeholder="Ürün Adı" onchange="updateItem('${cat}', ${idx}, 0, this.value)">
+                                    <input type="number" value="${item[1]}" placeholder="Fiyat" step="0.01" onchange="updateItem('${cat}', ${idx}, 1, this.value)">
+                                    <input type="number" value="${item[2] || 0}" placeholder="YS %" step="1" onchange="updateItem('${cat}', ${idx}, 2, this.value)">
+                                    <input type="number" value="${item[3] || 0}" placeholder="TY %" step="1" onchange="updateItem('${cat}', ${idx}, 3, this.value)">
+                                    <input type="number" value="${item[4] || 0}" placeholder="GT %" step="1" onchange="updateItem('${cat}', ${idx}, 4, this.value)">
+                                    <input type="number" value="${item[5] || 0}" placeholder="MG %" step="1" onchange="updateItem('${cat}', ${idx}, 5, this.value)">
+                                    <button class="btn-icon" onclick="removeItem('${cat}', ${idx})">❌</button>
+                                </div>
+                            `).join('')}
+                        </div>
                     </div>
                     <div class="add-row">
                         <button class="btn-add-item" onclick="addItem('${cat}')">+ Yeni Ürün Ekle</button>
@@ -247,12 +269,12 @@
         }
 
         function updateItem(cat, idx, field, value) {
-            if (field === 1) value = parseFloat(value) || 0;
+            if (field >= 1) value = parseFloat(value) || 0;
             menuData[cat][idx][field] = value;
         }
 
         function addItem(cat) {
-            menuData[cat].push(["Yeni Ürün", 0.0]);
+            menuData[cat].push(["Yeni Ürün", 0.0, 0, 0, 0, 0]);
             renderEditor();
         }
 

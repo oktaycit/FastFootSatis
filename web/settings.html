@@ -533,6 +533,10 @@
                             <label>API Key</label>
                             <input type="text" id="int_ys_api_key" placeholder="API Anahtarı">
                         </div>
+                        <div class="form-group">
+                            <label>Artış (%)</label>
+                            <input type="number" id="int_ys_markup" placeholder="0" step="1" style="width: 80px;">
+                        </div>
                     </div>
                 </div>
 
@@ -564,6 +568,10 @@
                             <label>API Secret</label>
                             <input type="text" id="int_ty_api_secret" placeholder="API Secret">
                         </div>
+                        <div class="form-group">
+                            <label>Artış (%)</label>
+                            <input type="number" id="int_ty_markup" placeholder="0" step="1" style="width: 80px;">
+                        </div>
                     </div>
                 </div>
 
@@ -591,6 +599,10 @@
                             <label>App Token</label>
                             <input type="text" id="int_gt_app_token" placeholder="Uygulama Tokeni">
                         </div>
+                        <div class="form-group">
+                            <label>Artış (%)</label>
+                            <input type="number" id="int_gt_markup" placeholder="0" step="1" style="width: 80px;">
+                        </div>
                     </div>
                 </div>
 
@@ -617,6 +629,10 @@
                         <div class="form-group">
                             <label>API Key</label>
                             <input type="text" id="int_mg_api_key" placeholder="API Anahtarı">
+                        </div>
+                        <div class="form-group">
+                            <label>Artış (%)</label>
+                            <input type="number" id="int_mg_markup" placeholder="0" step="1" style="width: 80px;">
                         </div>
                     </div>
                 </div>
@@ -650,64 +666,126 @@
             </div>
         </div>
 
-        <!-- 7. POS Entegrasyon Ayarları -->
-        <div class="settings-card">
-            <div class="card-header">💳 POS / ÖKC Entegrasyonu</div>
-            <div class="card-body">
-                <div class="toggle-row">
-                    <div>
-                        <div class="toggle-label">POS Servisi</div>
-                        <div class="toggle-desc">Kredi kartı ödemelerini otomatik POS cihazına gönder</div>
-                    </div>
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="posEnabled">
-                        <span class="slider"></span>
-                    </label>
-                </div>
+    </div>
 
-                <div id="posConfigArea" style="margin-top: 15px;">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="posType">Cihaz Tipi</label>
-                            <select id="posType"
-                                style="padding: 11px; border: 2px solid #e0e0e0; border-radius: var(--radius-md); background: #f8f9fa;">
-                                <option value="demo">🧪 Demo / Simülatör</option>
-                                <option value="beko-json">📦 Beko (JSON API)</option>
-                                <option value="hugin">📦 Hugin (JSON API)</option>
-                                <option value="generic">📦 Genel (Generic JSON)</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="posIp">IP Adresi</label>
-                            <input type="text" id="posIp" placeholder="127.0.0.1">
-                        </div>
-                        <div class="form-group">
-                            <label for="posPort">Port</label>
-                            <input type="number" id="posPort" placeholder="5000">
-                        </div>
+    <!-- 7. Muhasebe Entegrasyonu -->
+    <div class="settings-card">
+        <div class="card-header">📊 Muhasebe Entegrasyonu (e-Fatura)</div>
+        <div class="card-body">
+            <div class="form-group">
+                <label for="int_acc_platform">Aktif Platform</label>
+                <select id="int_acc_platform" onchange="toggleAccountingUI()"
+                    style="padding: 11px; border: 2px solid #e0e0e0; border-radius: var(--radius-md); background: #f8f9fa;">
+                    <option value="none">❌ Yok</option>
+                    <option value="parasut">🚀 Paraşüt</option>
+                    <option value="kolaybi">🚀 KolayBi</option>
+                </select>
+            </div>
+
+            <!-- Paraşüt Fields -->
+            <div id="acc_parasut_fields"
+                style="display:none; margin-top:15px; padding:15px; background:#f0f7ff; border-radius: var(--radius-md);">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Client ID</label>
+                        <input type="text" id="acc_parasut_client_id" placeholder="Paraşüt Client ID">
                     </div>
-                    <small style="color:var(--text-secondary);">
-                        Cihaz üzerinden TCP/IP bağlantısının aktif olduğundan emin olun.
-                    </small>
+                    <div class="form-group">
+                        <label>Client Secret</label>
+                        <input type="password" id="acc_parasut_client_secret" placeholder="Paraşüt Client Secret">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>E-posta (Username)</label>
+                        <input type="text" id="acc_parasut_username" placeholder="Paraşüt Giriş E-postası">
+                    </div>
+                    <div class="form-group">
+                        <label>Şifre (Password)</label>
+                        <input type="password" id="acc_parasut_password" placeholder="Paraşüt Giriş Şifresi">
+                    </div>
+                    <div class="form-group">
+                        <label>Firma ID (Company ID)</label>
+                        <input type="text" id="acc_parasut_company_id" placeholder="Paraşüt Firma ID">
+                    </div>
+                </div>
+            </div>
+
+            <!-- KolayBi Fields -->
+            <div id="acc_kolaybi_fields"
+                style="display:none; margin-top:15px; padding:15px; background:#f0fff4; border-radius: var(--radius-md);">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>API Key</label>
+                        <input type="text" id="acc_kolaybi_api_key" placeholder="KolayBi API Key">
+                    </div>
+                    <div class="form-group">
+                        <label>API Secret</label>
+                        <input type="password" id="acc_kolaybi_api_secret" placeholder="KolayBi API Secret">
+                    </div>
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- Butonlar -->
-        <div class="action-buttons">
-            <button class="btn-settings btn-save" id="btnSave" onclick="saveSettings()">
-                💾 Ayarları Kaydet
-            </button>
-            <button class="btn-settings btn-info-s" id="btnRefresh" onclick="loadSettings()">
-                🔄 Yenile
-            </button>
-            <button class="btn-settings btn-warning" onclick="window.location.href='/menu_edit'">
-                🍽️ Menü Düzenle
-            </button>
-            <button class="btn-settings btn-back" onclick="window.location.href='/'">
-                🏠 Ana Sayfa
-            </button>
+    <!-- 8. POS Entegrasyon Ayarları -->
+    <div class="settings-card">
+        <div class="card-header">💳 POS / ÖKC Entegrasyonu</div>
+        <div class="card-body">
+            <div class="toggle-row">
+                <div>
+                    <div class="toggle-label">POS Servisi</div>
+                    <div class="toggle-desc">Kredi kartı ödemelerini otomatik POS cihazına gönder</div>
+                </div>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="posEnabled">
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div id="posConfigArea" style="margin-top: 15px;">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="posType">Cihaz Tipi</label>
+                        <select id="posType"
+                            style="padding: 11px; border: 2px solid #e0e0e0; border-radius: var(--radius-md); background: #f8f9fa;">
+                            <option value="demo">🧪 Demo / Simülatör</option>
+                            <option value="beko-json">📦 Beko (JSON API)</option>
+                            <option value="hugin">📦 Hugin (JSON API)</option>
+                            <option value="generic">📦 Genel (Generic JSON)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="posIp">IP Adresi</label>
+                        <input type="text" id="posIp" placeholder="127.0.0.1">
+                    </div>
+                    <div class="form-group">
+                        <label for="posPort">Port</label>
+                        <input type="number" id="posPort" placeholder="5000">
+                    </div>
+                </div>
+                <small style="color:var(--text-secondary);">
+                    Cihaz üzerinden TCP/IP bağlantısının aktif olduğundan emin olun.
+                </small>
+            </div>
         </div>
+    </div>
+
+    <!-- Butonlar -->
+    <div class="action-buttons">
+        <button class="btn-settings btn-save" id="btnSave" onclick="saveSettings()">
+            💾 Ayarları Kaydet
+        </button>
+        <button class="btn-settings btn-info-s" id="btnRefresh" onclick="loadSettings()">
+            🔄 Yenile
+        </button>
+        <button class="btn-settings btn-warning" onclick="window.location.href='/menu_edit'">
+            🍽️ Menü Düzenle
+        </button>
+        <button class="btn-settings btn-back" onclick="window.location.href='/'">
+            🏠 Ana Sayfa
+        </button>
+    </div>
     </div>
 
     <!-- Toast bildirimi -->
@@ -770,22 +848,44 @@
                 document.getElementById('int_ys_enabled').checked = settings.yemeksepeti.enabled;
                 document.getElementById('int_ys_store_id').value = settings.yemeksepeti.store_id || '';
                 document.getElementById('int_ys_api_key').value = settings.yemeksepeti.api_key || '';
+                document.getElementById('int_ys_markup').value = settings.yemeksepeti.markup || 0;
 
                 // Trendyol
                 document.getElementById('int_ty_enabled').checked = settings.trendyol.enabled;
                 document.getElementById('int_ty_supplier_id').value = settings.trendyol.supplier_id || '';
                 document.getElementById('int_ty_api_key').value = settings.trendyol.api_key || '';
                 document.getElementById('int_ty_api_secret').value = settings.trendyol.api_secret || '';
+                document.getElementById('int_ty_markup').value = settings.trendyol.markup || 0;
 
-                // Getir
                 document.getElementById('int_gt_enabled').checked = settings.getir.enabled;
                 document.getElementById('int_gt_restaurant_id').value = settings.getir.restaurant_id || '';
                 document.getElementById('int_gt_app_token').value = settings.getir.app_token || '';
+                document.getElementById('int_gt_markup').value = settings.getir.markup || 0;
+
+                // Accounting
+                const acc = settings.accounting || { active_platform: 'none' };
+                document.getElementById('int_acc_platform').value = acc.active_platform;
+
+                if (acc.parasut) {
+                    document.getElementById('acc_parasut_client_id').value = acc.parasut.client_id || '';
+                    document.getElementById('acc_parasut_client_secret').value = acc.parasut.client_secret || '';
+                    document.getElementById('acc_parasut_username').value = acc.parasut.username || '';
+                    document.getElementById('acc_parasut_password').value = acc.parasut.password || '';
+                    document.getElementById('acc_parasut_company_id').value = acc.parasut.company_id || '';
+                }
+
+                if (acc.kolaybi) {
+                    document.getElementById('acc_kolaybi_api_key').value = acc.kolaybi.api_key || '';
+                    document.getElementById('acc_kolaybi_api_secret').value = acc.kolaybi.api_secret || '';
+                }
+
+                toggleAccountingUI();
 
                 // Migros
                 document.getElementById('int_mg_enabled').checked = settings.migros.enabled;
                 document.getElementById('int_mg_store_id').value = settings.migros.store_id || '';
                 document.getElementById('int_mg_api_key').value = settings.migros.api_key || '';
+                document.getElementById('int_mg_markup').value = settings.migros.markup || 0;
 
                 // WhatsApp
                 document.getElementById('int_wp_enabled').checked = settings.whatsapp?.enabled || false;
@@ -948,28 +1048,46 @@
                 yemeksepeti: {
                     enabled: document.getElementById('int_ys_enabled').checked,
                     store_id: document.getElementById('int_ys_store_id').value.trim(),
-                    api_key: document.getElementById('int_ys_api_key').value.trim()
+                    api_key: document.getElementById('int_ys_api_key').value.trim(),
+                    markup: parseFloat(document.getElementById('int_ys_markup').value) || 0
                 },
                 trendyol: {
                     enabled: document.getElementById('int_ty_enabled').checked,
                     supplier_id: document.getElementById('int_ty_supplier_id').value.trim(),
                     api_key: document.getElementById('int_ty_api_key').value.trim(),
-                    api_secret: document.getElementById('int_ty_api_secret').value.trim()
+                    api_secret: document.getElementById('int_ty_api_secret').value.trim(),
+                    markup: parseFloat(document.getElementById('int_ty_markup').value) || 0
                 },
                 getir: {
                     enabled: document.getElementById('int_gt_enabled').checked,
                     restaurant_id: document.getElementById('int_gt_restaurant_id').value.trim(),
-                    app_token: document.getElementById('int_gt_app_token').value.trim()
+                    app_token: document.getElementById('int_gt_app_token').value.trim(),
+                    markup: parseFloat(document.getElementById('int_gt_markup').value) || 0
                 },
                 migros: {
                     enabled: document.getElementById('int_mg_enabled').checked,
                     store_id: document.getElementById('int_mg_store_id').value.trim(),
-                    api_key: document.getElementById('int_mg_api_key').value.trim()
+                    api_key: document.getElementById('int_mg_api_key').value.trim(),
+                    markup: parseFloat(document.getElementById('int_mg_markup').value) || 0
                 },
                 whatsapp: {
                     enabled: document.getElementById('int_wp_enabled').checked,
                     service_name: document.getElementById('int_wp_service_name').value.trim(),
                     api_key: document.getElementById('int_wp_api_key').value.trim()
+                },
+                accounting: {
+                    active_platform: document.getElementById('int_acc_platform').value,
+                    parasut: {
+                        client_id: document.getElementById('acc_parasut_client_id').value.trim(),
+                        client_secret: document.getElementById('acc_parasut_client_secret').value.trim(),
+                        username: document.getElementById('acc_parasut_username').value.trim(),
+                        password: document.getElementById('acc_parasut_password').value.trim(),
+                        company_id: document.getElementById('acc_parasut_company_id').value.trim()
+                    },
+                    kolaybi: {
+                        api_key: document.getElementById('acc_kolaybi_api_key').value.trim(),
+                        api_secret: document.getElementById('acc_kolaybi_api_secret').value.trim()
+                    }
                 }
             };
 
@@ -1013,6 +1131,12 @@
         function togglePosUI() {
             const enabled = document.getElementById('posEnabled').checked;
             document.getElementById('posConfigArea').style.display = enabled ? 'block' : 'none';
+        }
+
+        function toggleAccountingUI() {
+            const platform = document.getElementById('int_acc_platform').value;
+            document.getElementById('acc_parasut_fields').style.display = platform === 'parasut' ? 'block' : 'none';
+            document.getElementById('acc_kolaybi_fields').style.display = platform === 'kolaybi' ? 'block' : 'none';
         }
 
         document.getElementById('posEnabled').addEventListener('change', togglePosUI);
