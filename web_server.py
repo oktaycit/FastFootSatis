@@ -70,6 +70,7 @@ COUNTER_FILE = os.path.join(SCRIPT_DIR, "sira_no.txt")
 WAITERS_FILE = os.path.join(SCRIPT_DIR, "waiters.json")
 INTEGRATION_CONFIG = os.path.join(SCRIPT_DIR, "integrations.json")
 SALONS_FILE = os.path.join(SCRIPT_DIR, "salons.json")
+ACTIVE_ADISYONLAR_FILE = os.path.join(SCRIPT_DIR, "active_adisyonlar.json")
 SERVER_PORT = 5555
 
 # Klasörleri oluştur
@@ -152,6 +153,7 @@ class RestaurantServer:
         self.load_salons()
         self.load_waiters()
         self.refresh_adisyonlar()
+        self.load_active_adisyonlar() # Aktif adisyonları geri yükle
         self.load_menu_data()
         
         # Sid -> Kasa ID haritalaması (Vardiya işlemleri için)
@@ -323,6 +325,30 @@ class RestaurantServer:
             self.adisyonlar["Genel"] = []
         
         logger.info(f"✓ {len(self.adisyonlar)} adisyon alanı oluşturuldu")
+
+    def save_active_adisyonlar(self):
+        """Aktif adisyonları dosyaya kaydet"""
+        try:
+            with open(ACTIVE_ADISYONLAR_FILE, "w", encoding="utf-8") as f:
+                json.dump(self.adisyonlar, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception as e:
+            logger.error(f"Adisyon kaydetme hatası: {e}")
+            return False
+
+    def load_active_adisyonlar(self):
+        """Aktif adisyonları dosyadan yükle"""
+        if os.path.exists(ACTIVE_ADISYONLAR_FILE):
+            try:
+                with open(ACTIVE_ADISYONLAR_FILE, "r", encoding="utf-8") as f:
+                    loaded_adisyonlar = json.load(f)
+                    # Sadece mevcut masaları/paketleri güncelle (yapı değişmiş olabilir)
+                    for masa, items in loaded_adisyonlar.items():
+                        if masa in self.adisyonlar:
+                            self.adisyonlar[masa] = items
+                logger.info("✓ Aktif adisyonlar geri yüklendi")
+            except Exception as e:
+                logger.error(f"Adisyon yükleme hatası: {e}")
     
     def load_menu_data(self):
         """Menüyü yükle - DB'den veya dosyadan"""
@@ -895,6 +921,14 @@ def api_vardiya_ac():
     if not kasa_id or not kasiyer: return jsonify({'success': False, 'error': 'Eksik bilgi'})
     try:
         shift_id = db.open_shift(kasa_id, kasiyer, bakiye)
+        # Tüm bağlı istemcilere vardiya açıldığını bildir
+        socketio.emit('vardiya_update', {
+            'id': shift_id,
+            'kasiyer': kasiyer,
+            'kasa_id': int(kasa_id),
+            'durum': 'acik',
+            'acilis_zamani': datetime.datetime.now().isoformat()
+        })
         return jsonify({'success': True, 'id': shift_id})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
@@ -909,6 +943,8 @@ def api_vardiya_kapat():
     if not shift_id: return jsonify({'success': False, 'error': 'Vardiya ID gerekli'})
     try:
         db.close_shift(shift_id, nakit, kart)
+        # Tüm bağlı istemcilere vardiya kapandığını bildir
+        socketio.emit('vardiya_update', None)
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
@@ -1204,6 +1240,7 @@ def integration_webhook(platform):
         'customer': order.get('customer')
     })
     
+    server.save_active_adisyonlar() # Persistence
     return jsonify({'success': True})
 
 # ==================== MENÜ ====================
@@ -1382,6 +1419,7 @@ def handle_add_item(data):
     }
     
     server.adisyonlar[masa_adi].append(siparis)
+    server.save_active_adisyonlar() # Persistence
     
     # Tüm clientlara bildir
     items = server.adisyonlar[masa_adi]
@@ -1421,6 +1459,7 @@ def handle_kitchen_order_ready(data):
         for item in server.adisyonlar[masa]:
             if item.get('uid') in items_uids:
                 item['durum'] = 'hazir'
+        server.save_active_adisyonlar() # Persistence
 
     # Garsonlara bildir
     for waiter_name in waiters:
@@ -1459,6 +1498,7 @@ def handle_cancel_item(data):
         
         if item_idx != -1:
             cancelled_item = server.adisyonlar[masa_adi].pop(item_idx)
+            server.save_active_adisyonlar() # Persistence
             logger.info(f"🗑️ Sipariş iptal edildi: {masa_adi} - {cancelled_item['urun']}")
             
             # Mutfak ekranına bildir
@@ -1502,6 +1542,7 @@ def handle_transfer_table(data):
     # Taşıma işlemi
     server.adisyonlar[target_masa].extend(items_to_move)
     server.adisyonlar[source_masa] = []
+    server.save_active_adisyonlar() # Persistence
     
     logger.info(f"🔄 Masa taşıma: {source_masa} ➔ {target_masa} ({len(items_to_move)} ürün)")
     
@@ -1603,6 +1644,7 @@ def handle_remove_item(data):
     if masa_adi and masa_adi in server.adisyonlar:
         if 0 <= index < len(server.adisyonlar[masa_adi]):
             server.adisyonlar[masa_adi].pop(index)
+            server.save_active_adisyonlar() # Persistence
             
             items = server.adisyonlar[masa_adi]
             total = sum(item['adet'] * item['fiyat'] for item in items)
@@ -1716,6 +1758,8 @@ def handle_payment(data):
                 is_partial = True
         else:
             server.adisyonlar[masa_adi] = []
+        
+        server.save_active_adisyonlar() # Persistence
         
         # Tüm clientlara bildir
         socketio.emit('payment_completed', {

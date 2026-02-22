@@ -323,6 +323,23 @@ function onPaymentCompleted(data) {
     showNotification(`${data.type} ödemesi başarıyla alındı!`, 'success');
 }
 
+function onAdisyonlarUpdate(data) {
+    console.log('🔄 Global adisyonlar update:', data);
+    adisyonlar = data;
+
+    // Update all table buttons
+    Object.keys(adisyonlar).forEach(masa => {
+        updateTableButton(masa);
+    });
+
+    // If we have a selected masa, update its display
+    if (currentMasa) {
+        currentItems = adisyonlar[currentMasa] || [];
+        currentTotal = currentItems.reduce((sum, item) => sum + (item.adet * item.fiyat), 0);
+        updateOrderDisplay();
+    }
+}
+
 function onNewOnlineOrder(data) {
     console.log('🌐 New online order:', data);
 
@@ -371,15 +388,40 @@ function updateVardiyaUI() {
     const statusEl = document.getElementById('vardiyaStatus');
     if (!statusEl) return;
 
+    const currentRole = localStorage.getItem('terminal_role') || 'kasa';
+    const isTerminal = (currentRole === 'terminal');
+
     if (activeShift) {
-        statusEl.innerHTML = `<span style="color:#2ecc71"><i class="fas fa-clock"></i> ${activeShift.kasiyer} (Açık)</span>`;
+        console.log('✅ UI: Vardiya Açık', activeShift);
+        statusEl.innerHTML = `<span style="color:#2ecc71; font-weight: bold;"><i class="fas fa-clock"></i> ${activeShift.kasiyer} (Açık)</span>`;
+        // Enable buttons if they were disabled
+        enableCheckoutButtons(true);
     } else {
-        const isTerminal = localStorage.getItem('terminal_role') === 'terminal';
+        console.log('❌ UI: Vardiya Kapalı');
         if (isTerminal) {
             statusEl.innerHTML = ``;
+            enableCheckoutButtons(false);
         } else {
-            statusEl.innerHTML = `<span style="color:#e74c3c"><i class="fas fa-exclamation-triangle"></i> VARDİYA KAPALI</span>`;
+            statusEl.innerHTML = `<span style="color:#e74c3c; font-weight: bold;"><i class="fas fa-exclamation-triangle"></i> KASA KAPALI</span>`;
+            enableCheckoutButtons(false);
         }
+    }
+}
+
+function enableCheckoutButtons(enabled) {
+    const btns = ['btnCash', 'btnCard', 'btnCredit', 'btnCari', 'btnFinalizePayment'];
+    btns.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.disabled = !enabled;
+            el.style.opacity = enabled ? '1' : '0.5';
+            el.style.cursor = enabled ? 'pointer' : 'not-allowed';
+        }
+    });
+
+    // Terminal ise zaten kapalı kalmalı
+    if (localStorage.getItem('terminal_role') === 'terminal') {
+        applyTerminalRestrictions();
     }
 }
 
