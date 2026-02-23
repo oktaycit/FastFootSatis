@@ -470,13 +470,15 @@ body {
     padding: 10px;
     background: #fff;
     border-top: 2px solid #e0e0e0;
-    flex-shrink: 0;
-    /* Buton alanı asla daralmasın */
+    flex-shrink: 1;
+    /* Allow shrinking so scroll can appear if needed */
+    flex-basis: auto;
     box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.05);
     overflow-y: auto;
-    /* Çok dar ekranlarda butonlar için scroll */
-    max-height: 80vh;
-    /* Butonlar asla ekranı tamamen kaplamasın */
+    /* Enable scroll if content is too tall */
+    height: auto;
+    max-height: 50vh;
+    /* Don't let buttons cover more than half the screen */
 }
 
 .total-display {

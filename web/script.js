@@ -1167,11 +1167,7 @@ function setupEventListeners() {
         };
     }
 
-    if (elements.btnSettings) {
-        elements.btnSettings.onclick = () => {
-            showNotification('Ayarlar özelliği yakında eklenecek!', 'info');
-        };
-    }
+
 
     if (elements.btnAbout) {
         elements.btnAbout.onclick = () => {

@@ -666,127 +666,128 @@
             </div>
         </div>
 
-    </div>
 
-    <!-- 7. Muhasebe Entegrasyonu -->
-    <div class="settings-card">
-        <div class="card-header">📊 Muhasebe Entegrasyonu (e-Fatura)</div>
-        <div class="card-body">
-            <div class="form-group">
-                <label for="int_acc_platform">Aktif Platform</label>
-                <select id="int_acc_platform" onchange="toggleAccountingUI()"
-                    style="padding: 11px; border: 2px solid #e0e0e0; border-radius: var(--radius-md); background: #f8f9fa;">
-                    <option value="none">❌ Yok</option>
-                    <option value="parasut">🚀 Paraşüt</option>
-                    <option value="kolaybi">🚀 KolayBi</option>
-                </select>
-            </div>
 
-            <!-- Paraşüt Fields -->
-            <div id="acc_parasut_fields"
-                style="display:none; margin-top:15px; padding:15px; background:#f0f7ff; border-radius: var(--radius-md);">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Client ID</label>
-                        <input type="text" id="acc_parasut_client_id" placeholder="Paraşüt Client ID">
+        <!-- 7. Muhasebe Entegrasyonu -->
+        <div class="settings-card">
+            <div class="card-header">📊 Muhasebe Entegrasyonu (e-Fatura)</div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label for="int_acc_platform">Aktif Platform</label>
+                    <select id="int_acc_platform" onchange="toggleAccountingUI()"
+                        style="padding: 11px; border: 2px solid #e0e0e0; border-radius: var(--radius-md); background: #f8f9fa;">
+                        <option value="none">❌ Yok</option>
+                        <option value="parasut">🚀 Paraşüt</option>
+                        <option value="kolaybi">🚀 KolayBi</option>
+                    </select>
+                </div>
+
+                <!-- Paraşüt Fields -->
+                <div id="acc_parasut_fields"
+                    style="display:none; margin-top:15px; padding:15px; background:#f0f7ff; border-radius: var(--radius-md);">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Client ID</label>
+                            <input type="text" id="acc_parasut_client_id" placeholder="Paraşüt Client ID">
+                        </div>
+                        <div class="form-group">
+                            <label>Client Secret</label>
+                            <input type="password" id="acc_parasut_client_secret" placeholder="Paraşüt Client Secret">
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>Client Secret</label>
-                        <input type="password" id="acc_parasut_client_secret" placeholder="Paraşüt Client Secret">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>E-posta (Username)</label>
+                            <input type="text" id="acc_parasut_username" placeholder="Paraşüt Giriş E-postası">
+                        </div>
+                        <div class="form-group">
+                            <label>Şifre (Password)</label>
+                            <input type="password" id="acc_parasut_password" placeholder="Paraşüt Giriş Şifresi">
+                        </div>
+                        <div class="form-group">
+                            <label>Firma ID (Company ID)</label>
+                            <input type="text" id="acc_parasut_company_id" placeholder="Paraşüt Firma ID">
+                        </div>
                     </div>
                 </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>E-posta (Username)</label>
-                        <input type="text" id="acc_parasut_username" placeholder="Paraşüt Giriş E-postası">
-                    </div>
-                    <div class="form-group">
-                        <label>Şifre (Password)</label>
-                        <input type="password" id="acc_parasut_password" placeholder="Paraşüt Giriş Şifresi">
-                    </div>
-                    <div class="form-group">
-                        <label>Firma ID (Company ID)</label>
-                        <input type="text" id="acc_parasut_company_id" placeholder="Paraşüt Firma ID">
+
+                <!-- KolayBi Fields -->
+                <div id="acc_kolaybi_fields"
+                    style="display:none; margin-top:15px; padding:15px; background:#f0fff4; border-radius: var(--radius-md);">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>API Key</label>
+                            <input type="text" id="acc_kolaybi_api_key" placeholder="KolayBi API Key">
+                        </div>
+                        <div class="form-group">
+                            <label>API Secret</label>
+                            <input type="password" id="acc_kolaybi_api_secret" placeholder="KolayBi API Secret">
+                        </div>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- KolayBi Fields -->
-            <div id="acc_kolaybi_fields"
-                style="display:none; margin-top:15px; padding:15px; background:#f0fff4; border-radius: var(--radius-md);">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>API Key</label>
-                        <input type="text" id="acc_kolaybi_api_key" placeholder="KolayBi API Key">
+        <!-- 8. POS Entegrasyon Ayarları -->
+        <div class="settings-card">
+            <div class="card-header">💳 POS / ÖKC Entegrasyonu</div>
+            <div class="card-body">
+                <div class="toggle-row">
+                    <div>
+                        <div class="toggle-label">POS Servisi</div>
+                        <div class="toggle-desc">Kredi kartı ödemelerini otomatik POS cihazına gönder</div>
                     </div>
-                    <div class="form-group">
-                        <label>API Secret</label>
-                        <input type="password" id="acc_kolaybi_api_secret" placeholder="KolayBi API Secret">
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="posEnabled">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div id="posConfigArea" style="margin-top: 15px;">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="posType">Cihaz Tipi</label>
+                            <select id="posType"
+                                style="padding: 11px; border: 2px solid #e0e0e0; border-radius: var(--radius-md); background: #f8f9fa;">
+                                <option value="demo">🧪 Demo / Simülatör</option>
+                                <option value="beko-json">📦 Beko (JSON API)</option>
+                                <option value="hugin">📦 Hugin (JSON API)</option>
+                                <option value="generic">📦 Genel (Generic JSON)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="posIp">IP Adresi</label>
+                            <input type="text" id="posIp" placeholder="127.0.0.1">
+                        </div>
+                        <div class="form-group">
+                            <label for="posPort">Port</label>
+                            <input type="number" id="posPort" placeholder="5000">
+                        </div>
                     </div>
+                    <small style="color:var(--text-secondary);">
+                        Cihaz üzerinden TCP/IP bağlantısının aktif olduğundan emin olun.
+                    </small>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- 8. POS Entegrasyon Ayarları -->
-    <div class="settings-card">
-        <div class="card-header">💳 POS / ÖKC Entegrasyonu</div>
-        <div class="card-body">
-            <div class="toggle-row">
-                <div>
-                    <div class="toggle-label">POS Servisi</div>
-                    <div class="toggle-desc">Kredi kartı ödemelerini otomatik POS cihazına gönder</div>
-                </div>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="posEnabled">
-                    <span class="slider"></span>
-                </label>
-            </div>
-
-            <div id="posConfigArea" style="margin-top: 15px;">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="posType">Cihaz Tipi</label>
-                        <select id="posType"
-                            style="padding: 11px; border: 2px solid #e0e0e0; border-radius: var(--radius-md); background: #f8f9fa;">
-                            <option value="demo">🧪 Demo / Simülatör</option>
-                            <option value="beko-json">📦 Beko (JSON API)</option>
-                            <option value="hugin">📦 Hugin (JSON API)</option>
-                            <option value="generic">📦 Genel (Generic JSON)</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="posIp">IP Adresi</label>
-                        <input type="text" id="posIp" placeholder="127.0.0.1">
-                    </div>
-                    <div class="form-group">
-                        <label for="posPort">Port</label>
-                        <input type="number" id="posPort" placeholder="5000">
-                    </div>
-                </div>
-                <small style="color:var(--text-secondary);">
-                    Cihaz üzerinden TCP/IP bağlantısının aktif olduğundan emin olun.
-                </small>
-            </div>
+        <!-- Butonlar -->
+        <div class="action-buttons">
+            <button class="btn-settings btn-save" id="btnSave" onclick="saveSettings()">
+                💾 Ayarları Kaydet
+            </button>
+            <button class="btn-settings btn-info-s" id="btnRefresh" onclick="loadSettings()">
+                🔄 Yenile
+            </button>
+            <button class="btn-settings btn-warning" onclick="window.location.href='/menu_edit'">
+                🍽️ Menü Düzenle
+            </button>
+            <button class="btn-settings btn-back" onclick="window.location.href='/'">
+                🏠 Ana Sayfa
+            </button>
         </div>
     </div>
-
-    <!-- Butonlar -->
-    <div class="action-buttons">
-        <button class="btn-settings btn-save" id="btnSave" onclick="saveSettings()">
-            💾 Ayarları Kaydet
-        </button>
-        <button class="btn-settings btn-info-s" id="btnRefresh" onclick="loadSettings()">
-            🔄 Yenile
-        </button>
-        <button class="btn-settings btn-warning" onclick="window.location.href='/menu_edit'">
-            🍽️ Menü Düzenle
-        </button>
-        <button class="btn-settings btn-back" onclick="window.location.href='/'">
-            🏠 Ana Sayfa
-        </button>
-    </div>
-    </div>
+    <!-- End settings-wrapper -->
 
     <!-- Toast bildirimi -->
     <div id="toast"></div>
