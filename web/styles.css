@@ -150,7 +150,8 @@ body {
 /* Left Panel - Menu */
 .left-panel {
     flex: 0 0 380px;
-    min-width: 300px;
+    min-width: 150px;
+    max-width: 50%;
     background: #fff;
     border-right: 1px solid #ddd;
     display: flex;
@@ -311,7 +312,8 @@ body {
 /* Right Panel - Order & Checkout */
 .right-panel {
     flex: 0 0 500px;
-    min-width: 400px;
+    min-width: 300px;
+    max-width: 60%;
     height: 100%;
     display: flex;
     flex-direction: column;
@@ -323,12 +325,73 @@ body {
 }
 
 .order-list-container {
-    flex: 1;
-    /* Alabildiği tüm alanı alsın */
+    flex: 1 1 300px;
+    /* Flex grow, flex shrink, initial height */
     overflow-y: auto;
     /* Sadece liste kaysın */
     padding: 10px;
     background: #f8f9fa;
+    min-height: 100px;
+    /* Minimum yükseklik */
+}
+
+/* Vertical Resizer Handle */
+.resizer-v {
+    height: 8px;
+    background: #e0e0e0;
+    cursor: row-resize;
+    position: relative;
+    z-index: 10;
+    transition: background 0.2s;
+    border-top: 1px solid #ddd;
+    border-bottom: 1px solid #ddd;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.resizer-v::after {
+    content: "•••";
+    color: #999;
+    font-size: 10px;
+    letter-spacing: 2px;
+    line-height: 1;
+}
+
+.resizer-v:hover {
+    background: var(--accent-color);
+}
+
+.resizer-v:hover::after {
+    color: white;
+}
+
+/* Horizontal Resizer Handle */
+.resizer-h {
+    width: 8px;
+    background: #e0e0e0;
+    cursor: col-resize;
+    position: relative;
+    z-index: 10;
+    transition: background 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.resizer-h::after {
+    content: "⋮";
+    color: #999;
+    font-size: 14px;
+    line-height: 1;
+}
+
+.resizer-h:hover {
+    background: var(--accent-color);
+}
+
+.resizer-h:hover::after {
+    color: white;
 }
 
 .order-list {
@@ -419,21 +482,23 @@ body {
 .total-display {
     background: linear-gradient(135deg, var(--danger-color), #c0392b);
     color: white;
-    padding: 10px 15px;
+    padding: 12px 15px;
     border-radius: var(--radius-lg);
     text-align: center;
     margin-bottom: 10px;
     box-shadow: var(--shadow-md);
+    cursor: pointer;
+    transition: transform 0.1s ease, box-shadow 0.2s ease;
+    user-select: none;
 }
 
-.total-display {
-    background: linear-gradient(135deg, var(--danger-color), #c0392b);
-    color: white;
-    padding: 12px;
-    border-radius: var(--radius-md);
-    text-align: center;
-    margin-bottom: 10px;
-    box-shadow: var(--shadow-md);
+.total-display:active {
+    transform: scale(0.98);
+}
+
+.total-display:hover {
+    box-shadow: 0 4px 12px rgba(192, 57, 43, 0.4);
+    background: linear-gradient(135deg, #e74c3c, #c0392b);
 }
 
 .total-label {
@@ -607,7 +672,8 @@ body {
     height: 100%;
     background-color: rgba(0, 0, 0, 0.7);
     backdrop-filter: blur(5px);
-    overflow: auto;
+    overflow-y: scroll;
+    /* Prevents shifting when contents heighten */
 }
 
 .modal-content {
@@ -715,6 +781,9 @@ body {
 }
 
 .input-group input {
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 0;
     padding: 15px;
     border: 2px solid #ddd;
     border-radius: var(--radius-md);

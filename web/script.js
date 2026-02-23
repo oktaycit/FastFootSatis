@@ -34,9 +34,7 @@ const elements = {
 
     // Buttons
     btnPrint: null,
-    btnCash: null,
-    btnCard: null,
-    btnCredit: null,
+    btnTotalPayment: null,
     btnCari: null,
     btnReports: null,
     btnSettings: null,
@@ -60,8 +58,6 @@ const elements = {
     btnPaySelected: null,
     splitButtonsArea: null,
     selectedCount: null,
-    btnSplitEqually: null,
-
     // Caller ID Popup
     cidPopup: null,
     cidName: null,
@@ -84,7 +80,12 @@ const elements = {
     btnAssignCourier: null,
     assignedCourierInfo: null,
     assignedCourierName: null,
-    btnSendCourierInfo: null
+    btnSendCourierInfo: null,
+    orderResizer: null,
+    resizerLeft: null,
+    resizerRight: null,
+    leftPanel: null,
+    rightPanel: null
 };
 
 /**
@@ -99,11 +100,19 @@ function init() {
         }
     });
 
+    // Also get panels if not explicitly ID'd
+    elements.leftPanel = document.querySelector('.left-panel');
+    elements.rightPanel = document.querySelector('.right-panel');
+
     // Connect to SocketIO server
     connectToServer();
 
     // Setup event listeners
     setupEventListeners();
+
+    // Initialize resizer
+    initResizer();
+    initHorizontalResizers();
 
     console.log('✅ Application initialized');
 }
@@ -174,10 +183,15 @@ function onConnect() {
     updateConnectionStatus(true);
 
     // Kasa ID'sini bildir
-    const kasaId = localStorage.getItem('kasa_id');
-    if (kasaId) {
-        socket.emit('set_kasa', { kasa_id: parseInt(kasaId) });
+    let kasaId = localStorage.getItem('kasa_id');
+    if (!kasaId) {
+        // Varsayılan kasa ID'si ata (Mac/Demo için önemli)
+        kasaId = "1";
+        localStorage.setItem('kasa_id', kasaId);
+        localStorage.setItem('kasa_ad', 'Kasa 1');
+        console.log('📟 Default Kasa set: 1');
     }
+    socket.emit('set_kasa', { kasa_id: parseInt(kasaId) });
 }
 
 function onDisconnect() {
@@ -209,6 +223,7 @@ function onInitialData(data) {
     systemInfo = data.system || {};
     menuData = data.menu || {};
     adisyonlar = data.adisyonlar || {};
+    activeShift = data.active_shift || null;
 
     // Check for terminal role override in URL or localStorage
     const urlParams = new URLSearchParams(window.location.search);
@@ -225,6 +240,7 @@ function onInitialData(data) {
     updateSystemInfo();
     renderMenu();
     renderTables();
+    updateVardiyaUI(); // İlk yüklemede vardiya durumunu yansıt
 
     // Apply role restrictions
     if (isTerminal) {
@@ -409,7 +425,7 @@ function updateVardiyaUI() {
 }
 
 function enableCheckoutButtons(enabled) {
-    const btns = ['btnCash', 'btnCard', 'btnCredit', 'btnCari', 'btnFinalizePayment'];
+    const btns = ['btnTotalPayment', 'btnCari', 'btnFinalizePayment'];
     btns.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -921,17 +937,34 @@ function handlePaymentInputFocus(input) {
     const val = parseFloat(input.value) || 0;
     if (val === 0) {
         const total = getCurrentPaymentTotal();
-        const nakit = input === elements.paymentNakit ? 0 : (parseFloat(elements.paymentNakit.value) || 0);
-        const kart = input === elements.paymentKart ? 0 : (parseFloat(elements.paymentKart.value) || 0);
-        const cari = input === elements.paymentCari ? 0 : (parseFloat(elements.paymentCari.value) || 0);
 
-        const otherPaid = nakit + kart + cari;
-        const remaining = Math.max(0, total - otherPaid);
+        const otherInputs = [elements.paymentNakit, elements.paymentKart, elements.paymentCari].filter(el => el !== input);
+        let fullInput = null;
+        let otherTotal = 0;
+
+        otherInputs.forEach(el => {
+            const v = parseFloat(el.value) || 0;
+            otherTotal += v;
+            if (Math.abs(v - total) < 0.01) {
+                fullInput = el;
+            }
+        });
+
+        // Move total if it resides entirely in one other input and no partial payments exist
+        if (fullInput && Math.abs(otherTotal - total) < 0.01) {
+            fullInput.value = '';
+            input.value = total.toFixed(2);
+            updateRemainingAmount();
+            input.select();
+            return;
+        }
+
+        const remaining = Math.max(0, total - otherTotal);
 
         if (remaining > 0) {
             input.value = remaining.toFixed(2);
             updateRemainingAmount();
-            input.select(); // Select the text for easy editing
+            input.select();
         }
     }
 }
@@ -968,23 +1001,7 @@ function balancePaymentInputs(changedInput) {
     updateRemainingAmount();
 }
 
-function splitEqually() {
-    const countStr = prompt("Hesap kaç kişiye bölünecek?", "2");
-    const count = parseInt(countStr);
 
-    if (isNaN(count) || count <= 0) return;
-
-    const total = getCurrentPaymentTotal();
-    const perPerson = total / count;
-
-    // Default to Cash
-    elements.paymentNakit.value = perPerson.toFixed(2);
-    elements.paymentKart.value = '';
-    elements.paymentCari.value = '';
-
-    updateRemainingAmount(total);
-    showNotification(`Kişi başı: ${perPerson.toFixed(2)} TL. Ödeme türünü değiştirebilirsiniz.`, 'info');
-}
 
 async function searchCustomers() {
     const query = elements.customerSearch.value.toLowerCase();
@@ -1108,27 +1125,19 @@ function processPayment(type) {
  * Event listeners setup
  */
 function setupEventListeners() {
-    if (elements.btnCash) {
-        elements.btnCash.onclick = () => {
+    if (elements.btnTotalPayment) {
+        elements.btnTotalPayment.onclick = () => {
+            if (!currentMasa) {
+                showNotification('Lütfen önce masa seçiniz!', 'warning');
+                return;
+            }
+            if (currentItems.length === 0) {
+                showNotification('Sipariş listesi boş!', 'warning');
+                return;
+            }
             const isSelective = selectedItemIndices.length > 0;
-            console.log(`💵 btnCash clicked -> opening modal with Nakit prefill (Selective: ${isSelective})`);
+            console.log(`💶 btnTotalPayment clicked -> opening modal with Nakit prefill (Selective: ${isSelective})`);
             openPaymentModal('Nakit', isSelective);
-        };
-    }
-
-    if (elements.btnCard) {
-        elements.btnCard.onclick = () => {
-            const isSelective = selectedItemIndices.length > 0;
-            console.log(`💳 btnCard clicked -> opening modal with Kart prefill (Selective: ${isSelective})`);
-            openPaymentModal('Kredi Kartı', isSelective);
-        };
-    }
-
-    if (elements.btnCredit) {
-        elements.btnCredit.onclick = () => {
-            const isSelective = selectedItemIndices.length > 0;
-            console.log(`📝 btnCredit clicked -> opening modal with Cari prefill (Selective: ${isSelective})`);
-            openPaymentModal('Açık Hesap', isSelective);
         };
     }
 
@@ -1171,12 +1180,7 @@ function setupEventListeners() {
     }
 
     // Modal & Payment Events
-    if (elements.btnCredit) {
-        elements.btnCredit.onclick = () => {
-            console.log('📝 btnCredit clicked -> opening modal');
-            openPaymentModal();
-        };
-    }
+
 
     if (elements.closePaymentModal) {
         elements.closePaymentModal.onclick = () => closePaymentModal();
@@ -1230,9 +1234,7 @@ function setupEventListeners() {
         elements.btnPaySelected.onclick = () => openPaymentModal(null, true);
     }
 
-    if (elements.btnSplitEqually) {
-        elements.btnSplitEqually.onclick = () => splitEqually();
-    }
+
 
     // Close modal on outside click
     window.onclick = (event) => {
@@ -1466,5 +1468,137 @@ function createPaketOrderFromCid(phone, customer) {
         }
     } else {
         showToast('Boş paket slotu bulunamadı!', 'error');
+    }
+}
+/**
+ * Initialize vertical resizer for order list
+ */
+function initResizer() {
+    const resizer = elements.orderResizer;
+    const container = document.querySelector('.order-list-container');
+
+    if (!resizer || !container) return;
+
+    let startY, startHeight;
+
+    resizer.addEventListener('mousedown', (e) => {
+        startY = e.clientY;
+        startHeight = parseInt(document.defaultView.getComputedStyle(container).height, 10);
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+
+        // Disable text selection and add active class
+        document.body.style.userSelect = 'none';
+        resizer.style.background = 'var(--accent-color)';
+    });
+
+    function onMouseMove(e) {
+        const newHeight = startHeight + (e.clientY - startY);
+        if (newHeight > 100 && newHeight < (window.innerHeight * 0.7)) {
+            container.style.height = newHeight + 'px';
+            container.style.flex = `0 0 ${newHeight}px`;
+        }
+    }
+
+    function onMouseUp() {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+
+        document.body.style.userSelect = '';
+        resizer.style.background = '';
+
+        // Save preference to localStorage
+        localStorage.setItem('order_list_height', container.style.height);
+    }
+
+    // Restore saved height
+    const savedHeight = localStorage.getItem('order_list_height');
+    if (savedHeight) {
+        container.style.height = savedHeight;
+        container.style.flex = `0 0 ${savedHeight}`;
+    }
+}
+
+/**
+ * Initialize horizontal resizers for panels
+ */
+function initHorizontalResizers() {
+    const resizerLeft = elements.resizerLeft;
+    const resizerRight = elements.resizerRight;
+    const leftPanel = elements.leftPanel;
+    const rightPanel = elements.rightPanel;
+
+    if (resizerLeft && leftPanel) {
+        let startX, startWidth;
+        resizerLeft.addEventListener('mousedown', (e) => {
+            startX = e.clientX;
+            startWidth = parseInt(document.defaultView.getComputedStyle(leftPanel).width, 10);
+
+            document.addEventListener('mousemove', onMouseMoveLeft);
+            document.addEventListener('mouseup', onMouseUpLeft);
+
+            document.body.style.userSelect = 'none';
+            resizerLeft.style.background = 'var(--accent-color)';
+        });
+
+        function onMouseMoveLeft(e) {
+            const newWidth = startWidth + (e.clientX - startX);
+            // Min 150px, Max 50vw
+            if (newWidth > 150 && newWidth < (window.innerWidth * 0.5)) {
+                leftPanel.style.flex = `0 0 ${newWidth}px`;
+            }
+        }
+
+        function onMouseUpLeft() {
+            document.removeEventListener('mousemove', onMouseMoveLeft);
+            document.removeEventListener('mouseup', onMouseUpLeft);
+            document.body.style.userSelect = '';
+            resizerLeft.style.background = '';
+            localStorage.setItem('left_panel_width', leftPanel.style.flex);
+        }
+
+        // Restore saved width
+        const savedLeftWidth = localStorage.getItem('left_panel_width');
+        if (savedLeftWidth) {
+            leftPanel.style.flex = savedLeftWidth;
+        }
+    }
+
+    if (resizerRight && rightPanel) {
+        let startX, startWidth;
+        resizerRight.addEventListener('mousedown', (e) => {
+            startX = e.clientX;
+            startWidth = parseInt(document.defaultView.getComputedStyle(rightPanel).width, 10);
+
+            document.addEventListener('mousemove', onMouseMoveRight);
+            document.addEventListener('mouseup', onMouseUpRight);
+
+            document.body.style.userSelect = 'none';
+            resizerRight.style.background = 'var(--accent-color)';
+        });
+
+        function onMouseMoveRight(e) {
+            // Right resizer moves left to expand right panel
+            const newWidth = startWidth - (e.clientX - startX);
+            // Min 300px, Max 60vw
+            if (newWidth > 300 && newWidth < (window.innerWidth * 0.6)) {
+                rightPanel.style.flex = `0 0 ${newWidth}px`;
+            }
+        }
+
+        function onMouseUpRight() {
+            document.removeEventListener('mousemove', onMouseMoveRight);
+            document.removeEventListener('mouseup', onMouseUpRight);
+            document.body.style.userSelect = '';
+            resizerRight.style.background = '';
+            localStorage.setItem('right_panel_width', rightPanel.style.flex);
+        }
+
+        // Restore saved width
+        const savedRightWidth = localStorage.getItem('right_panel_width');
+        if (savedRightWidth) {
+            rightPanel.style.flex = savedRightWidth;
+        }
     }
 }

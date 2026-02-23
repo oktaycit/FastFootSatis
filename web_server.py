@@ -233,9 +233,33 @@ class RestaurantServer:
             logger.error(f"Ayar kaydetme hatası: {e}")
             return False
 
+    def get_system_info(self):
+        """Sistem bilgilerini döndür"""
+        return {
+            'company_name': self.company_name,
+            'terminal_id': self.terminal_id,
+            'ip': get_local_ip(),
+            'masa_sayisi': self.masa_sayisi,
+            'paket_sayisi': self.paket_sayisi,
+            'salons': self.salons,
+            'database': USE_DATABASE,
+            'pdf': PDF_SUPPORT,
+            'cid_enabled': self.cid_enabled,
+            'pos_enabled': self.pos_enabled
+        }
+
     def get_sid_active_shift(self, sid):
         """Socket SID'ine bağlı aktif vardiyayı getir"""
-        if not USE_DATABASE: return None
+        if not USE_DATABASE:
+            # DB yoksa Mac/Demo modu için her zaman açık bir vardiya varmış gibi davran
+            return {
+                'id': 0,
+                'kasiyer': 'Demo Kasiyer',
+                'kasa_id': 1,
+                'durum': 'acik',
+                'acilis_zamani': datetime.datetime.now().isoformat()
+            }
+        
         kasa_id = self.sid_kasa_map.get(sid)
         if not kasa_id: return None
         return db.get_active_shift_by_kasa(kasa_id)
