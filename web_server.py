@@ -263,6 +263,7 @@ class RestaurantServer:
         kasa_id = self.sid_kasa_map.get(sid)
         if not kasa_id: return None
         
+        from decimal import Decimal
         shift = db.get_active_shift_by_kasa(kasa_id)
         if shift:
             shift_dict = dict(shift)
@@ -270,6 +271,12 @@ class RestaurantServer:
                 shift_dict['acilis_zamani'] = shift_dict['acilis_zamani'].isoformat()
             if 'kapanis_zamani' in shift_dict and hasattr(shift_dict['kapanis_zamani'], 'isoformat'):
                 shift_dict['kapanis_zamani'] = shift_dict['kapanis_zamani'].isoformat()
+            
+            # Decimal değerleri float'a çevir
+            for key in ['acilis_bakiyesi', 'kapanis_nakit', 'kapanis_kart']:
+                if key in shift_dict and isinstance(shift_dict[key], Decimal):
+                    shift_dict[key] = float(shift_dict[key])
+                    
             return shift_dict
             
         return None
