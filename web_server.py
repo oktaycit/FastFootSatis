@@ -622,6 +622,16 @@ def menu_edit_page():
     """Menü düzenleme sayfası"""
     return app.send_static_file('menu_edit.html')
 
+@app.route('/kasa')
+def kasa_page_clean():
+    """Kasa yönetimi sayfası (Temiz URL)"""
+    return app.send_static_file('kasa_yonetimi.html')
+
+@app.route('/kurye')
+def kurye_page_clean():
+    """Kurye yönetimi sayfası (Temiz URL)"""
+    return app.send_static_file('kurye_yonetimi.html')
+
 @app.route('/cari')
 def cari_page():
     """Cari işlemler sayfası"""

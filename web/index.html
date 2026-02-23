@@ -110,33 +110,53 @@
                     <button class="btn btn-card" id="btnCard">💳 KART</button>
                     <button class="btn btn-credit" id="btnCredit">📝 AÇIK</button>
                 </div>
-                <!-- Management Buttons -->
-                <div class="management-buttons">
+                <!-- Main Actions -->
+                <div class="main-actions"
+                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
                     <a href="/cari" style="text-decoration:none;">
-                        <button class="btn btn-secondary" id="btnCari">💰 CARİ</button>
+                        <button class="btn btn-secondary" id="btnCari" style="margin-bottom:0;">💰 CARİ</button>
                     </a>
-                    <a href="/kasa_yonetimi.html" style="text-decoration:none;">
-                        <button class="btn" style="background: #34495e; color: white;"><i
-                                class="fas fa-cash-register"></i> KASA / VARDİYA</button>
+                    <a href="/kasa" style="text-decoration:none;">
+                        <button class="btn" style="background: #34495e; color: white; margin-bottom:0;"><i
+                                class="fas fa-cash-register"></i> KASA</button>
                     </a>
-                    <a href="/kurye_yonetimi.html" style="text-decoration:none;">
-                        <button class="btn" style="background: #27ae60; color: white;">🛵 KURYE YÖNETİMİ</button>
-                    </a>
-                    <a href="/settings" style="text-decoration:none;">
-                        <button class="btn btn-secondary" id="btnSettings">⚙️ AYARLAR</button>
-                    </a>
-                    <button class="btn btn-info" id="btnAbout">ℹ️ HAKKINDA</button>
-                    <a href="/terminals" style="text-decoration:none;">
-                        <button class="btn btn-terminals" id="btnTerminals">📡 TERMİNAL</button>
-                    </a>
+                </div>
+
+                <!-- Secondary Management Buttons (Grouped) -->
+                <div class="management-buttons" style="margin-top: 10px;">
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px;">
+                        <a href="/kurye" style="text-decoration:none;" title="Kurye">
+                            <button class="btn"
+                                style="background: #27ae60; color: white; font-size: 11px; padding: 10px 5px;">🛵
+                                KURYE</button>
+                        </a>
+                        <a href="/settings" style="text-decoration:none;" title="Ayarlar">
+                            <button class="btn btn-secondary" id="btnSettings"
+                                style="font-size: 11px; padding: 10px 5px;">⚙️ AYARLAR</button>
+                        </a>
+                        <a href="/terminals" style="text-decoration:none;" title="Terminaller">
+                            <button class="btn btn-terminals" id="btnTerminals"
+                                style="font-size: 11px; padding: 10px 5px;">📡 TERMİNAL</button>
+                        </a>
+                    </div>
+                </div>
+
+                <div class="extra-modules"
+                    style="margin-top: 5px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px;">
                     <a href="/mutfak" style="text-decoration:none;" target="_blank">
-                        <button class="btn" style="background: #2c3e50; color: white;">👨‍🍳 MUTFAK</button>
+                        <button class="btn"
+                            style="background: #2c3e50; color: white; font-size: 11px; padding: 10px 5px;">👨‍🍳
+                            MUTFAK</button>
                     </a>
                     <a href="/waiter" style="text-decoration:none;" target="_blank">
-                        <button class="btn" style="background: #e67e22; color: white;">🤵 GARSON</button>
+                        <button class="btn"
+                            style="background: #e67e22; color: white; font-size: 11px; padding: 10px 5px;">🤵
+                            GARSON</button>
                     </a>
                     <a href="/waiters_manage" style="text-decoration:none;">
-                        <button class="btn" style="background: #8e44ad; color: white;">👥 GARSON YÖNETİMİ</button>
+                        <button class="btn"
+                            style="background: #8e44ad; color: white; font-size: 11px; padding: 10px 5px;">👥
+                            PERSONEL</button>
                     </a>
                 </div>
             </div>
