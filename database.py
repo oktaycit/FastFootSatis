@@ -188,6 +188,43 @@ class Database:
             # SATIŞLAR TABLOSUNA VARDIYA_ID VE KURYE_ID EKLE
             cursor.execute("ALTER TABLE satislar ADD COLUMN IF NOT EXISTS vardiya_id INTEGER")
             cursor.execute("ALTER TABLE satislar ADD COLUMN IF NOT EXISTS kurye_id INTEGER")
+
+            # PUBLIC QR NONCE TABLOSU
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS public_qr_nonces (
+                    nonce TEXT PRIMARY KEY,
+                    table_name TEXT NOT NULL,
+                    shift_id INTEGER,
+                    expires_at TIMESTAMP NOT NULL,
+                    used_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # PUBLIC MASA OTURUMLARI TABLOSU
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS public_table_sessions (
+                    id TEXT PRIMARY KEY,
+                    table_name TEXT NOT NULL,
+                    shift_id INTEGER,
+                    verify_method TEXT NOT NULL DEFAULT 'dynamic_qr',
+                    device_fingerprint TEXT,
+                    ip TEXT,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    expires_at TIMESTAMP NOT NULL
+                )
+            """)
+
+            # MASA NFC ETİKET TABLOSU
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS table_nfc_tags (
+                    table_name TEXT PRIMARY KEY,
+                    tag_uid_hash TEXT NOT NULL,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
             
             # İNDEXLER
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_satislar_tarih ON satislar(tarih_saat)")
@@ -197,6 +234,10 @@ class Database:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_cari_hareketler_cari ON cari_hareketler(cari_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_menu_kategori ON menu(kategori)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_vardiyalar_durum ON vardiyalar(durum)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_public_qr_nonces_exp ON public_qr_nonces(expires_at)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_public_sessions_table ON public_table_sessions(table_name)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_public_sessions_shift ON public_table_sessions(shift_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_public_sessions_status_exp ON public_table_sessions(status, expires_at)")
             
             print("✓ Veri tabanı şeması oluşturuldu")
     
@@ -577,6 +618,89 @@ class Database:
                 LIMIT %s
             """, (limit,))
             return cursor.fetchall()
+
+    # ==================== PUBLIC QR OTURUM İŞLEMLERİ ====================
+
+    def cleanup_public_security_state(self):
+        """Süresi dolan nonce ve session kayıtlarını temizle"""
+        with self.get_cursor() as cursor:
+            cursor.execute("DELETE FROM public_qr_nonces WHERE expires_at < CURRENT_TIMESTAMP OR used_at IS NOT NULL")
+            cursor.execute("DELETE FROM public_table_sessions WHERE expires_at < CURRENT_TIMESTAMP OR status <> 'active'")
+
+    def create_public_nonce(self, nonce, table_name, shift_id, expires_at):
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO public_qr_nonces (nonce, table_name, shift_id, expires_at)
+                VALUES (%s, %s, %s, %s)
+            """, (nonce, table_name, shift_id, expires_at))
+
+    def get_public_nonce(self, nonce):
+        with self.get_cursor() as cursor:
+            cursor.execute("SELECT * FROM public_qr_nonces WHERE nonce = %s", (nonce,))
+            return cursor.fetchone()
+
+    def mark_public_nonce_used(self, nonce):
+        with self.get_cursor() as cursor:
+            cursor.execute("UPDATE public_qr_nonces SET used_at = CURRENT_TIMESTAMP WHERE nonce = %s", (nonce,))
+
+    def create_public_session(self, session_id, table_name, shift_id, verify_method, device_fingerprint, ip, expires_at):
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO public_table_sessions
+                    (id, table_name, shift_id, verify_method, device_fingerprint, ip, status, expires_at)
+                VALUES (%s, %s, %s, %s, %s, %s, 'active', %s)
+            """, (session_id, table_name, shift_id, verify_method, device_fingerprint, ip, expires_at))
+
+    def get_public_session(self, session_id):
+        with self.get_cursor() as cursor:
+            cursor.execute("SELECT * FROM public_table_sessions WHERE id = %s", (session_id,))
+            return cursor.fetchone()
+
+    def update_public_session_expiry(self, session_id, expires_at):
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                UPDATE public_table_sessions
+                SET expires_at = %s
+                WHERE id = %s AND status = 'active'
+            """, (expires_at, session_id))
+
+    def revoke_public_sessions_for_table(self, table_name):
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                UPDATE public_table_sessions
+                SET status = 'revoked'
+                WHERE table_name = %s AND status = 'active'
+            """, (table_name,))
+
+    def revoke_public_sessions_for_shift(self, shift_id):
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                UPDATE public_table_sessions
+                SET status = 'revoked'
+                WHERE shift_id = %s AND status = 'active'
+            """, (shift_id,))
+
+    def save_nfc_tag_hash(self, table_name, tag_uid_hash):
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO table_nfc_tags (table_name, tag_uid_hash, is_active, updated_at)
+                VALUES (%s, %s, TRUE, CURRENT_TIMESTAMP)
+                ON CONFLICT (table_name)
+                DO UPDATE SET
+                    tag_uid_hash = EXCLUDED.tag_uid_hash,
+                    is_active = TRUE,
+                    updated_at = CURRENT_TIMESTAMP
+            """, (table_name, tag_uid_hash))
+
+    def get_nfc_tag_hash(self, table_name):
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                SELECT tag_uid_hash
+                FROM table_nfc_tags
+                WHERE table_name = %s AND is_active = TRUE
+            """, (table_name,))
+            row = cursor.fetchone()
+            return row['tag_uid_hash'] if row else None
     
     # ==================== KURYE İŞLEMLERİ ====================
 

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Masa Session Uretici</title>
+    <style>
+        body { font-family: "Segoe UI", Arial, sans-serif; margin: 0; background: #f8fafc; color: #111827; }
+        .wrap { max-width: 760px; margin: 24px auto; padding: 16px; }
+        .card { background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; }
+        .row { display: grid; grid-template-columns: 1fr 120px 120px; gap: 8px; }
+        input, button { border: 1px solid #d1d5db; border-radius: 8px; padding: 10px; font-size: 14px; }
+        button { background: #0f766e; color: white; border: 0; cursor: pointer; font-weight: 600; }
+        pre { white-space: pre-wrap; word-break: break-all; background: #0b1020; color: #dbeafe; border-radius: 8px; padding: 12px; }
+        .hint { color: #475569; font-size: 14px; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="card">
+        <h2 style="margin-top:0;">Dinamik QR Session Uretici</h2>
+        <p class="hint">Garson/kasa bu ekrandan masa icin sureli token olusturur. Müşteri bunu QR'dan alarak dogrular.</p>
+
+        <div class="row">
+            <input id="tableName" placeholder="Masa 1" />
+            <input id="kasaId" placeholder="Kasa ID" value="1" />
+            <button id="btnCreate">Olustur</button>
+        </div>
+        <div class="row" style="margin-top:8px;">
+            <input id="waiterName" placeholder="Garson adi" />
+            <input id="waiterPin" placeholder="Garson PIN" />
+            <input id="adminPassword" placeholder="veya Admin sifre" />
+        </div>
+        <p class="hint">TTL: 15 dk (varsayilan), tek kullanimlik token.</p>
+
+        <h3>URL</h3>
+        <pre id="outUrl">-</pre>
+
+        <h3>Token</h3>
+        <pre id="outToken">-</pre>
+
+        <hr style="margin:16px 0;border:0;border-top:1px solid #e5e7eb;">
+        <h3 style="margin-top:0;">NFC Etiket Kaydet</h3>
+        <div class="row">
+            <input id="nfcTableName" placeholder="Masa 1" />
+            <input id="nfcUid" placeholder="NFC UID" />
+            <button id="btnNfcSave">NFC Kaydet</button>
+        </div>
+        <p class="hint">NFC UID ham değer olarak girilir, sunucu hashleyip kaydeder.</p>
+    </div>
+</div>
+<script>
+const tableName = document.getElementById('tableName');
+const kasaId = document.getElementById('kasaId');
+const waiterName = document.getElementById('waiterName');
+const waiterPin = document.getElementById('waiterPin');
+const adminPassword = document.getElementById('adminPassword');
+const outUrl = document.getElementById('outUrl');
+const outToken = document.getElementById('outToken');
+const nfcTableName = document.getElementById('nfcTableName');
+const nfcUid = document.getElementById('nfcUid');
+document.getElementById('btnCreate').addEventListener('click', async () => {
+    const t = tableName.value.trim();
+    if (!t) {
+        alert('Masa adi gerekli');
+        return;
+    }
+
+    const r = await fetch('/api/waiter/table-session/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            table_name: t,
+            kasa_id: Number(kasaId.value || 0),
+            ttl_seconds: 900,
+            waiter_name: waiterName.value.trim(),
+            waiter_pin: waiterPin.value.trim(),
+            admin_password: adminPassword.value.trim()
+        })
+    });
+    const data = await r.json();
+    if (!data.success) {
+        alert(data.error || 'Olusturma hatasi');
+        return;
+    }
+
+    const abs = `${location.origin}${data.verify_url}`;
+    outUrl.textContent = abs;
+    outToken.textContent = data.qr_token;
+});
+
+document.getElementById('btnNfcSave').addEventListener('click', async () => {
+    const t = nfcTableName.value.trim();
+    const uid = nfcUid.value.trim();
+    if (!t || !uid) {
+        alert('Masa ve NFC UID gerekli');
+        return;
+    }
+
+    const r = await fetch('/api/waiter/nfc-tag/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            table_name: t,
+            nfc_uid: uid,
+            waiter_name: waiterName.value.trim(),
+            waiter_pin: waiterPin.value.trim(),
+            admin_password: adminPassword.value.trim()
+        })
+    });
+    const data = await r.json();
+    if (!data.success) {
+        alert(data.error || 'NFC kayit hatasi');
+        return;
+    }
+    alert(`${data.table_name} icin NFC kaydi tamamlandi`);
+});
+</script>
+</body>
+</html>

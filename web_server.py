@@ -18,6 +18,10 @@ import socket
 import subprocess
 import platform
 import uuid
+import hmac
+import hashlib
+import base64
+import secrets
 import serial
 import serial.tools.list_ports
 import urllib.parse
@@ -149,6 +153,18 @@ class RestaurantServer:
         # Terminal sunucusu
         self.terminal_thread = None
         self.running = False
+
+        # Public QR sipariş güvenlik durumu (DB'siz fallback, runtime memory)
+        self.qr_secret = os.getenv("FASTFOOT_QR_SECRET", app.config['SECRET_KEY'])
+        self.public_sessions = {}      # session_id -> session_info
+        self.public_nonce_store = {}   # nonce -> nonce_info
+        self.public_rate_limit = defaultdict(list)  # session_id -> [timestamps]
+
+        if USE_DATABASE:
+            try:
+                db.init_database()
+            except Exception as e:
+                logger.error(f"DB init hatası (public session şeması): {e}")
         
         # Ayarları yükle
         self.load_settings()
@@ -165,6 +181,302 @@ class RestaurantServer:
         logger.info("🚀 RestaurantServer initialized")
         logger.info(f"📊 Masa: {self.masa_sayisi}, Paket: {self.paket_sayisi}")
         logger.info(f"📡 IP: {get_local_ip()}")
+
+    # ==================== PUBLIC QR SESSION HELPERS ====================
+    def _b64url_encode(self, raw):
+        return base64.urlsafe_b64encode(raw).decode('ascii').rstrip("=")
+
+    def _b64url_decode(self, raw):
+        raw = raw + "=" * (-len(raw) % 4)
+        return base64.urlsafe_b64decode(raw.encode('ascii'))
+
+    def _cleanup_public_security_state(self):
+        now_ts = time.time()
+        if USE_DATABASE:
+            try:
+                db.cleanup_public_security_state()
+            except Exception as e:
+                logger.error(f"Public state DB cleanup hatası: {e}")
+
+        expired_nonces = [
+            nonce for nonce, data in self.public_nonce_store.items()
+            if data.get('expires_at', 0) <= now_ts or data.get('used_at')
+        ]
+        for nonce in expired_nonces:
+            self.public_nonce_store.pop(nonce, None)
+
+        expired_sessions = [
+            sid for sid, data in self.public_sessions.items()
+            if data.get('status') != 'active' or data.get('expires_at', 0) <= now_ts
+        ]
+        for sid in expired_sessions:
+            self.public_sessions.pop(sid, None)
+            self.public_rate_limit.pop(sid, None)
+
+    def _create_signed_qr_token(self, table_name, shift_id=None, ttl_seconds=900):
+        self._cleanup_public_security_state()
+        nonce = secrets.token_urlsafe(10)
+        exp_ts = int(time.time()) + int(ttl_seconds)
+        payload = {
+            'table_name': table_name,
+            'shift_id': shift_id,
+            'nonce': nonce,
+            'exp': exp_ts
+        }
+        payload_bytes = json.dumps(payload, separators=(',', ':'), ensure_ascii=False).encode('utf-8')
+        payload_b64 = self._b64url_encode(payload_bytes)
+        signature = hmac.new(self.qr_secret.encode('utf-8'), payload_b64.encode('ascii'), hashlib.sha256).digest()
+        token = f"{payload_b64}.{self._b64url_encode(signature)}"
+
+        self.public_nonce_store[nonce] = {
+            'table_name': table_name,
+            'shift_id': shift_id,
+            'expires_at': exp_ts,
+            'used_at': None
+        }
+        if USE_DATABASE:
+            try:
+                db.create_public_nonce(
+                    nonce=nonce,
+                    table_name=table_name,
+                    shift_id=shift_id,
+                    expires_at=datetime.datetime.fromtimestamp(exp_ts)
+                )
+            except Exception as e:
+                logger.error(f"Public nonce DB kayıt hatası: {e}")
+        return token, exp_ts
+
+    def _verify_signed_qr_token(self, token):
+        self._cleanup_public_security_state()
+        try:
+            payload_b64, sig_b64 = token.split('.', 1)
+            expected_sig = hmac.new(
+                self.qr_secret.encode('utf-8'),
+                payload_b64.encode('ascii'),
+                hashlib.sha256
+            ).digest()
+            actual_sig = self._b64url_decode(sig_b64)
+            if not hmac.compare_digest(expected_sig, actual_sig):
+                return None, "Geçersiz imza"
+
+            payload_raw = self._b64url_decode(payload_b64)
+            payload = json.loads(payload_raw.decode('utf-8'))
+        except Exception:
+            return None, "Geçersiz token formatı"
+
+        now_ts = int(time.time())
+        if payload.get('exp', 0) < now_ts:
+            return None, "Token süresi dolmuş"
+
+        nonce = payload.get('nonce')
+        nonce_data = self.public_nonce_store.get(nonce)
+        if USE_DATABASE:
+            try:
+                db_nonce = db.get_public_nonce(nonce)
+                if db_nonce:
+                    nonce_data = {
+                        'table_name': db_nonce.get('table_name'),
+                        'shift_id': db_nonce.get('shift_id'),
+                        'expires_at': int(db_nonce.get('expires_at').timestamp()) if db_nonce.get('expires_at') else 0,
+                        'used_at': db_nonce.get('used_at')
+                    }
+            except Exception as e:
+                logger.error(f"Public nonce DB okuma hatası: {e}")
+        if not nonce_data:
+            return None, "Token geçersiz veya kullanılmış"
+        if nonce_data.get('used_at'):
+            return None, "Token daha önce kullanılmış"
+        if nonce_data.get('expires_at', 0) < now_ts:
+            return None, "Token süresi dolmuş"
+
+        return payload, None
+
+    def create_public_session_from_qr(self, token, device_fingerprint="", ip=""):
+        payload, err = self._verify_signed_qr_token(token)
+        if err:
+            return None, err
+
+        nonce = payload['nonce']
+        self.public_nonce_store[nonce]['used_at'] = int(time.time())
+        if USE_DATABASE:
+            try:
+                db.mark_public_nonce_used(nonce)
+            except Exception as e:
+                logger.error(f"Public nonce DB used update hatası: {e}")
+
+        session_id = secrets.token_urlsafe(24)
+        expires_at = int(time.time()) + 3600  # 60 dk
+        session_data = {
+            'id': session_id,
+            'table_name': payload['table_name'],
+            'shift_id': payload.get('shift_id'),
+            'verify_method': 'dynamic_qr',
+            'device_fingerprint': device_fingerprint[:200],
+            'ip': ip,
+            'status': 'active',
+            'created_at': int(time.time()),
+            'expires_at': expires_at
+        }
+        self.public_sessions[session_id] = session_data
+        if USE_DATABASE:
+            try:
+                db.create_public_session(
+                    session_id=session_id,
+                    table_name=session_data['table_name'],
+                    shift_id=session_data.get('shift_id'),
+                    verify_method='dynamic_qr',
+                    device_fingerprint=session_data.get('device_fingerprint', ''),
+                    ip=ip,
+                    expires_at=datetime.datetime.fromtimestamp(expires_at)
+                )
+            except Exception as e:
+                logger.error(f"Public session DB kayıt hatası: {e}")
+        return session_data, None
+
+    def create_public_session_from_nfc(self, table_name, nfc_uid, device_fingerprint="", ip=""):
+        if table_name not in self.adisyonlar:
+            return None, "Geçersiz masa"
+        if not nfc_uid:
+            return None, "NFC verisi gerekli"
+
+        nfc_hash = hashlib.sha256(nfc_uid.encode('utf-8')).hexdigest()
+        expected_hash = None
+        if USE_DATABASE:
+            try:
+                expected_hash = db.get_nfc_tag_hash(table_name)
+            except Exception as e:
+                logger.error(f"NFC hash DB okuma hatası: {e}")
+
+        if not expected_hash:
+            return None, "Bu masa için NFC doğrulama henüz tanımlı değil"
+        if expected_hash != nfc_hash:
+            return None, "NFC etiketi masa ile eşleşmiyor"
+
+        session_id = secrets.token_urlsafe(24)
+        expires_at = int(time.time()) + 3600
+        session_data = {
+            'id': session_id,
+            'table_name': table_name,
+            'shift_id': None,
+            'verify_method': 'nfc',
+            'device_fingerprint': device_fingerprint[:200],
+            'ip': ip,
+            'status': 'active',
+            'created_at': int(time.time()),
+            'expires_at': expires_at
+        }
+        self.public_sessions[session_id] = session_data
+        if USE_DATABASE:
+            try:
+                db.create_public_session(
+                    session_id=session_id,
+                    table_name=table_name,
+                    shift_id=None,
+                    verify_method='nfc',
+                    device_fingerprint=session_data.get('device_fingerprint', ''),
+                    ip=ip,
+                    expires_at=datetime.datetime.fromtimestamp(expires_at)
+                )
+            except Exception as e:
+                logger.error(f"NFC session DB kayıt hatası: {e}")
+        return session_data, None
+
+    def validate_public_session(self, session_id, table_name=None):
+        self._cleanup_public_security_state()
+        s = self.public_sessions.get(session_id)
+        if USE_DATABASE:
+            try:
+                db_session = db.get_public_session(session_id)
+                if db_session:
+                    s = {
+                        'id': db_session.get('id'),
+                        'table_name': db_session.get('table_name'),
+                        'shift_id': db_session.get('shift_id'),
+                        'verify_method': db_session.get('verify_method'),
+                        'device_fingerprint': db_session.get('device_fingerprint'),
+                        'ip': db_session.get('ip'),
+                        'status': db_session.get('status'),
+                        'created_at': int(db_session.get('created_at').timestamp()) if db_session.get('created_at') else 0,
+                        'expires_at': int(db_session.get('expires_at').timestamp()) if db_session.get('expires_at') else 0
+                    }
+            except Exception as e:
+                logger.error(f"Public session DB okuma hatası: {e}")
+        if not s:
+            return None, "Oturum bulunamadı"
+        if s.get('status') != 'active':
+            return None, "Oturum aktif değil"
+        if s.get('expires_at', 0) < int(time.time()):
+            return None, "Oturum süresi dolmuş"
+        if table_name and s.get('table_name') != table_name:
+            return None, "Masa uyuşmazlığı"
+        return s, None
+
+    def can_place_public_order(self, session_id, max_per_minute=3):
+        now_ts = time.time()
+        recent = [t for t in self.public_rate_limit.get(session_id, []) if now_ts - t <= 60]
+        if len(recent) >= max_per_minute:
+            self.public_rate_limit[session_id] = recent
+            return False
+        recent.append(now_ts)
+        self.public_rate_limit[session_id] = recent
+        return True
+
+    def revoke_public_sessions_for_table(self, table_name):
+        if USE_DATABASE:
+            try:
+                db.revoke_public_sessions_for_table(table_name)
+            except Exception as e:
+                logger.error(f"Public session table revoke DB hatası: {e}")
+        for session in self.public_sessions.values():
+            if session.get('table_name') == table_name and session.get('status') == 'active':
+                session['status'] = 'revoked'
+
+    def revoke_public_sessions_for_shift(self, shift_id):
+        if USE_DATABASE:
+            try:
+                db.revoke_public_sessions_for_shift(shift_id)
+            except Exception as e:
+                logger.error(f"Public session shift revoke DB hatası: {e}")
+        for session in self.public_sessions.values():
+            if session.get('shift_id') == shift_id and session.get('status') == 'active':
+                session['status'] = 'revoked'
+
+    def add_order_item(self, masa_adi, urun, fiyat, garson='Bilinmiyor', adet=1):
+        if masa_adi not in self.adisyonlar:
+            return None
+
+        siparis_id = str(uuid.uuid4())[:8]
+        siparis = {
+            'uid': siparis_id,
+            'urun': urun,
+            'adet': int(adet),
+            'fiyat': float(fiyat),
+            'tip': 'normal',
+            'garson': garson,
+            'durum': 'mutfakta',
+            'saat': datetime.datetime.now().strftime("%H:%M:%S")
+        }
+        self.adisyonlar[masa_adi].append(siparis)
+        self.save_active_adisyonlar()
+
+        items = self.adisyonlar[masa_adi]
+        total = sum(item['adet'] * item['fiyat'] for item in items)
+        socketio.emit('masa_update', {
+            'masa': masa_adi,
+            'items': items,
+            'total': total
+        })
+        socketio.emit('kitchen_new_order', {
+            'uid': siparis_id,
+            'masa': masa_adi,
+            'urun': urun,
+            'adet': int(adet),
+            'saat': siparis['saat'],
+            'garson': garson,
+            'terminal_id': f"public:{masa_adi}"
+        })
+        self.send_to_kitchen_legacy(masa_adi, urun, int(adet))
+        return siparis
     
     def load_settings(self):
         """Ayarları dosyadan yükle"""
@@ -726,6 +1038,16 @@ def waiters_manage_page():
     """Garson yönetimi sayfası"""
     return app.send_static_file('waiters_manage.html')
 
+@app.route('/menu/public')
+def public_menu_page():
+    """Müşteri QR menü sayfası"""
+    return app.send_static_file('customer_menu.html')
+
+@app.route('/waiter/table-session')
+def waiter_table_session_page():
+    """Garson için dinamik masa oturumu üretici"""
+    return app.send_static_file('table_session.html')
+
 @app.route('/api/system/info')
 def system_info():
     """Sistem bilgileri"""
@@ -1023,6 +1345,7 @@ def api_vardiya_kapat():
     if not shift_id: return jsonify({'success': False, 'error': 'Vardiya ID gerekli'})
     try:
         db.close_shift(shift_id, nakit, kart)
+        server.revoke_public_sessions_for_shift(int(shift_id))
         # Tüm bağlı istemcilere vardiya kapandığını bildir
         socketio.emit('vardiya_update', None)
         return jsonify({'success': True})
@@ -1377,6 +1700,212 @@ def save_salons_api():
         logger.error(f"Salon kaydetme hatası: {e}")
         return jsonify({'success': False, 'error': str(e)})
 
+# ==================== PUBLIC QR ORDERING ====================
+
+@app.route('/api/public/menu')
+def api_public_menu():
+    table_hint = (request.args.get('table_hint') or "").strip()
+    table_exists = table_hint in server.adisyonlar if table_hint else False
+    return jsonify({
+        'success': True,
+        'table_hint': table_hint,
+        'table_exists': table_exists,
+        'menu': server.menu_data
+    })
+
+@app.route('/api/waiter/table-session/create', methods=['POST'])
+def api_waiter_create_table_session():
+    data = request.get_json(silent=True) or {}
+    table_name = (data.get('table_name') or "").strip()
+    kasa_id = data.get('kasa_id')
+    ttl_seconds = int(data.get('ttl_seconds', 900))
+    waiter_name = (data.get('waiter_name') or "").strip()
+    waiter_pin = (data.get('waiter_pin') or "").strip()
+    admin_password = (data.get('admin_password') or "").strip()
+
+    authorized = False
+    if admin_password and admin_password == server.admin_password:
+        authorized = True
+    elif waiter_name and waiter_pin:
+        waiter = next((w for w in server.waiters if w.get('name') == waiter_name and w.get('pin') == waiter_pin), None)
+        authorized = waiter is not None
+    if not authorized:
+        return jsonify({'success': False, 'error': 'Yetkisiz istek'}), 401
+
+    if not table_name:
+        return jsonify({'success': False, 'error': 'Masa adı gerekli'}), 400
+    if table_name not in server.adisyonlar:
+        return jsonify({'success': False, 'error': 'Geçersiz masa adı'}), 400
+
+    shift_id = None
+    if USE_DATABASE and kasa_id:
+        shift = db.get_active_shift_by_kasa(kasa_id)
+        if shift:
+            shift_id = shift.get('id')
+
+    token, expires_at = server._create_signed_qr_token(
+        table_name=table_name,
+        shift_id=shift_id,
+        ttl_seconds=max(120, min(ttl_seconds, 1800))
+    )
+    verify_url = f"/menu/public?table_hint={urllib.parse.quote(table_name)}&qr_token={urllib.parse.quote(token)}"
+
+    return jsonify({
+        'success': True,
+        'table_name': table_name,
+        'shift_id': shift_id,
+        'qr_token': token,
+        'expires_at_unix': expires_at,
+        'verify_url': verify_url
+    })
+
+@app.route('/api/waiter/nfc-tag/register', methods=['POST'])
+def api_waiter_register_nfc_tag():
+    data = request.get_json(silent=True) or {}
+    table_name = (data.get('table_name') or "").strip()
+    nfc_uid = (data.get('nfc_uid') or "").strip()
+    waiter_name = (data.get('waiter_name') or "").strip()
+    waiter_pin = (data.get('waiter_pin') or "").strip()
+    admin_password = (data.get('admin_password') or "").strip()
+
+    authorized = False
+    if admin_password and admin_password == server.admin_password:
+        authorized = True
+    elif waiter_name and waiter_pin:
+        waiter = next((w for w in server.waiters if w.get('name') == waiter_name and w.get('pin') == waiter_pin), None)
+        authorized = waiter is not None
+    if not authorized:
+        return jsonify({'success': False, 'error': 'Yetkisiz istek'}), 401
+
+    if not table_name or table_name not in server.adisyonlar:
+        return jsonify({'success': False, 'error': 'Gecerli masa gerekli'}), 400
+    if not nfc_uid:
+        return jsonify({'success': False, 'error': 'NFC UID gerekli'}), 400
+    if not USE_DATABASE:
+        return jsonify({'success': False, 'error': 'NFC dogrulama icin DB gerekli'}), 400
+
+    try:
+        nfc_hash = hashlib.sha256(nfc_uid.encode('utf-8')).hexdigest()
+        db.save_nfc_tag_hash(table_name, nfc_hash)
+        return jsonify({'success': True, 'table_name': table_name})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/public/session/verify-dynamic-qr', methods=['POST'])
+def api_public_verify_dynamic_qr():
+    data = request.get_json(silent=True) or {}
+    qr_token = (data.get('qr_token') or "").strip()
+    table_hint = (data.get('table_hint') or "").strip()
+    device_fingerprint = (data.get('device_fingerprint') or "").strip()
+
+    if not qr_token:
+        return jsonify({'success': False, 'error': 'QR token gerekli'}), 400
+
+    session, err = server.create_public_session_from_qr(
+        token=qr_token,
+        device_fingerprint=device_fingerprint,
+        ip=request.remote_addr or ""
+    )
+    if err:
+        return jsonify({'success': False, 'error': err}), 401
+    if session['table_name'] not in server.adisyonlar:
+        return jsonify({'success': False, 'error': 'Masa aktif degil'}), 400
+
+    if table_hint and session['table_name'] != table_hint:
+        return jsonify({'success': False, 'error': 'Masa uyuşmuyor'}), 403
+
+    return jsonify({
+        'success': True,
+        'session_token': session['id'],
+        'table_name': session['table_name'],
+        'expires_at_unix': session['expires_at']
+    })
+
+@app.route('/api/public/session/verify-nfc', methods=['POST'])
+def api_public_verify_nfc():
+    data = request.get_json(silent=True) or {}
+    table_hint = (data.get('table_hint') or "").strip()
+    nfc_uid = (data.get('nfc_uid') or "").strip()
+    device_fingerprint = (data.get('device_fingerprint') or "").strip()
+
+    if not table_hint or not nfc_uid:
+        return jsonify({'success': False, 'error': 'Masa ve NFC bilgisi gerekli'}), 400
+
+    session, err = server.create_public_session_from_nfc(
+        table_name=table_hint,
+        nfc_uid=nfc_uid,
+        device_fingerprint=device_fingerprint,
+        ip=request.remote_addr or ""
+    )
+    if err:
+        return jsonify({'success': False, 'error': err}), 401
+
+    return jsonify({
+        'success': True,
+        'session_token': session['id'],
+        'table_name': session['table_name'],
+        'expires_at_unix': session['expires_at']
+    })
+
+@app.route('/api/public/order', methods=['POST'])
+def api_public_order():
+    data = request.get_json(silent=True) or {}
+    session_token = (data.get('session_token') or "").strip()
+    table_name = (data.get('table_name') or "").strip()
+    raw_items = data.get('items') or []
+
+    if not session_token or not table_name:
+        return jsonify({'success': False, 'error': 'Oturum ve masa bilgisi gerekli'}), 400
+    if not isinstance(raw_items, list) or not raw_items:
+        return jsonify({'success': False, 'error': 'Sipariş kalemleri gerekli'}), 400
+    if table_name not in server.adisyonlar:
+        return jsonify({'success': False, 'error': 'Masa bulunamadı'}), 400
+
+    session, err = server.validate_public_session(session_token, table_name=table_name)
+    if err:
+        return jsonify({'success': False, 'error': err}), 401
+
+    if not server.can_place_public_order(session_token, max_per_minute=3):
+        return jsonify({'success': False, 'error': 'Çok sık sipariş gönderildi, lütfen bekleyin'}), 429
+
+    added = []
+    for it in raw_items[:25]:
+        urun = (it.get('urun') or "").strip()
+        adet = int(it.get('adet', 1))
+        fiyat = float(it.get('fiyat', 0))
+        if not urun or adet <= 0 or fiyat < 0:
+            continue
+        for _ in range(min(adet, 20)):
+            order_item = server.add_order_item(
+                masa_adi=table_name,
+                urun=urun,
+                fiyat=fiyat,
+                garson='Müşteri QR',
+                adet=1
+            )
+            if order_item:
+                added.append(order_item)
+
+    if not added:
+        return jsonify({'success': False, 'error': 'Geçerli sipariş kalemi bulunamadı'}), 400
+
+    session['expires_at'] = min(int(time.time()) + 900, session['created_at'] + 3600)
+    if USE_DATABASE:
+        try:
+            db.update_public_session_expiry(
+                session_token,
+                datetime.datetime.fromtimestamp(session['expires_at'])
+            )
+        except Exception as e:
+            logger.error(f"Public session expiry update DB hatası: {e}")
+
+    return jsonify({
+        'success': True,
+        'table_name': table_name,
+        'added_count': len(added),
+        'session_expires_at_unix': session['expires_at']
+    })
+
 # ==================== MENÜ ====================
 
 @app.route('/api/menu/save', methods=['POST'])
@@ -1536,48 +2065,21 @@ def handle_add_item(data):
         emit('error', {'message': 'Lütfen önce masa seçiniz'})
         return
     
-    urun = data.get('urun')
+    urun = (data.get('urun') or "").strip()
     fiyat = float(data.get('fiyat', 0))
-    
-    # Her siparişe benzersiz ID ve durum ekle
-    siparis_id = str(uuid.uuid4())[:8]
-    siparis = {
-        'uid': siparis_id,
-        'urun': urun,
-        'adet': 1,
-        'fiyat': fiyat,
-        'tip': 'normal',
-        'garson': data.get('garson', 'Bilinmiyor'),
-        'durum': 'mutfakta',
-        'saat': datetime.datetime.now().strftime("%H:%M:%S")
-    }
-    
-    server.adisyonlar[masa_adi].append(siparis)
-    server.save_active_adisyonlar() # Persistence
-    
-    # Tüm clientlara bildir
-    items = server.adisyonlar[masa_adi]
-    total = sum(item['adet'] * item['fiyat'] for item in items)
-    
-    socketio.emit('masa_update', {
-        'masa': masa_adi,
-        'items': items,
-        'total': total
-    })
-    
-    # Mutfak bildirimi gönder
-    socketio.emit('kitchen_new_order', {
-        'uid': siparis_id,
-        'masa': masa_adi,
-        'urun': urun,
-        'adet': 1,
-        'saat': datetime.datetime.now().strftime("%H:%M:%S"),
-        'garson': data.get('garson', 'Bilinmiyor'),
-        'terminal_id': f"sid:{sid}"
-    })
-    
-    # Legacy mutfak sistemine gönder
-    server.send_to_kitchen_legacy(masa_adi, urun, 1)
+    if not urun:
+        emit('error', {'message': 'Ürün adı gerekli'})
+        return
+
+    order_item = server.add_order_item(
+        masa_adi=masa_adi,
+        urun=urun,
+        fiyat=fiyat,
+        garson=data.get('garson', 'Bilinmiyor'),
+        adet=1
+    )
+    if not order_item:
+        emit('error', {'message': 'Sipariş eklenemedi'})
 
 @socketio.on('kitchen_order_ready')
 def handle_kitchen_order_ready(data):
@@ -1892,6 +2394,9 @@ def handle_payment(data):
                 is_partial = True
         else:
             server.adisyonlar[masa_adi] = []
+
+        if not server.adisyonlar[masa_adi]:
+            server.revoke_public_sessions_for_table(masa_adi)
         
         server.save_active_adisyonlar() # Persistence
         
