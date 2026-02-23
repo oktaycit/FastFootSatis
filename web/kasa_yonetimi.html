@@ -363,8 +363,10 @@
                     <div class="card-title"><i class="fas fa-door-open"></i> Vardiya Aç - ${currentKasa.ad}</div>
                     <div class="status-badge status-closed">Vardiya Kapalı</div>
                     <div class="form-group">
-                        <label>Kasiyer Adı</label>
-                        <input type="text" id="kasiyerAd" placeholder="İsminizi yazın">
+                        <label>Kasiyer Seçin</label>
+                        <select id="kasiyerAd" style="width: 100%; background: var(--bg-color); border: 1px solid var(--border); border-radius: 6px; padding: 10px; color: white;">
+                            <option value="">Seçiniz...</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label>Açılış Bakiyesi (TL)</label>
@@ -372,6 +374,7 @@
                     </div>
                     <button class="btn btn-primary" onclick="vardiyaAc()">VARDİYAYI BAŞLAT</button>
                 `;
+                kasiyerleriGetir();
             } else {
                 container.innerHTML = `
                     <div class="card-title"><i class="fas fa-user-clock"></i> Aktif Vardiya - ${currentKasa.ad}</div>
@@ -449,6 +452,15 @@
             } else {
                 alert("Hata: " + data.error);
             }
+        }
+
+        async function kasiyerleriGetir() {
+            const res = await fetch('/api/cashiers');
+            const data = await res.json();
+            const sel = document.getElementById('kasiyerAd');
+            if (!sel) return;
+            sel.innerHTML = '<option value="">Seçiniz...</option>' +
+                data.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
         }
 
         async function gecmisYukle() {

@@ -70,6 +70,7 @@ COUNTER_FILE = os.path.join(SCRIPT_DIR, "sira_no.txt")
 WAITERS_FILE = os.path.join(SCRIPT_DIR, "waiters.json")
 INTEGRATION_CONFIG = os.path.join(SCRIPT_DIR, "integrations.json")
 SALONS_FILE = os.path.join(SCRIPT_DIR, "salons.json")
+CASHIERS_FILE = os.path.join(SCRIPT_DIR, "cashiers.json")
 ACTIVE_ADISYONLAR_FILE = os.path.join(SCRIPT_DIR, "active_adisyonlar.json")
 SERVER_PORT = 5555
 
@@ -137,8 +138,9 @@ class RestaurantServer:
         # Menu
         self.menu_data = {}
         
-        # Garsonlar
+        # Garsonlar ve Kasiyerler
         self.waiters = [] # [{"name": "Ahmet", "pin": "1234"}]
+        self.cashiers = [] # [{"name": "Kasa 1"}]
         
         # Aktif bağlantılar
         self.active_connections = {}
@@ -152,6 +154,7 @@ class RestaurantServer:
         self.load_settings()
         self.load_salons()
         self.load_waiters()
+        self.load_cashiers()
         self.refresh_adisyonlar()
         self.load_active_adisyonlar() # Aktif adisyonları geri yükle
         self.load_menu_data()
@@ -295,13 +298,38 @@ class RestaurantServer:
             self.waiters = []
 
     def save_waiters(self):
-        """Garson listesini kaydet"""
+        """Garsonları dosyaya kaydet"""
         try:
             with open(WAITERS_FILE, "w", encoding="utf-8") as f:
                 json.dump(self.waiters, f, ensure_ascii=False, indent=2)
+            logger.info("✓ Garsonlar kaydedildi")
             return True
         except Exception as e:
             logger.error(f"Garson kaydetme hatası: {e}")
+            return False
+
+    def load_cashiers(self):
+        """Kasiyerleri dosyadan yükle"""
+        if os.path.exists(CASHIERS_FILE):
+            try:
+                with open(CASHIERS_FILE, "r", encoding="utf-8") as f:
+                    self.cashiers = json.load(f)
+                logger.info(f"✓ {len(self.cashiers)} kasiyer yüklendi")
+            except Exception as e:
+                logger.error(f"Kasiyer yükleme hatası: {e}")
+                self.cashiers = []
+        else:
+            self.cashiers = []
+
+    def save_cashiers(self):
+        """Kasiyerleri dosyaya kaydet"""
+        try:
+            with open(CASHIERS_FILE, "w", encoding="utf-8") as f:
+                json.dump(self.cashiers, f, ensure_ascii=False, indent=2)
+            logger.info("✓ Kasiyerler kaydedildi")
+            return True
+        except Exception as e:
+            logger.error(f"Kasiyer kaydetme hatası: {e}")
             return False
             
     def send_to_kitchen_legacy(self, masa_adi, urun_adi, adet=1):
@@ -732,6 +760,7 @@ def get_settings():
         'pos_ip': server.pos_ip,
         'pos_port': server.pos_port,
         'pos_type': server.pos_type,
+        'salons': server.salons,
         'ip':           get_local_ip()
     })
 
@@ -1103,87 +1132,6 @@ def update_cari_details_api():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
-# ==================== GARSON YÖNETİMİ API ====================
-
-@app.route('/api/waiters', methods=['GET'])
-def get_waiters():
-    """Tüm garsonları döndür"""
-    return jsonify(server.waiters)
-
-@app.route('/api/waiters', methods=['POST'])
-def add_waiter():
-    """Yeni garson ekle"""
-    data = request.get_json()
-    name = data.get('name', '').strip()
-    pin = data.get('pin', '').strip()
-    
-    if not name or not pin:
-        return jsonify({'success': False, 'error': 'İsim ve PIN gerekli'}), 400
-    
-    if any(w['name'] == name for w in server.waiters):
-        return jsonify({'success': False, 'error': 'Bu isimde bir garson zaten var'}), 400
-    
-    server.waiters.append({'name': name, 'pin': pin})
-    server.save_waiters()
-    logger.info(f"🤵 Yeni garson eklendi: {name}")
-    return jsonify({'success': True})
-
-@app.route('/api/waiters/<name>', methods=['DELETE'])
-def delete_waiter(name):
-    """Garsonu sil"""
-    server.waiters = [w for w in server.waiters if w['name'] != name]
-    server.save_waiters()
-    logger.info(f"🗑️ Garson silindi: {name}")
-    return jsonify({'success': True})
-
-@app.route('/api/waiters/login', methods=['POST'])
-def waiter_login_api():
-    """Garson girişi"""
-    data = request.get_json()
-    name = data.get('name', '')
-    pin = data.get('pin', '')
-    
-    waiter = next((w for w in server.waiters if w['name'] == name and w['pin'] == pin), None)
-    if waiter:
-        return jsonify({'success': True})
-    return jsonify({'success': False, 'error': 'Hatalı PIN!'}), 401
-
-# ==================== KURYE YÖNETİMİ API ====================
-
-@app.route('/api/couriers', methods=['GET'])
-def get_couriers_api():
-    if not USE_DATABASE: return jsonify([])
-    return jsonify(db.get_all_kuryeler())
-
-@app.route('/api/couriers', methods=['POST'])
-def add_courier_api():
-    if not USE_DATABASE: return jsonify({'success': False, 'error': 'DB yok'})
-    data = request.json
-    try:
-        courier_id = db.add_kurye(
-            ad=data.get('ad'),
-            telefon=data.get('telefon'),
-            plaka=data.get('plaka'),
-            firma_id=data.get('firma_id')
-        )
-        return jsonify({'success': True, 'id': courier_id})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
-
-@app.route('/api/couriers/<int:courier_id>', methods=['PUT'])
-def update_courier_api(courier_id):
-    if not USE_DATABASE: return jsonify({'success': False, 'error': 'DB yok'})
-    data = request.json
-    try:
-        db.update_kurye(
-            courier_id,
-            ad=data.get('ad'),
-            telefon=data.get('telefon'),
-            plaka=data.get('plaka'),
-            firma_id=data.get('firma_id'),
-            aktif=data.get('aktif')
-        )
-        return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
@@ -1293,6 +1241,141 @@ def integration_webhook(platform):
     
     server.save_active_adisyonlar() # Persistence
     return jsonify({'success': True})
+
+# ==================== SALON YÖNETİMİ ====================
+
+# ==================== PERSONNEL MANAGEMENT APIs ====================
+
+@app.route('/api/waiters', methods=['GET'])
+def get_waiters_api():
+    return jsonify(server.waiters)
+
+@app.route('/api/waiters', methods=['POST'])
+def add_waiter_api():
+    try:
+        data = request.json
+        name = data.get('name', '').strip()
+        pin = data.get('pin', '').strip()
+        if not name or not pin:
+            return jsonify({'success': False, 'error': 'İsim ve PIN gerekli'})
+        
+        server.waiters.append({'name': name, 'pin': pin})
+        server.save_waiters()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/waiters/<int:idx>', methods=['DELETE'])
+def delete_waiter_api(idx):
+    try:
+        if 0 <= idx < len(server.waiters):
+            server.waiters.pop(idx)
+            server.save_waiters()
+            return jsonify({'success': True})
+        return jsonify({'success': False, 'error': 'Geçersiz indeks'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/cashiers', methods=['GET'])
+def get_cashiers_api():
+    return jsonify(server.cashiers)
+
+@app.route('/api/cashiers', methods=['POST'])
+def add_cashier_api():
+    try:
+        data = request.json
+        if not data.get('name'):
+            return jsonify({'success': False, 'error': 'İsim gerekli'})
+        server.cashiers.append({'name': data['name']})
+        server.save_cashiers()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/cashiers/<int:idx>', methods=['DELETE'])
+def delete_cashier_api(idx):
+    try:
+        if 0 <= idx < len(server.cashiers):
+            server.cashiers.pop(idx)
+            server.save_cashiers()
+            return jsonify({'success': True})
+        return jsonify({'success': False, 'error': 'Geçersiz indeks'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/couriers', methods=['GET'])
+def get_couriers_api_unified():
+    if not USE_DATABASE:
+        return jsonify([])
+    try:
+        with db.get_cursor() as cursor:
+            cursor.execute("SELECT * FROM kuryeler ORDER BY id")
+            return jsonify(cursor.fetchall())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/couriers', methods=['POST'])
+def add_courier_api_unified():
+    if not USE_DATABASE:
+        return jsonify({'success': False, 'error': 'DB bağlantısı yok'})
+    try:
+        data = request.json
+        with db.get_cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO kuryeler (ad, telefon, plaka, aktif)
+                VALUES (%s, %s, %s, %s)
+            """, (data.get('ad'), data.get('telefon'), data.get('plaka'), data.get('aktif', True)))
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/couriers/<int:id>', methods=['DELETE'])
+def delete_courier_api_unified(id):
+    if not USE_DATABASE:
+        return jsonify({'success': False, 'error': 'DB bağlantısı yok'})
+    try:
+        with db.get_cursor() as cursor:
+            cursor.execute("DELETE FROM kuryeler WHERE id = %s", (id,))
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/waiters/login', methods=['POST'])
+def waiter_login_api_unified():
+    data = request.json
+    name = data.get('name', '')
+    pin = data.get('pin', '')
+    waiter = next((w for w in server.waiters if w['name'] == name and w['pin'] == pin), None)
+    if waiter:
+        return jsonify({'success': True})
+    return jsonify({'success': False, 'error': 'Hatalı PIN!'}), 401
+
+@app.route('/api/salons', methods=['POST'])
+def save_salons_api():
+    """Salon düzenini kaydet"""
+    try:
+        data = request.json
+        if not isinstance(data, list):
+            return jsonify({'success': False, 'error': 'Geçersiz veri formatı'})
+            
+        with open(SALONS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            
+        # Sunucu cache'ini yenile
+        global server
+        server.salons = data
+        
+        # Tüm istemcilere güncel düzeni ve diğer ayarları gönder
+        socketio.emit('initial_data', {
+            'system': server.get_system_info(),
+            'menu': server.menu_data,
+            'adisyonlar': server.adisyonlar
+        })
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"Salon kaydetme hatası: {e}")
+        return jsonify({'success': False, 'error': str(e)})
 
 # ==================== MENÜ ====================
 

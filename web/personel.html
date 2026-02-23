@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastFootSatış - Personel Ayarları</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        :root {
+            --primary-color: #e67e22;
+            --secondary-color: #2c3e50;
+            --bg-color: #f4f7f6;
+            --card-bg: #fff;
+            --text-main: #333;
+            --text-secondary: #7f8c8d;
+            --success-color: #27ae60;
+            --danger-color: #e74c3c;
+            --info-color: #3498db;
+            --radius-md: 10px;
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            color: var(--text-main);
+        }
+
+        .header {
+            background-color: var(--secondary-color);
+            color: white;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .tab-btn {
+            padding: 10px 20px;
+            border: none;
+            background: #ddd;
+            border-radius: var(--radius-md) var(--radius-md) 0 0;
+            cursor: pointer;
+            font-weight: bold;
+            color: #666;
+            transition: all 0.3s;
+        }
+
+        .tab-btn.active {
+            background: var(--card-bg);
+            color: var(--primary-color);
+            box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.05);
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 0 var(--radius-md) var(--radius-md) var(--radius-md);
+            padding: 25px;
+            box-shadow: var(--shadow);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .form-group {
+            flex: 1;
+            min-width: 200px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: opacity 0.2s;
+        }
+
+        .btn:hover {
+            opacity: 0.8;
+        }
+
+        .btn-add {
+            background-color: var(--success-color);
+            color: white;
+        }
+
+        .btn-delete {
+            background-color: var(--danger-color);
+            color: white;
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+
+        th {
+            background: #f9f9f9;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .back-link {
+            text-decoration: none;
+            color: white;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 30px;
+            display: none;
+            z-index: 1000;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header class="header">
+        <div style="display:flex; align-items:center; gap:15px;">
+            <a href="settings.html" class="back-link">← Ayarlar</a>
+            <h2 style="margin:0;">👤 Personel Yönetimi</h2>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="tabs">
+            <button class="tab-btn active" onclick="showTab('waiters')">🤵 Garsonlar</button>
+            <button class="tab-btn" onclick="showTab('cashiers')">💰 Kasiyerler</button>
+            <button class="tab-btn" onclick="showTab('couriers')">🛵 Kuryeler</button>
+        </div>
+
+        <div class="card">
+            <!-- Garsonlar -->
+            <div id="waiters" class="tab-content active">
+                <h3 style="margin-top:0;">🤵 Garson Tanımları</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Garson Adı</label>
+                        <input type="text" id="w_name" placeholder="Örn: Ahmet Y.">
+                    </div>
+                    <div class="form-group">
+                        <label>Giriş PIN</label>
+                        <input type="password" id="w_pin" placeholder="****" maxlength="4">
+                    </div>
+                    <div class="form-group" style="flex:0; min-width:auto; justify-content:flex-end;">
+                        <button class="btn btn-add" onclick="addWaiter()">➕ Ekle</button>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>İsim</th>
+                            <th>PIN</th>
+                            <th style="width:50px;">İşlem</th>
+                        </tr>
+                    </thead>
+                    <tbody id="waiterTable"></tbody>
+                </table>
+            </div>
+
+            <!-- Kasiyerler -->
+            <div id="cashiers" class="tab-content">
+                <h3 style="margin-top:0;">💰 Kasiyer Tanımları</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Kasiyer Adı</label>
+                        <input type="text" id="c_name" placeholder="Örn: Mehmet S.">
+                    </div>
+                    <div class="form-group" style="flex:0; min-width:auto; justify-content:flex-end;">
+                        <button class="btn btn-add" onclick="addCashier()">➕ Ekle</button>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>İsim</th>
+                            <th style="width:50px;">İşlem</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cashierTable"></tbody>
+                </table>
+            </div>
+
+            <!-- Kuryeler -->
+            <div id="couriers" class="tab-content">
+                <h3 style="margin-top:0;">🛵 Kurye Tanımları</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Kurye Adı</label>
+                        <input type="text" id="k_name" placeholder="Örn: Veli K.">
+                    </div>
+                    <div class="form-group">
+                        <label>Telefon</label>
+                        <input type="text" id="k_phone" placeholder="05xx...">
+                    </div>
+                    <div class="form-group">
+                        <label>Plaka</label>
+                        <input type="text" id="k_plate" placeholder="34 ABC 123">
+                    </div>
+                    <div class="form-group" style="flex:0; min-width:auto; justify-content:flex-end;">
+                        <button class="btn btn-add" onclick="addCourier()">➕ Ekle</button>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>İsim</th>
+                            <th>Telefon</th>
+                            <th>Plaka</th>
+                            <th style="width:50px;">İşlem</th>
+                        </tr>
+                    </thead>
+                    <tbody id="courierTable"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast"></div>
+
+    <script>
+        function showTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+
+            document.getElementById(tabId).classList.add('active');
+            event.currentTarget.classList.add('active');
+
+            if (tabId === 'waiters') loadWaiters();
+            if (tabId === 'cashiers') loadCashiers();
+            if (tabId === 'couriers') loadCouriers();
+        }
+
+        function showToast(msg, type = 'info') {
+            const t = document.getElementById('toast');
+            t.innerText = msg;
+            t.style.display = 'block';
+            t.style.background = type === 'error' ? '#e74c3c' : '#333';
+            setTimeout(() => t.style.display = 'none', 3000);
+        }
+
+        async function loadWaiters() {
+            const res = await fetch('/api/waiters');
+            const data = await res.json();
+            const tbody = document.getElementById('waiterTable');
+            tbody.innerHTML = data.map((w, idx) => `
+            <tr>
+                <td>${w.name}</td>
+                <td>****</td>
+                <td><button class="btn-delete" onclick="deleteWaiter(${idx})">Sil</button></td>
+            </tr>
+        `).join('');
+        }
+
+        async function addWaiter() {
+            const name = document.getElementById('w_name').value.trim();
+            const pin = document.getElementById('w_pin').value.trim();
+            if (!name || !pin) return showToast('Tüm alanları doldurun', 'error');
+
+            const res = await fetch('/api/waiters', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, pin })
+            });
+            const data = await res.json();
+            if (data.success) {
+                document.getElementById('w_name').value = '';
+                document.getElementById('w_pin').value = '';
+                loadWaiters();
+                showToast('Garson eklendi');
+            }
+        }
+
+        async function deleteWaiter(idx) {
+            if (!confirm('Emin misiniz?')) return;
+            const res = await fetch('/api/waiters/' + idx, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) loadWaiters();
+        }
+
+        async function loadCashiers() {
+            const res = await fetch('/api/cashiers');
+            const data = await res.json();
+            const tbody = document.getElementById('cashierTable');
+            tbody.innerHTML = data.map((c, idx) => `
+            <tr>
+                <td>${c.name}</td>
+                <td><button class="btn-delete" onclick="deleteCashier(${idx})">Sil</button></td>
+            </tr>
+        `).join('');
+        }
+
+        async function addCashier() {
+            const name = document.getElementById('c_name').value.trim();
+            if (!name) return;
+            const res = await fetch('/api/cashiers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name })
+            });
+            if ((await res.json()).success) {
+                document.getElementById('c_name').value = '';
+                loadCashiers();
+            }
+        }
+
+        async function deleteCashier(idx) {
+            if (!confirm('Emin misiniz?')) return;
+            const res = await fetch('/api/cashiers/' + idx, { method: 'DELETE' });
+            if ((await res.json()).success) loadCashiers();
+        }
+
+        async function loadCouriers() {
+            const res = await fetch('/api/couriers');
+            const data = await res.json();
+            const tbody = document.getElementById('courierTable');
+            tbody.innerHTML = data.map(k => `
+            <tr>
+                <td>${k.ad}</td>
+                <td>${k.telefon || '-'}</td>
+                <td>${k.plaka || '-'}</td>
+                <td><button class="btn-delete" onclick="deleteCourier(${k.id})">Sil</button></td>
+            </tr>
+        `).join('');
+        }
+
+        async function addCourier() {
+            const ad = document.getElementById('k_name').value.trim();
+            const telefon = document.getElementById('k_phone').value.trim();
+            const plaka = document.getElementById('k_plate').value.trim();
+            if (!ad) return;
+
+            const res = await fetch('/api/couriers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ad, telefon, plaka })
+            });
+            if ((await res.json()).success) {
+                document.getElementById('k_name').value = '';
+                document.getElementById('k_phone').value = '';
+                document.getElementById('k_plate').value = '';
+                loadCouriers();
+            }
+        }
+
+        async function deleteCourier(id) {
+            if (!confirm('Emin misiniz?')) return;
+            const res = await fetch('/api/couriers/' + id, { method: 'DELETE' });
+            if ((await res.json()).success) loadCouriers();
+        }
+
+        window.onload = loadWaiters;
+    </script>
+
+</body>
+
+</html>

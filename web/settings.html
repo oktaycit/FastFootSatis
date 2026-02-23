@@ -335,6 +335,73 @@
                 justify-content: center;
             }
         }
+
+        /* --- Salon Builder CSS --- */
+        .salon-builder-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .salon-item {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: var(--radius-md);
+            padding: 15px;
+        }
+
+        .salon-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px dashed #d1d5db;
+        }
+
+        .salon-title {
+            font-weight: bold;
+            color: var(--primary-color);
+            font-size: 16px;
+            margin: 0;
+        }
+
+        .chip-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .table-chip {
+            background: var(--primary-color);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .table-chip .del {
+            cursor: pointer;
+            font-weight: bold;
+            opacity: 0.7;
+            font-size: 11px;
+            padding-left: 5px;
+        }
+
+        .table-chip .del:hover {
+            opacity: 1;
+            color: #ffcccc;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
     </style>
 </head>
 
@@ -372,13 +439,32 @@
             </div>
         </div>
 
-        <!-- 2. Salon Ayarları -->
+        <!-- 2. Personel Ayarları (YENİ) -->
         <div class="settings-card">
-            <div class="card-header">🪑 Salon Ayarları</div>
+            <div class="card-header">👥 Personel Yönetimi</div>
+            <div class="card-body" style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h4 style="margin:0 0 5px 0;">Çalışan Tanımları</h4>
+                    <p style="margin:0; font-size:14px; color:var(--text-secondary);">Garson, Kasiyer ve Kurye
+                        bilgilerini buradan yönetebilirsiniz.</p>
+                </div>
+                <button class="btn-settings" onclick="location.href='personel.html'"
+                    style="width:auto; padding:10px 25px; background:var(--info-color); color:white;">⚙️ Yönet</button>
+            </div>
+        </div>
+
+        <!-- 3. Salon ve Masa Düzeni (Yeni) -->
+        <div class="settings-card">
+            <div class="card-header" style="justify-content: space-between;">
+                <div>🪑 Salon &amp; Masa Düzeni</div>
+                <button class="btn-settings btn-save btn-sm" onclick="saveSalonsLayout()"
+                    style="margin:0; box-shadow:none;">💾 Düzeni Kaydet</button>
+            </div>
             <div class="card-body">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="masaSayisi">Masa Sayısı</label>
+                <div class="form-row" style="margin-bottom:15px; padding-bottom:15px; border-bottom:1px solid #eee;">
+                    <div class="form-group" style="opacity:0.6;"
+                        title="Eğer salons.json boş ise kullanılacak eski nesil sıralı masa sayısı">
+                        <label for="masaSayisi">Varsayılan Masa Sayısı</label>
                         <input type="number" id="masaSayisi" min="0" max="200" placeholder="30">
                     </div>
                     <div class="form-group">
@@ -386,9 +472,24 @@
                         <input type="number" id="paketSayisi" min="0" max="100" placeholder="5">
                     </div>
                 </div>
-                <small style="color:var(--text-secondary);">
-                    ⚠️ Masa / paket sayısını değiştirmek mevcut adisyon verilerini sıfırlayacaktır.
-                </small>
+
+                <div
+                    style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
+                    <div class="form-group" style="margin-bottom:0; flex:1; min-width:250px;">
+                        <label>Yeni Salon Ekle</label>
+                        <div style="display:flex; gap:8px;">
+                            <input type="text" id="newSalonName" placeholder="Örn: Teras" style="margin-bottom:0;"
+                                onkeypress="if(event.key==='Enter') addSalonUI()">
+                            <button class="btn-settings btn-info-s" onclick="addSalonUI()">➕ Ekle</button>
+                        </div>
+                    </div>
+                    <small style="color:var(--warning-color); font-weight:bold; text-align:right;">Değişikliklerin
+                        uygulanması için üstteki 'Düzeni Kaydet' e basınız.</small>
+                </div>
+
+                <div id="salonsDesigner" class="salon-builder-container">
+                    <!-- Dinamik Salon Listesi -->
+                </div>
             </div>
         </div>
 
@@ -834,6 +935,12 @@
                 // Entegrasyon Ayarlarını Yükle
                 loadIntegrationSettings();
 
+                // Salonları Yükle
+                if (data.salons) {
+                    localSalons = data.salons;
+                    renderSalonsDesigner();
+                }
+
             } catch (e) {
                 showToast('Ayarlar yüklenemedi: ' + e.message, 'error');
             }
@@ -1182,7 +1289,117 @@
             }
         });
 
+        /* --- Salon Builder JS --- */
+        let localSalons = [];
+
+        function renderSalonsDesigner() {
+            const container = document.getElementById('salonsDesigner');
+            container.innerHTML = '';
+
+            if (!localSalons || localSalons.length === 0) {
+                container.innerHTML = '<div style="color:#999; text-align:center; padding:20px;">Henüz hiç salon eklenmedi. Yukarıdan oluşturabilirsiniz.</div>';
+                return;
+            }
+
+            localSalons.forEach((salon, sIdx) => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'salon-item';
+
+                // Header
+                const header = document.createElement('div');
+                header.className = 'salon-header';
+                header.innerHTML = `
+                    <h4 class="salon-title">${salon.name}</h4>
+                    <button class="btn-settings btn-danger btn-sm" onclick="deleteSalon(${sIdx})" style="margin:0;">🗑️ Sil</button>
+                `;
+                itemDiv.appendChild(header);
+
+                // Chips
+                const chips = document.createElement('div');
+                chips.className = 'chip-container';
+                (salon.tables || []).forEach((tName, tIdx) => {
+                    const chip = document.createElement('div');
+                    chip.className = 'table-chip';
+                    chip.innerHTML = `${tName} <span class="del" onclick="deleteTable(${sIdx}, ${tIdx})">✕</span>`;
+                    chips.appendChild(chip);
+                });
+                itemDiv.appendChild(chips);
+
+                // Add Table row
+                const addRow = document.createElement('div');
+                addRow.style.display = 'flex';
+                addRow.style.gap = '8px';
+                addRow.innerHTML = `
+                    <input type="text" id="newTable_${sIdx}" placeholder="Masa Kodu (Örn: B1)" style="margin:0; flex:1; padding:8px; border:2px solid #e0e0e0; border-radius:var(--radius-md);" onkeypress="if(event.key==='Enter') addTable(${sIdx})">
+                    <button class="btn-settings btn-info-s btn-sm" onclick="addTable(${sIdx})" style="margin:0;">➕ Masa</button>
+                `;
+                itemDiv.appendChild(addRow);
+
+                container.appendChild(itemDiv);
+            });
+        }
+
+        function addSalonUI() {
+            const el = document.getElementById('newSalonName');
+            const name = el.value.trim();
+            if (!name) return;
+            // Generate auto ID
+            const newId = localSalons.length > 0 ? Math.max(...localSalons.map(s => s.id || 0)) + 1 : 1;
+            localSalons.push({ id: newId, name: name, tables: [] });
+            el.value = '';
+            renderSalonsDesigner();
+        }
+
+        function deleteSalon(sIdx) {
+            if (confirm('Salon ve içindeki tüm masalar silinecek. Emin misiniz?')) {
+                localSalons.splice(sIdx, 1);
+                renderSalonsDesigner();
+            }
+        }
+
+        function addTable(sIdx) {
+            const el = document.getElementById(`newTable_${sIdx}`);
+            const tName = el.value.trim();
+            if (!tName) return;
+            if (!localSalons[sIdx].tables) localSalons[sIdx].tables = [];
+            if (localSalons[sIdx].tables.includes(tName)) {
+                showToast('Bu masa kodu zaten var!', 'warning');
+                return;
+            }
+            localSalons[sIdx].tables.push(tName);
+            renderSalonsDesigner();
+        }
+
+        function deleteTable(sIdx, tIdx) {
+            localSalons[sIdx].tables.splice(tIdx, 1);
+            renderSalonsDesigner();
+        }
+
+        async function saveSalonsLayout() {
+            try {
+                const btn = document.querySelector('.settings-card .btn-save[onclick="saveSalonsLayout()"]');
+                const orig = btn.innerText;
+                btn.innerText = '⏳ Bekleyin...';
+
+                const res = await fetch('/api/salons', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(localSalons)
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Salon düzeni başarıyla kaydedildi!', 'success');
+                } else {
+                    showToast('Hata: ' + data.error, 'error');
+                }
+                btn.innerText = orig;
+            } catch (e) {
+                showToast('Bağlantı hatası!', 'error');
+            }
+        }
+
         // Sayfa yüklenince
+
         window.addEventListener('DOMContentLoaded', () => {
             loadSettings();
             loadSystemInfo();
