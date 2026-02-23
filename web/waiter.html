@@ -423,15 +423,38 @@
             tableCont.innerHTML = '';
             paketCont.innerHTML = '';
 
-            for (let i = 1; i <= sysInfo.masa_sayisi; i++) {
-                const name = `Masa ${i}`;
-                const div = document.createElement('div');
-                div.className = 'btn-item';
-                div.textContent = i;
-                div.onclick = () => selectMainTable(name);
-                tableCont.appendChild(div);
+            // Render Salons
+            if (sysInfo.salons && sysInfo.salons.length > 0) {
+                sysInfo.salons.forEach(salon => {
+                    const salonTitle = document.createElement('div');
+                    salonTitle.style.gridColumn = '1 / -1';
+                    salonTitle.style.padding = '5px 0';
+                    salonTitle.style.color = '#3498db';
+                    salonTitle.style.fontWeight = 'bold';
+                    salonTitle.style.borderBottom = '1px solid #333';
+                    salonTitle.textContent = salon.name;
+                    tableCont.appendChild(salonTitle);
+
+                    salon.tables.forEach(table => {
+                        const div = document.createElement('div');
+                        div.className = 'btn-item';
+                        div.textContent = table;
+                        div.onclick = () => selectMainTable(table);
+                        tableCont.appendChild(div);
+                    });
+                });
+            } else {
+                for (let i = 1; i <= sysInfo.masa_sayisi; i++) {
+                    const name = `Masa ${i}`;
+                    const div = document.createElement('div');
+                    div.className = 'btn-item';
+                    div.textContent = i;
+                    div.onclick = () => selectMainTable(name);
+                    tableCont.appendChild(div);
+                }
             }
 
+            // Render Pakets
             for (let i = 1; i <= sysInfo.paket_sayisi; i++) {
                 const name = `Paket ${i}`;
                 const div = document.createElement('div');

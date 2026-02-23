@@ -15,7 +15,18 @@
   "B3": [],
   "B4": [],
   "B5": [],
-  "1": [],
+  "1": [
+    {
+      "uid": "a9c9fc4c",
+      "urun": "Mercimek",
+      "adet": 1,
+      "fiyat": 120.0,
+      "tip": "normal",
+      "garson": "Ahmet",
+      "durum": "mutfakta",
+      "saat": "14:14:11"
+    }
+  ],
   "2": [],
   "3": [],
   "4": [],
