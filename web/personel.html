@@ -189,6 +189,7 @@
             <button class="tab-btn active" onclick="showTab('waiters')">🤵 Garsonlar</button>
             <button class="tab-btn" onclick="showTab('cashiers')">💰 Kasiyerler</button>
             <button class="tab-btn" onclick="showTab('couriers')">🛵 Kuryeler</button>
+            <button class="tab-btn" onclick="showTab('kitchen')">🍳 Mutfak</button>
         </div>
 
         <div class="card">
@@ -275,6 +276,29 @@
                     <tbody id="courierTable"></tbody>
                 </table>
             </div>
+
+            <!-- Mutfak -->
+            <div id="kitchen" class="tab-content">
+                <h3 style="margin-top:0;">🍳 Mutfak Personeli Tanımları</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Personel Adı</label>
+                        <input type="text" id="kit_name" placeholder="Örn: Fatma U.">
+                    </div>
+                    <div class="form-group" style="flex:0; min-width:auto; justify-content:flex-end;">
+                        <button class="btn btn-add" onclick="addKitchen()">➕ Ekle</button>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>İsim</th>
+                            <th style="width:50px;">İşlem</th>
+                        </tr>
+                    </thead>
+                    <tbody id="kitchenTable"></tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -291,6 +315,7 @@
             if (tabId === 'waiters') loadWaiters();
             if (tabId === 'cashiers') loadCashiers();
             if (tabId === 'couriers') loadCouriers();
+            if (tabId === 'kitchen') loadKitchen();
         }
 
         function showToast(msg, type = 'info') {
@@ -409,6 +434,39 @@
             if (!confirm('Emin misiniz?')) return;
             const res = await fetch('/api/couriers/' + id, { method: 'DELETE' });
             if ((await res.json()).success) loadCouriers();
+        }
+
+        async function loadKitchen() {
+            const res = await fetch('/api/kitchen');
+            const data = await res.json();
+            const tbody = document.getElementById('kitchenTable');
+            tbody.innerHTML = data.map((k, idx) => `
+            <tr>
+                <td>${k.name}</td>
+                <td><button class="btn-delete" onclick="deleteKitchen(${idx})">Sil</button></td>
+            </tr>
+        `).join('');
+        }
+
+        async function addKitchen() {
+            const name = document.getElementById('kit_name').value.trim();
+            if (!name) return;
+            const res = await fetch('/api/kitchen', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name })
+            });
+            if ((await res.json()).success) {
+                document.getElementById('kit_name').value = '';
+                loadKitchen();
+                showToast('Mutfak personeli eklendi');
+            }
+        }
+
+        async function deleteKitchen(idx) {
+            if (!confirm('Emin misiniz?')) return;
+            const res = await fetch('/api/kitchen/' + idx, { method: 'DELETE' });
+            if ((await res.json()).success) loadKitchen();
         }
 
         window.onload = loadWaiters;

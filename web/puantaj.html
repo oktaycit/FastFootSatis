@@ -734,9 +734,9 @@
             return h > 0 ? `${h}s ${m}dk` : `${m}dk`;
         }
         function rolBadge(rol) {
-            const map = { garson: 'badge-garson 🤵', kasiyer: 'badge-kasiyer 💰', kurye: 'badge-kurye 🛵' };
+            const map = { garson: 'badge-garson 🤵', kasiyer: 'badge-kasiyer 💰', kurye: 'badge-kurye 🛵', mutfak: 'badge-diger 🍳' };
             const c = map[rol] ? map[rol].split(' ')[0] : 'badge-diger';
-            const e = rol === 'garson' ? '🤵' : rol === 'kasiyer' ? '💰' : rol === 'kurye' ? '🛵' : '👤';
+            const e = rol === 'garson' ? '🤵' : rol === 'kasiyer' ? '💰' : rol === 'kurye' ? '🛵' : rol === 'mutfak' ? '🍳' : '👤';
             return `<span class="badge ${c}">${e} ${rol}</span>`;
         }
         function toLocalISO(date) {
@@ -759,10 +759,19 @@
         async function loadPersonelList() {
             try {
                 const dl = document.getElementById('personelList');
-                const [wRes, cRes] = await Promise.all([fetch('/api/waiters'), fetch('/api/cashiers')]);
+                const [wRes, cRes, kRes] = await Promise.all([
+                    fetch('/api/waiters'),
+                    fetch('/api/cashiers'),
+                    fetch('/api/kitchen')
+                ]);
                 const waiters = (await wRes.json());
                 const cashiers = (await cRes.json());
-                const all = [...(waiters.map(w => w.name)), ...(cashiers.map(c => c.name))];
+                const kitchen = (await kRes.json());
+                const all = [
+                    ...(waiters.map(w => w.name)),
+                    ...(cashiers.map(c => c.name)),
+                    ...(kitchen.map(k => k.name))
+                ];
                 dl.innerHTML = all.map(n => `<option value="${n}">`).join('');
             } catch (e) { /* ignore */ }
         }

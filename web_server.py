@@ -75,6 +75,7 @@ WAITERS_FILE = os.path.join(SCRIPT_DIR, "waiters.json")
 INTEGRATION_CONFIG = os.path.join(SCRIPT_DIR, "integrations.json")
 SALONS_FILE = os.path.join(SCRIPT_DIR, "salons.json")
 CASHIERS_FILE = os.path.join(SCRIPT_DIR, "cashiers.json")
+KITCHEN_FILE = os.path.join(SCRIPT_DIR, "kitchen.json")
 ACTIVE_ADISYONLAR_FILE = os.path.join(SCRIPT_DIR, "active_adisyonlar.json")
 SERVER_PORT = 5555
 
@@ -154,6 +155,7 @@ class RestaurantServer:
         # Garsonlar ve Kasiyerler
         self.waiters = [] # [{"name": "Ahmet", "pin": "1234"}]
         self.cashiers = [] # [{"name": "Kasa 1"}]
+        self.kitchen = [] # [{"name": "Aşçı 1"}]
         
         # Aktif bağlantılar
         self.active_connections = {}
@@ -191,6 +193,7 @@ class RestaurantServer:
         self.load_salons()
         self.load_waiters()
         self.load_cashiers()
+        self.load_kitchen()
         self.refresh_adisyonlar()
         self.load_active_adisyonlar() # Aktif adisyonları geri yükle
         self.load_menu_data()
@@ -676,6 +679,30 @@ class RestaurantServer:
             return True
         except Exception as e:
             logger.error(f"Kasiyer kaydetme hatası: {e}")
+            return False
+
+    def load_kitchen(self):
+        """Mutfak personelini dosyadan yükle"""
+        if os.path.exists(KITCHEN_FILE):
+            try:
+                with open(KITCHEN_FILE, "r", encoding="utf-8") as f:
+                    self.kitchen = json.load(f)
+                logger.info(f"✓ {len(self.kitchen)} mutfak personeli yüklendi")
+            except Exception as e:
+                logger.error(f"Mutfak personeli yükleme hatası: {e}")
+                self.kitchen = []
+        else:
+            self.kitchen = []
+
+    def save_kitchen(self):
+        """Mutfak personelini dosyaya kaydet"""
+        try:
+            with open(KITCHEN_FILE, "w", encoding="utf-8") as f:
+                json.dump(self.kitchen, f, ensure_ascii=False, indent=2)
+            logger.info("✓ Mutfak personeli kaydedildi")
+            return True
+        except Exception as e:
+            logger.error(f"Mutfak personeli kaydetme hatası: {e}")
             return False
             
     def send_to_kitchen_legacy(self, masa_adi, urun_adi, adet=1):
@@ -1366,6 +1393,13 @@ def api_vardiya_ac():
     kasiyer = data.get('kasiyer')
     bakiye = float(data.get('acilis_bakiyesi', 0))
     if not kasa_id or not kasiyer: return jsonify({'success': False, 'error': 'Eksik bilgi'})
+    
+    # Kasiyerin kayıtlı olup olmadığını kontrol et
+    registered_cashier_names = [c['name'] for c in server.cashiers]
+    if kasiyer not in registered_cashier_names:
+        logger.warning(f"⚠️ Kayıtlı olmayan bir isimle vardiya açma girişimi: {kasiyer}")
+        return jsonify({'success': False, 'error': f'"{kasiyer}" isimli kullanıcı kasiyer olarak kayıtlı değil.'}), 403
+
     try:
         shift_id = db.open_shift(kasa_id, kasiyer, bakiye)
         # Tüm bağlı istemcilere vardiya açıldığını bildir
@@ -1666,6 +1700,38 @@ def delete_cashier_api(idx):
         if 0 <= idx < len(server.cashiers):
             server.cashiers.pop(idx)
             server.save_cashiers()
+            return jsonify({'success': True})
+        return jsonify({'success': False, 'error': 'Geçersiz indeks'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/kitchen', methods=['GET'])
+def get_kitchen_api():
+    """Mutfak personeli listesini getir"""
+    return jsonify(server.kitchen)
+
+@app.route('/api/kitchen', methods=['POST'])
+def add_kitchen_api():
+    """Yeni mutfak personeli ekle"""
+    try:
+        data = request.json
+        name = (data.get('name') or '').strip()
+        if not name:
+            return jsonify({'success': False, 'error': 'İsim gerekli'}), 400
+            
+        server.kitchen.append({'name': name})
+        server.save_kitchen()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/kitchen/<int:idx>', methods=['DELETE'])
+def delete_kitchen_api(idx):
+    """Mutfak personelini sil"""
+    try:
+        if 0 <= idx < len(server.kitchen):
+            server.kitchen.pop(idx)
+            server.save_kitchen()
             return jsonify({'success': True})
         return jsonify({'success': False, 'error': 'Geçersiz indeks'})
     except Exception as e:
