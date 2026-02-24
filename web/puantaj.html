@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="tr">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,23 +10,29 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary:   #e67e22;
+            --primary: #e67e22;
             --primary-d: #d35400;
-            --dark:      #2c3e50;
-            --dark-l:    #34495e;
-            --bg:        #f0f2f5;
-            --card:      #ffffff;
-            --border:    #e0e4e8;
-            --success:   #27ae60;
-            --danger:    #e74c3c;
-            --info:      #3498db;
-            --warn:      #f39c12;
-            --text:      #2c3e50;
-            --muted:     #7f8c8d;
-            --radius:    12px;
-            --shadow:    0 4px 20px rgba(0,0,0,.08);
+            --dark: #2c3e50;
+            --dark-l: #34495e;
+            --bg: #f0f2f5;
+            --card: #ffffff;
+            --border: #e0e4e8;
+            --success: #27ae60;
+            --danger: #e74c3c;
+            --info: #3498db;
+            --warn: #f39c12;
+            --text: #2c3e50;
+            --muted: #7f8c8d;
+            --radius: 12px;
+            --shadow: 0 4px 20px rgba(0, 0, 0, .08);
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
         body {
             font-family: 'Inter', sans-serif;
             background: var(--bg);
@@ -41,420 +48,756 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: 0 2px 12px rgba(0,0,0,.2);
+            box-shadow: 0 2px 12px rgba(0, 0, 0, .2);
         }
-        .header-left { display: flex; align-items: center; gap: 14px; }
-        .header h1  { font-size: 1.3rem; font-weight: 700; }
-        .back-link  { color: rgba(255,255,255,.8); text-decoration: none; font-size: .9rem;
-                      display:flex; align-items:center; gap:5px; transition: color .2s; }
-        .back-link:hover { color: #fff; }
-        .clock  { font-size: .95rem; font-weight: 600; color: var(--primary); background: rgba(230,126,34,.12);
-                  padding: 6px 14px; border-radius: 20px; }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .header h1 {
+            font-size: 1.3rem;
+            font-weight: 700;
+        }
+
+        .back-link {
+            color: rgba(255, 255, 255, .8);
+            text-decoration: none;
+            font-size: .9rem;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            transition: color .2s;
+        }
+
+        .back-link:hover {
+            color: #fff;
+        }
+
+        .clock {
+            font-size: .95rem;
+            font-weight: 600;
+            color: var(--primary);
+            background: rgba(230, 126, 34, .12);
+            padding: 6px 14px;
+            border-radius: 20px;
+        }
 
         /* ── Tabs ── */
         .tab-bar {
-            display: flex; gap: 0; margin: 24px 24px 0;
-            background: var(--card); border-radius: var(--radius) var(--radius) 0 0;
-            box-shadow: var(--shadow); overflow: hidden;
+            display: flex;
+            gap: 0;
+            margin: 24px 24px 0;
+            background: var(--card);
+            border-radius: var(--radius) var(--radius) 0 0;
+            box-shadow: var(--shadow);
+            overflow: hidden;
         }
+
         .tab-btn {
-            flex: 1; padding: 14px 10px; border: none; background: transparent;
-            font-family: inherit; font-size: .9rem; font-weight: 600; cursor: pointer;
-            color: var(--muted); transition: all .25s; position: relative;
+            flex: 1;
+            padding: 14px 10px;
+            border: none;
+            background: transparent;
+            font-family: inherit;
+            font-size: .9rem;
+            font-weight: 600;
+            cursor: pointer;
+            color: var(--muted);
+            transition: all .25s;
+            position: relative;
         }
+
         .tab-btn::after {
-            content: ''; position: absolute; bottom: 0; left: 0; right: 0;
-            height: 3px; background: var(--primary); transform: scaleX(0); transition: transform .25s;
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--primary);
+            transform: scaleX(0);
+            transition: transform .25s;
         }
-        .tab-btn.active { color: var(--primary); background: rgba(230,126,34,.06); }
-        .tab-btn.active::after { transform: scaleX(1); }
-        .tab-btn:hover { color: var(--primary-d); }
+
+        .tab-btn.active {
+            color: var(--primary);
+            background: rgba(230, 126, 34, .06);
+        }
+
+        .tab-btn.active::after {
+            transform: scaleX(1);
+        }
+
+        .tab-btn:hover {
+            color: var(--primary-d);
+        }
 
         /* ── Main ── */
-        .main { padding: 0 24px 32px; }
-        .tab-panel { display: none; }
-        .tab-panel.active { display: block; }
+        .main {
+            padding: 0 24px 32px;
+        }
+
+        .tab-panel {
+            display: none;
+        }
+
+        .tab-panel.active {
+            display: block;
+        }
 
         /* ── Card ── */
         .card {
-            background: var(--card); border-radius: 0 0 var(--radius) var(--radius);
-            box-shadow: var(--shadow); padding: 24px;
+            background: var(--card);
+            border-radius: 0 0 var(--radius) var(--radius);
+            box-shadow: var(--shadow);
+            padding: 24px;
         }
-        .card-section { margin-top: 28px; }
+
+        .card-section {
+            margin-top: 28px;
+        }
+
         .section-title {
-            font-size: 1rem; font-weight: 700; color: var(--dark);
-            margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
-            padding-bottom: 10px; border-bottom: 2px solid var(--border);
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--dark);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--border);
         }
 
         /* ── Form row ── */
-        .form-row  { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
-        .form-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 150px; }
-        label       { font-size: .82rem; font-weight: 600; color: var(--muted); }
-        input, select {
-            padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 8px;
-            font-family: inherit; font-size: .9rem; color: var(--text);
-            transition: border-color .2s; background: #fff; outline: none;
+        .form-row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: flex-end;
         }
-        input:focus, select:focus { border-color: var(--primary); }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            flex: 1;
+            min-width: 150px;
+        }
+
+        label {
+            font-size: .82rem;
+            font-weight: 600;
+            color: var(--muted);
+        }
+
+        input,
+        select {
+            padding: 10px 12px;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: .9rem;
+            color: var(--text);
+            transition: border-color .2s;
+            background: #fff;
+            outline: none;
+        }
+
+        input:focus,
+        select:focus {
+            border-color: var(--primary);
+        }
+
         textarea {
-            padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 8px;
-            font-family: inherit; font-size: .9rem; resize: none; outline: none; min-height: 60px;
+            padding: 10px 12px;
+            border: 1.5px solid var(--border);
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: .9rem;
+            resize: none;
+            outline: none;
+            min-height: 60px;
         }
-        textarea:focus { border-color: var(--primary); }
+
+        textarea:focus {
+            border-color: var(--primary);
+        }
 
         /* ── Buttons ── */
-        .btn { padding: 10px 18px; border: none; border-radius: 8px; font-family: inherit;
-               font-size: .88rem; font-weight: 600; cursor: pointer; transition: all .2s; display: inline-flex;
-               align-items: center; gap: 6px; }
-        .btn:hover { opacity: .85; transform: translateY(-1px); }
-        .btn:active { transform: translateY(0); }
-        .btn-primary { background: var(--primary); color: #fff; }
-        .btn-success { background: var(--success); color: #fff; }
-        .btn-danger  { background: var(--danger);  color: #fff; font-size: .8rem; padding: 6px 12px; }
-        .btn-warn    { background: var(--warn);    color: #fff; font-size: .8rem; padding: 6px 12px; }
-        .btn-info    { background: var(--info);    color: #fff; font-size: .8rem; padding: 6px 12px; }
+        .btn {
+            padding: 10px 18px;
+            border: none;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: .88rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all .2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn:hover {
+            opacity: .85;
+            transform: translateY(-1px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #fff;
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: #fff;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: #fff;
+            font-size: .8rem;
+            padding: 6px 12px;
+        }
+
+        .btn-warn {
+            background: var(--warn);
+            color: #fff;
+            font-size: .8rem;
+            padding: 6px 12px;
+        }
+
+        .btn-info {
+            background: var(--info);
+            color: #fff;
+            font-size: .8rem;
+            padding: 6px 12px;
+        }
 
         /* ── Filter bar ── */
-        .filter-bar { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 20px; }
-        .filter-bar .form-group { flex: 0 0 auto; min-width: 160px; }
+        .filter-bar {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        .filter-bar .form-group {
+            flex: 0 0 auto;
+            min-width: 160px;
+        }
 
         /* ── Table ── */
-        .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); }
-        table { width: 100%; border-collapse: collapse; }
-        thead tr { background: linear-gradient(90deg, var(--dark) 0%, var(--dark-l) 100%); }
-        th { padding: 12px 14px; text-align: left; font-size: .8rem; font-weight: 600; color: rgba(255,255,255,.85);
-             white-space: nowrap; }
-        td { padding: 12px 14px; font-size: .85rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
-        tbody tr:last-child td { border-bottom: none; }
-        tbody tr { transition: background .15s; }
-        tbody tr:hover { background: rgba(230,126,34,.04); }
+        .table-wrap {
+            overflow-x: auto;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead tr {
+            background: linear-gradient(90deg, var(--dark) 0%, var(--dark-l) 100%);
+        }
+
+        th {
+            padding: 12px 14px;
+            text-align: left;
+            font-size: .8rem;
+            font-weight: 600;
+            color: rgba(255, 255, 255, .85);
+            white-space: nowrap;
+        }
+
+        td {
+            padding: 12px 14px;
+            font-size: .85rem;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        tbody tr {
+            transition: background .15s;
+        }
+
+        tbody tr:hover {
+            background: rgba(230, 126, 34, .04);
+        }
 
         /* ── Badges ── */
         .badge {
-            display: inline-block; padding: 3px 10px; border-radius: 20px;
-            font-size: .75rem; font-weight: 600;
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: .75rem;
+            font-weight: 600;
         }
-        .badge-garson  { background: #ebf5fb; color: #2980b9; }
-        .badge-kasiyer { background: #e8f8f5; color: #27ae60; }
-        .badge-kurye   { background: #fef9e7; color: #d4ac0d; }
-        .badge-diger   { background: #f4ecf7; color: #8e44ad; }
-        .badge-open    { background: #eafaf1; color: var(--success); }
-        .badge-closed  { background: #f2f3f4; color: var(--muted); }
+
+        .badge-garson {
+            background: #ebf5fb;
+            color: #2980b9;
+        }
+
+        .badge-kasiyer {
+            background: #e8f8f5;
+            color: #27ae60;
+        }
+
+        .badge-kurye {
+            background: #fef9e7;
+            color: #d4ac0d;
+        }
+
+        .badge-diger {
+            background: #f4ecf7;
+            color: #8e44ad;
+        }
+
+        .badge-open {
+            background: #eafaf1;
+            color: var(--success);
+        }
+
+        .badge-closed {
+            background: #f2f3f4;
+            color: var(--muted);
+        }
 
         /* ── Süre göstergesi ── */
         .duration-bar {
-            height: 6px; border-radius: 3px; background: var(--border);
-            margin-top: 4px; overflow: hidden; min-width: 80px;
+            height: 6px;
+            border-radius: 3px;
+            background: var(--border);
+            margin-top: 4px;
+            overflow: hidden;
+            min-width: 80px;
         }
-        .duration-fill { height: 100%; border-radius: 3px; background: var(--primary); transition: width .5s; }
+
+        .duration-fill {
+            height: 100%;
+            border-radius: 3px;
+            background: var(--primary);
+            transition: width .5s;
+        }
 
         /* ── Özet kartları ── */
-        .summary-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
         .summary-card {
             background: linear-gradient(135deg, var(--primary) 0%, var(--primary-d) 100%);
-            color: #fff; padding: 20px; border-radius: var(--radius); box-shadow: 0 4px 15px rgba(230,126,34,.3);
+            color: #fff;
+            padding: 20px;
+            border-radius: var(--radius);
+            box-shadow: 0 4px 15px rgba(230, 126, 34, .3);
         }
-        .summary-card.blue { background: linear-gradient(135deg, var(--info) 0%, #2980b9 100%);
-            box-shadow: 0 4px 15px rgba(52,152,219,.3); }
-        .summary-card.green { background: linear-gradient(135deg, var(--success) 0%, #229954 100%);
-            box-shadow: 0 4px 15px rgba(39,174,96,.3); }
-        .summary-card-label { font-size: .8rem; opacity: .85; margin-bottom: 8px; }
-        .summary-card-value { font-size: 2rem; font-weight: 700; }
-        .summary-card-sub   { font-size: .78rem; opacity: .75; margin-top: 4px; }
+
+        .summary-card.blue {
+            background: linear-gradient(135deg, var(--info) 0%, #2980b9 100%);
+            box-shadow: 0 4px 15px rgba(52, 152, 219, .3);
+        }
+
+        .summary-card.green {
+            background: linear-gradient(135deg, var(--success) 0%, #229954 100%);
+            box-shadow: 0 4px 15px rgba(39, 174, 96, .3);
+        }
+
+        .summary-card-label {
+            font-size: .8rem;
+            opacity: .85;
+            margin-bottom: 8px;
+        }
+
+        .summary-card-value {
+            font-size: 2rem;
+            font-weight: 700;
+        }
+
+        .summary-card-sub {
+            font-size: .78rem;
+            opacity: .75;
+            margin-top: 4px;
+        }
 
         /* ── Özet tablo ── */
         .progress-bar {
-            width: 100%; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin-top: 4px;
+            width: 100%;
+            height: 8px;
+            background: var(--border);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 4px;
         }
-        .progress-fill { height: 100%; border-radius: 4px; background: var(--primary); }
+
+        .progress-fill {
+            height: 100%;
+            border-radius: 4px;
+            background: var(--primary);
+        }
 
         /* ── Toast ── */
         #toast {
-            position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
-            background: var(--dark); color: #fff; padding: 12px 24px; border-radius: 30px;
-            font-size: .9rem; font-weight: 500; z-index: 9999; opacity: 0;
-            transition: all .35s cubic-bezier(.34,1.56,.64,1); pointer-events: none; white-space: nowrap;
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: var(--dark);
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-size: .9rem;
+            font-weight: 500;
+            z-index: 9999;
+            opacity: 0;
+            transition: all .35s cubic-bezier(.34, 1.56, .64, 1);
+            pointer-events: none;
+            white-space: nowrap;
         }
-        #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
-        #toast.success { background: var(--success); }
-        #toast.error   { background: var(--danger); }
+
+        #toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        #toast.success {
+            background: var(--success);
+        }
+
+        #toast.error {
+            background: var(--danger);
+        }
 
         /* ── Empty state ── */
-        .empty { text-align: center; padding: 48px 20px; color: var(--muted); }
-        .empty-emoji { font-size: 3rem; margin-bottom: 12px; }
-        .empty-text  { font-size: 1rem; }
+        .empty {
+            text-align: center;
+            padding: 48px 20px;
+            color: var(--muted);
+        }
+
+        .empty-emoji {
+            font-size: 3rem;
+            margin-bottom: 12px;
+        }
+
+        .empty-text {
+            font-size: 1rem;
+        }
 
         /* ── Responsive ── */
         @media (max-width: 640px) {
-            .main, .tab-bar { margin-left: 12px; margin-right: 12px; }
-            .form-row { flex-direction: column; }
-            .filter-bar { flex-direction: column; }
-            .header { flex-direction: column; gap: 10px; text-align: center; }
-            .summary-cards { grid-template-columns: 1fr 1fr; }
+
+            .main,
+            .tab-bar {
+                margin-left: 12px;
+                margin-right: 12px;
+            }
+
+            .form-row {
+                flex-direction: column;
+            }
+
+            .filter-bar {
+                flex-direction: column;
+            }
+
+            .header {
+                flex-direction: column;
+                gap: 10px;
+                text-align: center;
+            }
+
+            .summary-cards {
+                grid-template-columns: 1fr 1fr;
+            }
         }
     </style>
 </head>
+
 <body>
 
-<header class="header">
-    <div class="header-left">
-        <a href="/settings" class="back-link">← Ayarlar</a>
-        <h1>📊 Puantaj Takibi</h1>
+    <header class="header">
+        <div class="header-left">
+            <a href="/settings" class="back-link">← Ayarlar</a>
+            <h1>📊 Puantaj Takibi</h1>
+        </div>
+        <div class="clock" id="liveClock">--:--:--</div>
+    </header>
+
+    <div class="tab-bar">
+        <button class="tab-btn active" id="tab-gunluk" onclick="switchTab('gunluk')">📋 Günlük Puantaj</button>
+        <button class="tab-btn" id="tab-ozet" onclick="switchTab('ozet')">📅 Aylık Özet</button>
     </div>
-    <div class="clock" id="liveClock">--:--:--</div>
-</header>
 
-<div class="tab-bar">
-    <button class="tab-btn active" id="tab-gunluk" onclick="switchTab('gunluk')">📋 Günlük Puantaj</button>
-    <button class="tab-btn" id="tab-ozet"   onclick="switchTab('ozet')">📅 Aylık Özet</button>
-</div>
+    <div class="main">
 
-<div class="main">
+        <!-- ══════ GÜNLÜK PUANTAJ ══════ -->
+        <div class="card tab-panel active" id="panel-gunluk">
 
-    <!-- ══════ GÜNLÜK PUANTAJ ══════ -->
-    <div class="card tab-panel active" id="panel-gunluk">
+            <!-- Yeni Kayıt Formu -->
+            <div class="section-title">➕ Yeni Kayıt Ekle</div>
+            <div class="form-row">
+                <div class="form-group" style="flex:2">
+                    <label>Personel Adı</label>
+                    <input type="text" id="f_personel" placeholder="Örn: Ahmet Y." list="personelList"
+                        autocomplete="off">
+                    <datalist id="personelList"></datalist>
+                </div>
+                <div class="form-group">
+                    <label>Rol</label>
+                    <select id="f_rol">
+                        <option value="garson">🤵 Garson</option>
+                        <option value="kasiyer">💰 Kasiyer</option>
+                        <option value="kurye">🛵 Kurye</option>
+                        <option value="mutfak">🍳 Mutfak</option>
+                        <option value="diger">👤 Diğer</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Giriş Saati</label>
+                    <input type="datetime-local" id="f_giris">
+                </div>
+                <div class="form-group">
+                    <label>Çıkış Saati (opsiyonel)</label>
+                    <input type="datetime-local" id="f_cikis">
+                </div>
+                <div class="form-group" style="flex:2">
+                    <label>Not</label>
+                    <input type="text" id="f_notlar" placeholder="Opsiyonel not...">
+                </div>
+                <div class="form-group" style="flex:0;min-width:auto;justify-content:flex-end;">
+                    <button class="btn btn-primary" onclick="addRecord()">✅ Kaydet</button>
+                </div>
+            </div>
 
-        <!-- Yeni Kayıt Formu -->
-        <div class="section-title">➕ Yeni Kayıt Ekle</div>
-        <div class="form-row">
-            <div class="form-group" style="flex:2">
-                <label>Personel Adı</label>
-                <input type="text" id="f_personel" placeholder="Örn: Ahmet Y." list="personelList" autocomplete="off">
-                <datalist id="personelList"></datalist>
-            </div>
-            <div class="form-group">
-                <label>Rol</label>
-                <select id="f_rol">
-                    <option value="garson">🤵 Garson</option>
-                    <option value="kasiyer">💰 Kasiyer</option>
-                    <option value="kurye">🛵 Kurye</option>
-                    <option value="diger">👤 Diğer</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Giriş Saati</label>
-                <input type="datetime-local" id="f_giris">
-            </div>
-            <div class="form-group">
-                <label>Çıkış Saati (opsiyonel)</label>
-                <input type="datetime-local" id="f_cikis">
-            </div>
-            <div class="form-group" style="flex:2">
-                <label>Not</label>
-                <input type="text" id="f_notlar" placeholder="Opsiyonel not...">
-            </div>
-            <div class="form-group" style="flex:0;min-width:auto;justify-content:flex-end;">
-                <button class="btn btn-primary" onclick="addRecord()">✅ Kaydet</button>
+            <!-- Filtre -->
+            <div class="card-section">
+                <div class="section-title">📋 Kayıtlar</div>
+                <div class="filter-bar">
+                    <div class="form-group">
+                        <label>Tarih</label>
+                        <input type="date" id="f_tarih" onchange="loadRecords()">
+                    </div>
+                    <div class="form-group">
+                        <label>Personel (filtre)</label>
+                        <input type="text" id="f_personel_filtre" placeholder="Tümü" oninput="loadRecords()">
+                    </div>
+                    <div class="form-group" style="flex:0;min-width:auto;justify-content:flex-end;">
+                        <button class="btn btn-info" onclick="loadRecords()">🔄 Yenile</button>
+                    </div>
+                </div>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Personel</th>
+                                <th>Rol</th>
+                                <th>Giriş</th>
+                                <th>Çıkış</th>
+                                <th>Çalışma</th>
+                                <th>Durum</th>
+                                <th>Not</th>
+                                <th style="width:130px">İşlemler</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recordsBody"></tbody>
+                    </table>
+                </div>
+                <div id="emptyState" class="empty" style="display:none">
+                    <div class="empty-emoji">📭</div>
+                    <div class="empty-text">Bu tarih için kayıt bulunamadı</div>
+                </div>
             </div>
         </div>
 
-        <!-- Filtre -->
-        <div class="card-section">
-            <div class="section-title">📋 Kayıtlar</div>
+        <!-- ══════ AYLIK ÖZET ══════ -->
+        <div class="card tab-panel" id="panel-ozet">
+
             <div class="filter-bar">
                 <div class="form-group">
-                    <label>Tarih</label>
-                    <input type="date" id="f_tarih" onchange="loadRecords()">
-                </div>
-                <div class="form-group">
-                    <label>Personel (filtre)</label>
-                    <input type="text" id="f_personel_filtre" placeholder="Tümü" oninput="loadRecords()">
+                    <label>Ay / Yıl</label>
+                    <input type="month" id="f_ay" onchange="loadSummary()">
                 </div>
                 <div class="form-group" style="flex:0;min-width:auto;justify-content:flex-end;">
-                    <button class="btn btn-info" onclick="loadRecords()">🔄 Yenile</button>
+                    <button class="btn btn-info" onclick="loadSummary()">🔄 Yenile</button>
                 </div>
             </div>
 
+            <!-- Özet Kartlar -->
+            <div class="summary-cards" id="summaryCards"></div>
+
+            <!-- Personel Tablosu -->
             <div class="table-wrap">
                 <table>
                     <thead>
                         <tr>
                             <th>Personel</th>
                             <th>Rol</th>
-                            <th>Giriş</th>
-                            <th>Çıkış</th>
-                            <th>Çalışma</th>
-                            <th>Durum</th>
-                            <th>Not</th>
-                            <th style="width:130px">İşlemler</th>
+                            <th>Toplam Gün</th>
+                            <th>Toplam Saat</th>
+                            <th>Oran (maks. 200 sa.)</th>
                         </tr>
                     </thead>
-                    <tbody id="recordsBody"></tbody>
+                    <tbody id="summaryBody"></tbody>
                 </table>
             </div>
-            <div id="emptyState" class="empty" style="display:none">
-                <div class="empty-emoji">📭</div>
-                <div class="empty-text">Bu tarih için kayıt bulunamadı</div>
+            <div id="emptySummary" class="empty" style="display:none">
+                <div class="empty-emoji">📊</div>
+                <div class="empty-text">Bu ay için puantaj kaydı yok</div>
             </div>
         </div>
     </div>
 
-    <!-- ══════ AYLIK ÖZET ══════ -->
-    <div class="card tab-panel" id="panel-ozet">
-
-        <div class="filter-bar">
-            <div class="form-group">
-                <label>Ay / Yıl</label>
-                <input type="month" id="f_ay" onchange="loadSummary()">
+    <!-- Çıkış modal -->
+    <div id="checkoutModal"
+        style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;align-items:center;justify-content:center;">
+        <div
+            style="background:#fff;border-radius:16px;padding:28px;width:min(420px,90vw);box-shadow:0 20px 60px rgba(0,0,0,.2);">
+            <h3 style="margin-bottom:18px;color:var(--dark)">🏁 Çıkış Saatini Kaydet</h3>
+            <input type="hidden" id="m_id">
+            <div class="form-group" style="margin-bottom:14px">
+                <label>Çıkış Saati</label>
+                <input type="datetime-local" id="m_cikis">
             </div>
-            <div class="form-group" style="flex:0;min-width:auto;justify-content:flex-end;">
-                <button class="btn btn-info" onclick="loadSummary()">🔄 Yenile</button>
+            <div class="form-group" style="margin-bottom:18px">
+                <label>Not (opsiyonel)</label>
+                <input type="text" id="m_notlar" placeholder="">
             </div>
-        </div>
-
-        <!-- Özet Kartlar -->
-        <div class="summary-cards" id="summaryCards"></div>
-
-        <!-- Personel Tablosu -->
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Personel</th>
-                        <th>Rol</th>
-                        <th>Toplam Gün</th>
-                        <th>Toplam Saat</th>
-                        <th>Oran (maks. 200 sa.)</th>
-                    </tr>
-                </thead>
-                <tbody id="summaryBody"></tbody>
-            </table>
-        </div>
-        <div id="emptySummary" class="empty" style="display:none">
-            <div class="empty-emoji">📊</div>
-            <div class="empty-text">Bu ay için puantaj kaydı yok</div>
+            <div style="display:flex;gap:10px;justify-content:flex-end">
+                <button class="btn" style="background:var(--border);color:var(--text)"
+                    onclick="hideModal()">İptal</button>
+                <button class="btn btn-success" onclick="saveCheckout()">✅ Kaydet</button>
+            </div>
         </div>
     </div>
-</div>
 
-<!-- Çıkış modal -->
-<div id="checkoutModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:16px;padding:28px;width:min(420px,90vw);box-shadow:0 20px 60px rgba(0,0,0,.2);">
-        <h3 style="margin-bottom:18px;color:var(--dark)">🏁 Çıkış Saatini Kaydet</h3>
-        <input type="hidden" id="m_id">
-        <div class="form-group" style="margin-bottom:14px">
-            <label>Çıkış Saati</label>
-            <input type="datetime-local" id="m_cikis">
-        </div>
-        <div class="form-group" style="margin-bottom:18px">
-            <label>Not (opsiyonel)</label>
-            <input type="text" id="m_notlar" placeholder="">
-        </div>
-        <div style="display:flex;gap:10px;justify-content:flex-end">
-            <button class="btn" style="background:var(--border);color:var(--text)" onclick="hideModal()">İptal</button>
-            <button class="btn btn-success" onclick="saveCheckout()">✅ Kaydet</button>
-        </div>
-    </div>
-</div>
+    <div id="toast"></div>
 
-<div id="toast"></div>
+    <script>
+        // ── Saat ──
+        (function liveClock() {
+            const el = document.getElementById('liveClock');
+            function tick() { el.textContent = new Date().toLocaleTimeString('tr-TR'); }
+            tick(); setInterval(tick, 1000);
+        })();
 
-<script>
-// ── Saat ──
-(function liveClock() {
-    const el = document.getElementById('liveClock');
-    function tick() { el.textContent = new Date().toLocaleTimeString('tr-TR'); }
-    tick(); setInterval(tick, 1000);
-})();
+        // ── Tab ──
+        function switchTab(name) {
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('panel-' + name).classList.add('active');
+            document.getElementById('tab-' + name).classList.add('active');
+            if (name === 'gunluk') loadRecords();
+            if (name === 'ozet') loadSummary();
+        }
 
-// ── Tab ──
-function switchTab(name) {
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById('panel-' + name).classList.add('active');
-    document.getElementById('tab-' + name).classList.add('active');
-    if (name === 'gunluk') loadRecords();
-    if (name === 'ozet') loadSummary();
-}
+        // ── Toast ──
+        let toastTimer;
+        function toast(msg, type = '') {
+            const el = document.getElementById('toast');
+            el.textContent = msg;
+            el.className = 'show ' + type;
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => el.className = '', 3000);
+        }
 
-// ── Toast ──
-let toastTimer;
-function toast(msg, type = '') {
-    const el = document.getElementById('toast');
-    el.textContent = msg;
-    el.className = 'show ' + type;
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.className = '', 3000);
-}
+        // ── Yardımcılar ──
+        function formatTime(iso) {
+            if (!iso) return '—';
+            const d = new Date(iso);
+            return d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+        }
+        function formatDuration(minutes) {
+            if (!minutes && minutes !== 0) return '—';
+            const h = Math.floor(minutes / 60);
+            const m = minutes % 60;
+            return h > 0 ? `${h}s ${m}dk` : `${m}dk`;
+        }
+        function rolBadge(rol) {
+            const map = { garson: 'badge-garson 🤵', kasiyer: 'badge-kasiyer 💰', kurye: 'badge-kurye 🛵' };
+            const c = map[rol] ? map[rol].split(' ')[0] : 'badge-diger';
+            const e = rol === 'garson' ? '🤵' : rol === 'kasiyer' ? '💰' : rol === 'kurye' ? '🛵' : '👤';
+            return `<span class="badge ${c}">${e} ${rol}</span>`;
+        }
+        function toLocalISO(date) {
+            const off = date.getTimezoneOffset() * 60000;
+            return new Date(date - off).toISOString().slice(0, 16);
+        }
 
-// ── Yardımcılar ──
-function formatTime(iso) {
-    if (!iso) return '—';
-    const d = new Date(iso);
-    return d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-}
-function formatDuration(minutes) {
-    if (!minutes && minutes !== 0) return '—';
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    return h > 0 ? `${h}s ${m}dk` : `${m}dk`;
-}
-function rolBadge(rol) {
-    const map = { garson:'badge-garson 🤵', kasiyer:'badge-kasiyer 💰', kurye:'badge-kurye 🛵' };
-    const c = map[rol] ? map[rol].split(' ')[0] : 'badge-diger';
-    const e = rol === 'garson' ? '🤵' : rol === 'kasiyer' ? '💰' : rol === 'kurye' ? '🛵' : '👤';
-    return `<span class="badge ${c}">${e} ${rol}</span>`;
-}
-function toLocalISO(date) {
-    const off = date.getTimezoneOffset() * 60000;
-    return new Date(date - off).toISOString().slice(0, 16);
-}
+        // ── Başlangıç değerleri ──
+        window.onload = function () {
+            const now = new Date();
+            const today = now.toISOString().slice(0, 10);
+            document.getElementById('f_tarih').value = today;
+            document.getElementById('f_giris').value = toLocalISO(now);
+            document.getElementById('f_ay').value = today.slice(0, 7);
+            loadRecords();
+            loadPersonelList();
+        };
 
-// ── Başlangıç değerleri ──
-window.onload = function () {
-    const now = new Date();
-    const today = now.toISOString().slice(0, 10);
-    document.getElementById('f_tarih').value = today;
-    document.getElementById('f_giris').value = toLocalISO(now);
-    document.getElementById('f_ay').value    = today.slice(0, 7);
-    loadRecords();
-    loadPersonelList();
-};
+        // ── Personel otomatik tamamlama ──
+        async function loadPersonelList() {
+            try {
+                const dl = document.getElementById('personelList');
+                const [wRes, cRes] = await Promise.all([fetch('/api/waiters'), fetch('/api/cashiers')]);
+                const waiters = (await wRes.json());
+                const cashiers = (await cRes.json());
+                const all = [...(waiters.map(w => w.name)), ...(cashiers.map(c => c.name))];
+                dl.innerHTML = all.map(n => `<option value="${n}">`).join('');
+            } catch (e) { /* ignore */ }
+        }
 
-// ── Personel otomatik tamamlama ──
-async function loadPersonelList() {
-    try {
-        const dl = document.getElementById('personelList');
-        const [wRes, cRes] = await Promise.all([fetch('/api/waiters'), fetch('/api/cashiers')]);
-        const waiters  = (await wRes.json());
-        const cashiers = (await cRes.json());
-        const all = [...(waiters.map(w => w.name)), ...(cashiers.map(c => c.name))];
-        dl.innerHTML = all.map(n => `<option value="${n}">`).join('');
-    } catch(e) { /* ignore */ }
-}
+        // ── Kayıtları yükle ──
+        async function loadRecords() {
+            const tarih = document.getElementById('f_tarih').value;
+            const filtre = document.getElementById('f_personel_filtre').value;
+            let url = `/api/puantaj?tarih=${tarih}`;
+            if (filtre) url += `&personel=${encodeURIComponent(filtre)}`;
 
-// ── Kayıtları yükle ──
-async function loadRecords() {
-    const tarih  = document.getElementById('f_tarih').value;
-    const filtre = document.getElementById('f_personel_filtre').value;
-    let url = `/api/puantaj?tarih=${tarih}`;
-    if (filtre) url += `&personel=${encodeURIComponent(filtre)}`;
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                renderRecords(data);
+            } catch (e) { toast('Kayıtlar yüklenemedi', 'error'); }
+        }
 
-    try {
-        const res = await fetch(url);
-        const data = await res.json();
-        renderRecords(data);
-    } catch(e) { toast('Kayıtlar yüklenemedi', 'error'); }
-}
-
-function renderRecords(records) {
-    const tbody = document.getElementById('recordsBody');
-    const empty = document.getElementById('emptyState');
-    if (!records.length) {
-        tbody.innerHTML = '';
-        empty.style.display = '';
-        return;
-    }
-    empty.style.display = 'none';
-    tbody.innerHTML = records.map(r => {
-        const open = !r.cikis_saati;
-        const dur  = r.toplam_dakika !== null ? formatDuration(r.toplam_dakika) : (open ? '<span style="color:var(--primary);font-weight:600">Devam ediyor</span>' : '—');
-        const pct  = Math.min(100, ((r.toplam_dakika || 0) / 480) * 100);
-        const statusBadge = open
-            ? `<span class="badge badge-open">🟢 Açık</span>`
-            : `<span class="badge badge-closed">⬛ Kapandı</span>`;
-        return `<tr>
+        function renderRecords(records) {
+            const tbody = document.getElementById('recordsBody');
+            const empty = document.getElementById('emptyState');
+            if (!records.length) {
+                tbody.innerHTML = '';
+                empty.style.display = '';
+                return;
+            }
+            empty.style.display = 'none';
+            tbody.innerHTML = records.map(r => {
+                const open = !r.cikis_saati;
+                const dur = r.toplam_dakika !== null ? formatDuration(r.toplam_dakika) : (open ? '<span style="color:var(--primary);font-weight:600">Devam ediyor</span>' : '—');
+                const pct = Math.min(100, ((r.toplam_dakika || 0) / 480) * 100);
+                const statusBadge = open
+                    ? `<span class="badge badge-open">🟢 Açık</span>`
+                    : `<span class="badge badge-closed">⬛ Kapandı</span>`;
+                return `<tr>
             <td><strong>${r.personel_adi}</strong></td>
             <td>${rolBadge(r.rol)}</td>
             <td>${formatTime(r.giris_saati)}</td>
@@ -470,106 +813,106 @@ function renderRecords(records) {
                 <button class="btn btn-danger" onclick="deleteRecord(${r.id})" style="margin-left:4px">🗑</button>
             </td>
         </tr>`;
-    }).join('');
-}
+            }).join('');
+        }
 
-// ── Yeni kayıt ekle ──
-async function addRecord() {
-    const personel = document.getElementById('f_personel').value.trim();
-    const rol      = document.getElementById('f_rol').value;
-    const giris    = document.getElementById('f_giris').value;
-    const cikis    = document.getElementById('f_cikis').value;
-    const notlar   = document.getElementById('f_notlar').value.trim();
+        // ── Yeni kayıt ekle ──
+        async function addRecord() {
+            const personel = document.getElementById('f_personel').value.trim();
+            const rol = document.getElementById('f_rol').value;
+            const giris = document.getElementById('f_giris').value;
+            const cikis = document.getElementById('f_cikis').value;
+            const notlar = document.getElementById('f_notlar').value.trim();
 
-    if (!personel) { toast('Personel adı giriniz', 'error'); return; }
-    if (!giris)    { toast('Giriş saati gerekli', 'error');  return; }
+            if (!personel) { toast('Personel adı giriniz', 'error'); return; }
+            if (!giris) { toast('Giriş saati gerekli', 'error'); return; }
 
-    try {
-        const res = await fetch('/api/puantaj', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                personel_adi: personel,
-                rol,
-                giris_saati: giris,
-                cikis_saati: cikis || null,
-                notlar
-            })
-        });
-        const data = await res.json();
-        if (!data.success) { toast(data.error || 'Hata', 'error'); return; }
-        toast('Kayıt eklendi ✓', 'success');
-        document.getElementById('f_personel').value = '';
-        document.getElementById('f_cikis').value    = '';
-        document.getElementById('f_notlar').value   = '';
-        const now = new Date();
-        document.getElementById('f_giris').value = toLocalISO(now);
-        loadRecords();
-    } catch(e) { toast('Bağlantı hatası', 'error'); }
-}
+            try {
+                const res = await fetch('/api/puantaj', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        personel_adi: personel,
+                        rol,
+                        giris_saati: giris,
+                        cikis_saati: cikis || null,
+                        notlar
+                    })
+                });
+                const data = await res.json();
+                if (!data.success) { toast(data.error || 'Hata', 'error'); return; }
+                toast('Kayıt eklendi ✓', 'success');
+                document.getElementById('f_personel').value = '';
+                document.getElementById('f_cikis').value = '';
+                document.getElementById('f_notlar').value = '';
+                const now = new Date();
+                document.getElementById('f_giris').value = toLocalISO(now);
+                loadRecords();
+            } catch (e) { toast('Bağlantı hatası', 'error'); }
+        }
 
-// ── Çıkış modal ──
-function openCheckout(id) {
-    document.getElementById('m_id').value    = id;
-    document.getElementById('m_cikis').value = toLocalISO(new Date());
-    document.getElementById('m_notlar').value = '';
-    const modal = document.getElementById('checkoutModal');
-    modal.style.display = 'flex';
-}
-function hideModal() {
-    document.getElementById('checkoutModal').style.display = 'none';
-}
-async function saveCheckout() {
-    const id     = document.getElementById('m_id').value;
-    const cikis  = document.getElementById('m_cikis').value;
-    const notlar = document.getElementById('m_notlar').value.trim();
-    if (!cikis) { toast('Çıkış saati giriniz', 'error'); return; }
-    try {
-        const res = await fetch(`/api/puantaj/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ cikis_saati: cikis, notlar: notlar || undefined })
-        });
-        const data = await res.json();
-        if (!data.success) { toast(data.error || 'Hata', 'error'); return; }
-        toast('Çıkış kaydedildi ✓', 'success');
-        hideModal();
-        loadRecords();
-    } catch(e) { toast('Bağlantı hatası', 'error'); }
-}
+        // ── Çıkış modal ──
+        function openCheckout(id) {
+            document.getElementById('m_id').value = id;
+            document.getElementById('m_cikis').value = toLocalISO(new Date());
+            document.getElementById('m_notlar').value = '';
+            const modal = document.getElementById('checkoutModal');
+            modal.style.display = 'flex';
+        }
+        function hideModal() {
+            document.getElementById('checkoutModal').style.display = 'none';
+        }
+        async function saveCheckout() {
+            const id = document.getElementById('m_id').value;
+            const cikis = document.getElementById('m_cikis').value;
+            const notlar = document.getElementById('m_notlar').value.trim();
+            if (!cikis) { toast('Çıkış saati giriniz', 'error'); return; }
+            try {
+                const res = await fetch(`/api/puantaj/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cikis_saati: cikis, notlar: notlar || undefined })
+                });
+                const data = await res.json();
+                if (!data.success) { toast(data.error || 'Hata', 'error'); return; }
+                toast('Çıkış kaydedildi ✓', 'success');
+                hideModal();
+                loadRecords();
+            } catch (e) { toast('Bağlantı hatası', 'error'); }
+        }
 
-// ── Sil ──
-async function deleteRecord(id) {
-    if (!confirm('Bu kaydı silmek istediğinizden emin misiniz?')) return;
-    try {
-        const res = await fetch(`/api/puantaj/${id}`, { method: 'DELETE' });
-        const data = await res.json();
-        if (data.success) { toast('Kayıt silindi', 'success'); loadRecords(); }
-        else toast(data.error || 'Hata', 'error');
-    } catch(e) { toast('Bağlantı hatası', 'error'); }
-}
+        // ── Sil ──
+        async function deleteRecord(id) {
+            if (!confirm('Bu kaydı silmek istediğinizden emin misiniz?')) return;
+            try {
+                const res = await fetch(`/api/puantaj/${id}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) { toast('Kayıt silindi', 'success'); loadRecords(); }
+                else toast(data.error || 'Hata', 'error');
+            } catch (e) { toast('Bağlantı hatası', 'error'); }
+        }
 
-// ── Aylık özet ──
-async function loadSummary() {
-    const ay = document.getElementById('f_ay').value;
-    if (!ay) return;
-    try {
-        const [recsRes, ozetRes] = await Promise.all([
-            fetch(`/api/puantaj?ay=${ay}`),
-            fetch(`/api/puantaj/ozet?ay=${ay}`)
-        ]);
-        const recs = await recsRes.json();
-        const ozet = await ozetRes.json();
-        renderSummaryCards(recs, ozet);
-        renderSummaryTable(ozet);
-    } catch(e) { toast('Özet yüklenemedi', 'error'); }
-}
+        // ── Aylık özet ──
+        async function loadSummary() {
+            const ay = document.getElementById('f_ay').value;
+            if (!ay) return;
+            try {
+                const [recsRes, ozetRes] = await Promise.all([
+                    fetch(`/api/puantaj?ay=${ay}`),
+                    fetch(`/api/puantaj/ozet?ay=${ay}`)
+                ]);
+                const recs = await recsRes.json();
+                const ozet = await ozetRes.json();
+                renderSummaryCards(recs, ozet);
+                renderSummaryTable(ozet);
+            } catch (e) { toast('Özet yüklenemedi', 'error'); }
+        }
 
-function renderSummaryCards(recs, ozet) {
-    const toplamSaat = ozet.reduce((s, o) => s + (o.toplam_saat || 0), 0);
-    const personelSayisi = ozet.length;
-    const acikKayit = recs.filter(r => !r.cikis_saati).length;
-    document.getElementById('summaryCards').innerHTML = `
+        function renderSummaryCards(recs, ozet) {
+            const toplamSaat = ozet.reduce((s, o) => s + (o.toplam_saat || 0), 0);
+            const personelSayisi = ozet.length;
+            const acikKayit = recs.filter(r => !r.cikis_saati).length;
+            document.getElementById('summaryCards').innerHTML = `
         <div class="summary-card">
             <div class="summary-card-label">Toplam Çalışma</div>
             <div class="summary-card-value">${toplamSaat.toFixed(1)}</div>
@@ -586,21 +929,21 @@ function renderSummaryCards(recs, ozet) {
             <div class="summary-card-sub">${acikKayit} açık kayıt</div>
         </div>
     `;
-}
+        }
 
-function renderSummaryTable(ozet) {
-    const table  = document.getElementById('summaryBody');
-    const empty  = document.getElementById('emptySummary');
-    if (!ozet.length) {
-        table.innerHTML = '';
-        empty.style.display = '';
-        return;
-    }
-    empty.style.display = 'none';
-    const maxSaat = Math.max(...ozet.map(o => o.toplam_saat), 1);
-    table.innerHTML = ozet.map(o => {
-        const pct = Math.min(100, (o.toplam_saat / maxSaat) * 100);
-        return `<tr>
+        function renderSummaryTable(ozet) {
+            const table = document.getElementById('summaryBody');
+            const empty = document.getElementById('emptySummary');
+            if (!ozet.length) {
+                table.innerHTML = '';
+                empty.style.display = '';
+                return;
+            }
+            empty.style.display = 'none';
+            const maxSaat = Math.max(...ozet.map(o => o.toplam_saat), 1);
+            table.innerHTML = ozet.map(o => {
+                const pct = Math.min(100, (o.toplam_saat / maxSaat) * 100);
+                return `<tr>
             <td><strong>${o.personel_adi}</strong></td>
             <td>${rolBadge(o.rol)}</td>
             <td>${o.toplam_gun} gün</td>
@@ -612,13 +955,14 @@ function renderSummaryTable(ozet) {
                 <span style="font-size:.75rem;color:var(--muted)">${o.toplam_dakika} dakika</span>
             </td>
         </tr>`;
-    }).join('');
-}
+            }).join('');
+        }
 
-// Modal dışına tıklama
-document.getElementById('checkoutModal').addEventListener('click', function(e) {
-    if (e.target === this) hideModal();
-});
-</script>
+        // Modal dışına tıklama
+        document.getElementById('checkoutModal').addEventListener('click', function (e) {
+            if (e.target === this) hideModal();
+        });
+    </script>
 </body>
+
 </html>

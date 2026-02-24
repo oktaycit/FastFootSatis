@@ -28,3 +28,6 @@ dosya.zip
 
 # PostgreSQL credentials (sensitive)
 # db_config.py is included intentionally
+
+# Phone Agent Docs
+PhoneAgent_Docs/
