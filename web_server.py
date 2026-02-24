@@ -1394,11 +1394,12 @@ def api_vardiya_ac():
     bakiye = float(data.get('acilis_bakiyesi', 0))
     if not kasa_id or not kasiyer: return jsonify({'success': False, 'error': 'Eksik bilgi'})
     
-    # Kasiyerin kayıtlı olup olmadığını kontrol et
-    registered_cashier_names = [c['name'] for c in server.cashiers]
-    if kasiyer not in registered_cashier_names:
-        logger.warning(f"⚠️ Kayıtlı olmayan bir isimle vardiya açma girişimi: {kasiyer}")
-        return jsonify({'success': False, 'error': f'"{kasiyer}" isimli kullanıcı kasiyer olarak kayıtlı değil.'}), 403
+    # Kasiyerin kayıtlı olup olmadığını kontrol et (Eğer sistemde kayıtlı kasiyer varsa zorunlu tut)
+    if server.cashiers:
+        registered_cashier_names = [c['name'] for c in server.cashiers]
+        if kasiyer not in registered_cashier_names:
+            logger.warning(f"⚠️ Kayıtlı olmayan bir isimle vardiya açma girişimi: {kasiyer}")
+            return jsonify({'success': False, 'error': f'"{kasiyer}" isimli kullanıcı kasiyer olarak kayıtlı değil.'}), 403
 
     try:
         shift_id = db.open_shift(kasa_id, kasiyer, bakiye)
@@ -1419,8 +1420,13 @@ def api_vardiya_kapat():
     if not USE_DATABASE: return jsonify({'success': False, 'error': 'DB yok'})
     data = request.json
     shift_id = data.get('shift_id')
-    nakit = float(data.get('nakit', 0))
-    kart = float(data.get('kart', 0))
+    
+    # Boş string gelirse 0 kabul et (ValueError önlemek için)
+    val_nakit = data.get('nakit')
+    val_kart = data.get('kart')
+    nakit = float(val_nakit) if val_nakit and str(val_nakit).strip() != "" else 0.0
+    kart = float(val_kart) if val_kart and str(val_kart).strip() != "" else 0.0
+    
     if not shift_id: return jsonify({'success': False, 'error': 'Vardiya ID gerekli'})
     try:
         db.close_shift(shift_id, nakit, kart)
