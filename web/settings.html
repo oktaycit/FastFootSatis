@@ -442,14 +442,20 @@
         <!-- 2. Personel Ayarları (YENİ) -->
         <div class="settings-card">
             <div class="card-header">👥 Personel Yönetimi</div>
-            <div class="card-body" style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="card-body"
+                style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
                 <div>
-                    <h4 style="margin:0 0 5px 0;">Çalışan Tanımları</h4>
+                    <h4 style="margin:0 0 5px 0;">Çalışan Tanımları & Puantaj</h4>
                     <p style="margin:0; font-size:14px; color:var(--text-secondary);">Garson, Kasiyer ve Kurye
-                        bilgilerini buradan yönetebilirsiniz.</p>
+                        bilgilerini ve çalışma saatlerini buradan yönetebilirsiniz.</p>
                 </div>
-                <button class="btn-settings" onclick="location.href='personel.html'"
-                    style="width:auto; padding:10px 25px; background:var(--info-color); color:white;">⚙️ Yönet</button>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <button class="btn-settings" onclick="location.href='/personel'"
+                        style="width:auto; padding:10px 25px; background:var(--info-color); color:white;">⚙️
+                        Personel</button>
+                    <button class="btn-settings" onclick="location.href='/puantaj'"
+                        style="width:auto; padding:10px 25px; background:#e67e22; color:white;">📊 Puantaj</button>
+                </div>
             </div>
         </div>
 
@@ -902,6 +908,78 @@
             </div>
         </div>
 
+        <!-- 9. QR Menü & Online Sipariş -->
+        <div class="settings-card">
+            <div class="card-header">📱 QR Menü & Online Sipariş</div>
+            <div class="card-body">
+
+                <!-- Masa doğrulama modu -->
+                <div class="form-group" style="max-width:380px; margin-bottom:18px;">
+                    <label for="verifyMode">Masa Doğrulama Modu</label>
+                    <select id="verifyMode"
+                        style="padding:11px; border:2px solid #e0e0e0; border-radius:var(--radius-md); background:#f8f9fa;">
+                        <option value="hybrid">🔐 Hibrit — NFC veya Dinamik QR</option>
+                        <option value="dynamic_qr">📱 Yalnızca Dinamik QR</option>
+                        <option value="nfc">🏷️ Yalnızca NFC</option>
+                        <option value="none">🔓 Doğrulama Yok (Sadece Görüntüle)</option>
+                    </select>
+                    <small style="color:var(--text-secondary);">
+                        <b>Hibrit:</b> Garsonun ürettiği QR veya masadaki NFC etiketi ile sipariş onayı.
+                        <b>Yok:</b> Herkes serbestçe sipariş verebilir.
+                    </small>
+                </div>
+
+                <hr class="divider">
+
+                <!-- Online sipariş toggle -->
+                <div class="toggle-row">
+                    <div>
+                        <div class="toggle-label">🌐 Online Sipariş</div>
+                        <div class="toggle-desc">Uzaktan (ev/ofis) sipariş formunu etkinleştir — Ad, Telefon, Adres ile
+                        </div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="onlineOrdersEnabled" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <hr class="divider">
+
+                <!-- URL linkleri -->
+                <p
+                    style="font-size:13px; font-weight:600; color:var(--text-secondary); margin-bottom:10px; text-transform:uppercase;">
+                    Paylaşım Linkleri</p>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>📋 Masa QR Linki (örnek: Masa 1)</label>
+                        <div style="display:flex; gap:6px;">
+                            <input type="text" id="qrMenuUrl" readonly
+                                style="background:#f5f5f5; font-size:12px; color:#555;">
+                            <button class="btn-settings btn-info-s"
+                                style="padding:0 14px; margin:0; white-space:nowrap;" onclick="copyUrl('qrMenuUrl')">📋
+                                Kopyala</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>🌐 Online Sipariş Linki</label>
+                        <div style="display:flex; gap:6px;">
+                            <input type="text" id="onlineOrderUrl" readonly
+                                style="background:#f5f5f5; font-size:12px; color:#555;">
+                            <button class="btn-settings btn-info-s"
+                                style="padding:0 14px; margin:0; white-space:nowrap;"
+                                onclick="copyUrl('onlineOrderUrl')">📋 Kopyala</button>
+                        </div>
+                    </div>
+                </div>
+                <small style="color:var(--text-secondary);">
+                    Masa linkleri masaya yapıştırılan sabit QR'larda kullanılır.
+                    Online sipariş linki web sitesi, Instagram bio veya WhatsApp'ta paylaşılabilir.
+                    Dışarıdan erişim için router'da port yönlendirme (8000) gerekebilir.
+                </small>
+            </div>
+        </div>
+
         <!-- Butonlar -->
         <div class="action-buttons">
             <button class="btn-settings btn-save" id="btnSave" onclick="saveSettings()">
@@ -954,8 +1032,22 @@
                 document.getElementById('posIp').value = data.pos_ip || '127.0.0.1';
                 document.getElementById('posPort').value = data.pos_port || 5000;
                 document.getElementById('posType').value = data.pos_type || 'demo';
-
                 togglePosUI();
+
+                // QR Menü & Online Sipariş Politikası
+                try {
+                    const policyRes = await fetch('/api/public/policy');
+                    const policy = await policyRes.json();
+                    if (policy.success) {
+                        document.getElementById('verifyMode').value = policy.verify_mode || 'hybrid';
+                        document.getElementById('onlineOrdersEnabled').checked = policy.online_orders_enabled !== false;
+                    }
+                } catch (e) { console.warn('Policy yüklenemedi:', e); }
+
+                // URL'leri doldur
+                const base = window.location.protocol + '//' + window.location.host;
+                document.getElementById('qrMenuUrl').value = base + '/menu/public?table_hint=Masa+1';
+                document.getElementById('onlineOrderUrl').value = base + '/menu/public?mode=online';
 
                 // Header
                 document.getElementById('companyName').textContent = '⚙️ ' + (data.firma_ismi || 'AYARLAR');
@@ -1172,6 +1264,9 @@
                 // Entegrasyon ayarlarını ayrıca kaydet
                 await saveIntegrationSettings();
 
+                // QR Menu & Online Siparis politikasini kaydet
+                await saveQrMenuPolicy();
+
             } catch (e) {
                 showToast('Hata: ' + e.message, 'error');
             } finally {
@@ -1275,6 +1370,40 @@
             const platform = document.getElementById('int_acc_platform').value;
             document.getElementById('acc_parasut_fields').style.display = platform === 'parasut' ? 'block' : 'none';
             document.getElementById('acc_kolaybi_fields').style.display = platform === 'kolaybi' ? 'block' : 'none';
+        }
+
+        async function saveQrMenuPolicy() {
+            const verifyMode = document.getElementById('verifyMode').value;
+            const onlineOrdersEnabled = document.getElementById('onlineOrdersEnabled').checked;
+            const adminPassword = document.getElementById('mevcutSifre').value;
+            try {
+                const res = await fetch('/api/public/policy/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        admin_password: adminPassword,
+                        verify_mode: verifyMode,
+                        online_orders_enabled: onlineOrdersEnabled
+                    })
+                });
+                const data = await res.json();
+                if (!data.success) console.warn('QR policy kaydedilemedi:', data.error);
+            } catch (e) {
+                console.warn('QR policy kaydetme hatası:', e);
+            }
+        }
+
+        function copyUrl(inputId) {
+            const input = document.getElementById(inputId);
+            if (!input) return;
+            input.select();
+            input.setSelectionRange(0, 99999);
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(input.value).then(() => showToast('Link kopyalandı!', 'success'));
+            } else {
+                document.execCommand('copy');
+                showToast('Link kopyalandı!', 'success');
+            }
         }
 
         document.getElementById('posEnabled').addEventListener('change', togglePosUI);

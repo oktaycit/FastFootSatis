@@ -168,9 +168,9 @@ class RestaurantServer:
         self.public_sessions = {}      # session_id -> session_info
         self.public_nonce_store = {}   # nonce -> nonce_info
         self.public_rate_limit = defaultdict(list)  # session_id -> [timestamps]
-        self.verify_mode = (os.getenv("FASTFOOT_VERIFY_MODE", "hybrid") or "hybrid").strip().lower()
-        if self.verify_mode not in ("none", "dynamic_qr", "nfc", "hybrid"):
-            self.verify_mode = "hybrid"
+        # verify_mode ve online_orders_enabled load_settings() içinde set edilecek
+        self.verify_mode = "hybrid"  # load_settings() ile override edilecek
+        self.online_orders_enabled = True  # load_settings() ile override edilecek
         self.public_policy = {
             'dynamic_qr_ttl_sec': max(120, min(get_env_int("FASTFOOT_DYNAMIC_QR_TTL_SEC", 900), 1800)),
             'session_ttl_sec': max(300, min(get_env_int("FASTFOOT_PUBLIC_SESSION_TTL_SEC", 3600), 7200)),
@@ -515,7 +515,9 @@ class RestaurantServer:
             "pos_enabled": "HAYIR",
             "pos_ip": "127.0.0.1",
             "pos_port": "5000",
-            "pos_type": "demo"
+            "pos_type": "demo",
+            "verify_mode": "hybrid",
+            "online_orders_enabled": "EVET"
         }
         
         if os.path.exists(SETTINGS_FILE):
@@ -545,6 +547,15 @@ class RestaurantServer:
         self.pos_port = int(defaults["pos_port"])
         self.pos_type = defaults["pos_type"]
         self.pos_manager = POSManager(self.pos_enabled, self.pos_ip, self.pos_port, self.pos_type)
+        
+        # QR Menü ve Online Sipariş Ayarları
+        # Env değişkeni varsa önceliklidir, yoksa config.txt'ten okunur
+        env_verify = os.getenv("FASTFOOT_VERIFY_MODE", "").strip().lower()
+        cfg_verify = defaults.get("verify_mode", "hybrid").strip().lower()
+        self.verify_mode = env_verify if env_verify in ("none", "dynamic_qr", "nfc", "hybrid") else (
+            cfg_verify if cfg_verify in ("none", "dynamic_qr", "nfc", "hybrid") else "hybrid"
+        )
+        self.online_orders_enabled = (defaults.get("online_orders_enabled", "EVET") == "EVET")
     
     def save_settings(self):
         """Ayarları dosyaya kaydet"""
@@ -564,6 +575,8 @@ class RestaurantServer:
                 f.write(f"pos_ip:{self.pos_ip}\n")
                 f.write(f"pos_port:{self.pos_port}\n")
                 f.write(f"pos_type:{self.pos_type}\n")
+                f.write(f"verify_mode:{self.verify_mode}\n")
+                f.write(f"online_orders_enabled:{'EVET' if self.online_orders_enabled else 'HAYIR'}\n")
             return True
         except Exception as e:
             logger.error(f"Ayar kaydetme hatası: {e}")
@@ -1059,6 +1072,16 @@ def waiter_page():
 def waiters_manage_page():
     """Garson yönetimi sayfası"""
     return app.send_static_file('waiters_manage.html')
+
+@app.route('/puantaj')
+def puantaj_page():
+    """Çalışan puantaj takip sayfası"""
+    return app.send_static_file('puantaj.html')
+
+@app.route('/personel')
+def personel_page():
+    """Personel yönetimi sayfası"""
+    return app.send_static_file('personel.html')
 
 @app.route('/menu/public')
 def public_menu_page():
@@ -1695,6 +1718,137 @@ def waiter_login_api_unified():
         return jsonify({'success': True})
     return jsonify({'success': False, 'error': 'Hatalı PIN!'}), 401
 
+# ==================== PUANTAJ API ====================
+
+@app.route('/api/puantaj', methods=['GET'])
+def get_puantaj_api():
+    """Puantaj kayıtlarını listele (tarih filtrelenebilir)"""
+    if not USE_DATABASE:
+        return jsonify([])
+    try:
+        tarih = request.args.get('tarih')        # YYYY-MM-DD
+        ay    = request.args.get('ay')           # YYYY-MM
+        personel = request.args.get('personel')  # isim filtresi
+
+        if tarih:
+            records = db.get_puantaj_records(tarih_baslangic=tarih, tarih_bitis=tarih, personel_adi=personel)
+        elif ay:
+            yil, mon = ay.split('-')
+            import calendar
+            son_gun = calendar.monthrange(int(yil), int(mon))[1]
+            bas = f"{yil}-{mon}-01"
+            bit = f"{yil}-{mon}-{son_gun:02d}"
+            records = db.get_puantaj_records(tarih_baslangic=bas, tarih_bitis=bit, personel_adi=personel)
+        else:
+            from datetime import date
+            bugun = date.today().isoformat()
+            records = db.get_puantaj_records(tarih_baslangic=bugun, tarih_bitis=bugun, personel_adi=personel)
+
+        result = []
+        for r in records:
+            result.append({
+                'id': r['id'],
+                'personel_adi': r['personel_adi'],
+                'rol': r['rol'],
+                'tarih': str(r['tarih']),
+                'giris_saati': r['giris_saati'].strftime('%Y-%m-%dT%H:%M:%S') if r['giris_saati'] else None,
+                'cikis_saati': r['cikis_saati'].strftime('%Y-%m-%dT%H:%M:%S') if r['cikis_saati'] else None,
+                'toplam_dakika': r['toplam_dakika'],
+                'notlar': r['notlar'] or ''
+            })
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Puantaj listele hatası: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/puantaj', methods=['POST'])
+def add_puantaj_api():
+    """Yeni puantaj kaydı ekle"""
+    if not USE_DATABASE:
+        return jsonify({'success': False, 'error': 'DB bağlantısı yok'})
+    try:
+        data = request.json
+        personel_adi = (data.get('personel_adi') or '').strip()
+        rol = data.get('rol', 'garson')
+        giris_str = data.get('giris_saati')
+        notlar = data.get('notlar', '')
+        cikis_str = data.get('cikis_saati')
+
+        if not personel_adi:
+            return jsonify({'success': False, 'error': 'Personel adı gerekli'}), 400
+
+        import datetime as dt
+        giris = dt.datetime.fromisoformat(giris_str) if giris_str else dt.datetime.now()
+
+        record_id = db.add_puantaj_record(personel_adi, rol, giris, notlar)
+
+        # Çıkış saati de verildiyse hemen güncelle
+        if cikis_str:
+            cikis = dt.datetime.fromisoformat(cikis_str)
+            db.update_puantaj_checkout(record_id, cikis, notlar)
+
+        logger.info(f"📋 Puantaj kaydı eklendi: {personel_adi} ({rol})")
+        return jsonify({'success': True, 'id': record_id})
+    except Exception as e:
+        logger.error(f"Puantaj kayıt hatası: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/puantaj/<int:record_id>', methods=['PUT'])
+def update_puantaj_api(record_id):
+    """Puantaj kaydını güncelle (çıkış saati veya notlar)"""
+    if not USE_DATABASE:
+        return jsonify({'success': False, 'error': 'DB bağlantısı yok'})
+    try:
+        data = request.json
+        cikis_str = data.get('cikis_saati')
+        notlar = data.get('notlar')
+
+        import datetime as dt
+        cikis = dt.datetime.fromisoformat(cikis_str) if cikis_str else None
+        db.update_puantaj_checkout(record_id, cikis, notlar)
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"Puantaj güncelleme hatası: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/puantaj/<int:record_id>', methods=['DELETE'])
+def delete_puantaj_api(record_id):
+    """Puantaj kaydını sil"""
+    if not USE_DATABASE:
+        return jsonify({'success': False, 'error': 'DB bağlantısı yok'})
+    try:
+        db.delete_puantaj_record(record_id)
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"Puantaj silme hatası: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/puantaj/ozet', methods=['GET'])
+def puantaj_ozet_api():
+    """Aylık personel bazlı puantaj özeti"""
+    if not USE_DATABASE:
+        return jsonify([])
+    try:
+        ay = request.args.get('ay', '')  # YYYY-MM
+        if not ay:
+            from datetime import date
+            ay = date.today().strftime('%Y-%m')
+        yil, mon = ay.split('-')
+        rows = db.get_puantaj_monthly_summary(int(yil), int(mon))
+        result = []
+        for r in rows:
+            result.append({
+                'personel_adi': r['personel_adi'],
+                'rol': r['rol'],
+                'toplam_gun': r['toplam_gun'],
+                'toplam_dakika': int(r['toplam_dakika'] or 0),
+                'toplam_saat': round(int(r['toplam_dakika'] or 0) / 60, 1)
+            })
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Puantaj özet hatası: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/salons', methods=['POST'])
 def save_salons_api():
     """Salon düzenini kaydet"""
@@ -1746,8 +1900,161 @@ def api_public_policy():
         'allow_nfc': verify_mode in ('nfc', 'hybrid'),
         'max_items_per_order': server.public_policy.get('max_items_per_order', 25),
         'max_item_qty': server.public_policy.get('max_item_qty', 20),
-        'max_orders_per_minute': server.public_policy.get('max_orders_per_minute', 3)
+        'max_orders_per_minute': server.public_policy.get('max_orders_per_minute', 3),
+        'online_orders_enabled': server.online_orders_enabled
     })
+
+@app.route('/api/public/policy/update', methods=['POST'])
+def api_public_policy_update():
+    """QR Menu ve online siparis politikasini guncelle (admin gerektirir)"""
+    data = request.get_json(silent=True) or {}
+    admin_password = (data.get('admin_password') or '').strip()
+    if admin_password != server.admin_password:
+        return jsonify({'success': False, 'error': 'Admin sifresi hatali'}), 403
+
+    new_verify_mode = (data.get('verify_mode') or '').strip().lower()
+    if new_verify_mode in ('none', 'dynamic_qr', 'nfc', 'hybrid'):
+        server.verify_mode = new_verify_mode
+        logger.info(f"🔐 verify_mode guncellendi: {server.verify_mode}")
+
+    if 'online_orders_enabled' in data:
+        server.online_orders_enabled = bool(data['online_orders_enabled'])
+        logger.info(f"🛒 Online siparis: {'ACIK' if server.online_orders_enabled else 'KAPALI'}")
+
+    server.save_settings()
+    return jsonify({
+        'success': True,
+        'verify_mode': server.verify_mode,
+        'online_orders_enabled': server.online_orders_enabled
+    })
+
+# Online siparis rate limiting (telefon numarasina gore)
+_online_order_rate = defaultdict(list)
+
+@app.route('/api/online/order', methods=['POST'])
+def api_online_order():
+    """Uzaktan (online) siparis al — dogrulama gerektirmez, musteri bilgileri zorunlu"""
+    if not server.online_orders_enabled:
+        return jsonify({'success': False, 'error': 'Online siparis su an kapali'}), 503
+
+    data = request.get_json(silent=True) or {}
+    musteri_adi = (data.get('musteri_adi') or '').strip()
+    telefon = (data.get('telefon') or '').strip()
+    adres = (data.get('adres') or '').strip()
+    not_bilgisi = (data.get('not') or '').strip()
+    odeme_tipi = (data.get('odeme_tipi') or 'nakit').strip().lower()
+    if odeme_tipi not in ('nakit', 'kart'):
+        odeme_tipi = 'nakit'
+    raw_items = data.get('items') or []
+
+    # Validasyon
+    if not musteri_adi:
+        return jsonify({'success': False, 'error': 'Ad Soyad zorunludur'}), 400
+    if not telefon or len(''.join(filter(str.isdigit, telefon))) < 10:
+        return jsonify({'success': False, 'error': 'Gecerli bir telefon numarasi girin (min 10 hane)'}), 400
+    if not adres:
+        return jsonify({'success': False, 'error': 'Teslimat adresi zorunludur'}), 400
+    if not isinstance(raw_items, list) or not raw_items:
+        return jsonify({'success': False, 'error': 'Siparis kalemleri bos olamaz'}), 400
+
+    # Rate limiting: ayni telefondan 60 saniyede max 3 siparis
+    clean_tel = ''.join(filter(str.isdigit, telefon))
+    now_ts = time.time()
+    _online_order_rate[clean_tel] = [t for t in _online_order_rate[clean_tel] if now_ts - t < 60]
+    if len(_online_order_rate[clean_tel]) >= 3:
+        return jsonify({'success': False, 'error': 'Cok sik siparis gonderdiniz, lutfen bekleyin'}), 429
+    _online_order_rate[clean_tel].append(now_ts)
+
+    # Adisyon adi: "Online - Ad Soyad" (cakisma olursa numara ekle)
+    base_adisyon = f"Online - {musteri_adi[:30]}"
+    adisyon_adi = base_adisyon
+    suffix = 2
+    while adisyon_adi in server.adisyonlar and server.adisyonlar[adisyon_adi]:
+        adisyon_adi = f"{base_adisyon} ({suffix})"
+        suffix += 1
+
+    server.adisyonlar[adisyon_adi] = []
+
+    # Urunleri ekle
+    added = []
+    max_items = int(server.public_policy.get('max_items_per_order', 25))
+    max_qty = int(server.public_policy.get('max_item_qty', 20))
+    for it in raw_items[:max_items]:
+        urun = (it.get('urun') or '').strip()
+        adet = min(int(it.get('adet', 1)), max_qty)
+        fiyat = float(it.get('fiyat', 0))
+        if not urun or adet <= 0 or fiyat < 0:
+            continue
+        for _ in range(adet):
+            siparis = server.add_order_item(
+                masa_adi=adisyon_adi,
+                urun=urun,
+                fiyat=fiyat,
+                garson='Online Siparis',
+                adet=1
+            )
+            if siparis:
+                added.append(siparis)
+
+    if not added:
+        del server.adisyonlar[adisyon_adi]
+        return jsonify({'success': False, 'error': 'Gecerli siparis kalemi bulunamadi'}), 400
+
+    # Kasaya ve mutfaga bildir
+    socketio.emit('masa_update', {
+        'masa': adisyon_adi,
+        'items': server.adisyonlar[adisyon_adi],
+        'source': 'online_order'
+    })
+    socketio.emit('system_update', {
+        'new_online_order': True,
+        'masa': adisyon_adi,
+        'musteri_adi': musteri_adi,
+        'telefon': telefon,
+        'adres': adres,
+        'odeme_tipi': odeme_tipi
+    })
+
+    # DB'ye kaydet (varsa)
+    if USE_DATABASE:
+        try:
+            db.save_online_order(
+                musteri_adi=musteri_adi,
+                telefon=clean_tel,
+                adres=adres,
+                not_bilgisi=not_bilgisi,
+                items=added,
+                adisyon_adi=adisyon_adi,
+                odeme_tipi=odeme_tipi
+            )
+        except Exception as e:
+            logger.warning(f"Online siparis DB kaydedilemedi: {e}")
+
+    server.save_active_adisyonlar()
+    logger.info(f"🛒 Online siparis: {musteri_adi} | {clean_tel} | {len(added)} kalem | {adisyon_adi}")
+
+    return jsonify({
+        'success': True,
+        'adisyon_adi': adisyon_adi,
+        'added_count': len(added),
+        'message': 'Sipariminiz alindi! En kisa surede sizi arayacagiz.'
+    })
+
+@app.route('/api/online/orders', methods=['GET'])
+def api_online_orders():
+    """Online siparisleri listele (kasiyer paneli)"""
+    # Adisyonlar icinden "Online - " ile baslayanlar
+    online = []
+    for masa_adi, items in server.adisyonlar.items():
+        if masa_adi.startswith('Online - ') and items:
+            toplam = sum(float(it.get('fiyat', 0)) for it in items)
+            online.append({
+                'masa': masa_adi,
+                'kalem_sayisi': len(items),
+                'toplam': toplam,
+                'items': items
+            })
+    return jsonify({'success': True, 'orders': online})
 
 @app.route('/api/waiter/table-session/create', methods=['POST'])
 def api_waiter_create_table_session():

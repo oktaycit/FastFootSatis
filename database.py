@@ -227,6 +227,21 @@ class Database:
                 )
             """)
             
+            # PUANTAJ TABLOSU
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS puantaj (
+                    id SERIAL PRIMARY KEY,
+                    personel_adi TEXT NOT NULL,
+                    rol TEXT NOT NULL DEFAULT 'garson',
+                    tarih DATE NOT NULL DEFAULT CURRENT_DATE,
+                    giris_saati TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    cikis_saati TIMESTAMP,
+                    toplam_dakika INTEGER,
+                    notlar TEXT,
+                    olusturma_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # İNDEXLER
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_satislar_tarih ON satislar(tarih_saat)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_satislar_tip ON satislar(tip)")
@@ -239,6 +254,26 @@ class Database:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_public_sessions_table ON public_table_sessions(table_name)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_public_sessions_shift ON public_table_sessions(shift_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_public_sessions_status_exp ON public_table_sessions(status, expires_at)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_puantaj_tarih ON puantaj(tarih)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_puantaj_personel ON puantaj(personel_adi)")
+
+            # ONLINE SİPARİŞLER TABLOSU
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS online_orders (
+                    id SERIAL PRIMARY KEY,
+                    musteri_adi TEXT NOT NULL,
+                    telefon TEXT,
+                    adres TEXT NOT NULL,
+                    not_bilgisi TEXT,
+                    items JSONB DEFAULT '[]',
+                    odeme_tipi TEXT DEFAULT 'nakit',
+                    adisyon_adi TEXT,
+                    durum TEXT DEFAULT 'bekliyor',
+                    olusturma TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_online_orders_durum ON online_orders(durum)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_online_orders_olusturma ON online_orders(olusturma)")
             
             print("✓ Veri tabanı şeması oluşturuldu")
     
@@ -776,6 +811,120 @@ class Database:
                 VALUES (%s, %s, %s) RETURNING id
             """, (ad, api_key, json.dumps(ayarlar or {})))
             return cursor.fetchone()['id']
+
+    # ==================== ONLINE SİPARİŞ İŞLEMLERİ ====================
+
+    def save_online_order(self, musteri_adi, telefon, adres, not_bilgisi, items, adisyon_adi, odeme_tipi='nakit'):
+        """Online siparis kaydini olustur"""
+        import json
+        items_data = json.dumps([
+            {'urun': it.get('urun'), 'adet': it.get('adet', 1), 'fiyat': float(it.get('fiyat', 0))}
+            for it in items
+        ])
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO online_orders
+                    (musteri_adi, telefon, adres, not_bilgisi, items, odeme_tipi, adisyon_adi, durum)
+                VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, 'bekliyor')
+                RETURNING id
+            """, (musteri_adi, telefon, adres, not_bilgisi, items_data, odeme_tipi, adisyon_adi))
+            return cursor.fetchone()['id']
+
+    def get_online_orders(self, durum=None, limit=50):
+        """Online siparisleri listele"""
+        with self.get_cursor() as cursor:
+            if durum:
+                cursor.execute("""
+                    SELECT * FROM online_orders WHERE durum = %s
+                    ORDER BY olusturma DESC LIMIT %s
+                """, (durum, limit))
+            else:
+                cursor.execute("""
+                    SELECT * FROM online_orders
+                    ORDER BY olusturma DESC LIMIT %s
+                """, (limit,))
+            return cursor.fetchall()
+
+    def update_online_order_status(self, order_id, durum):
+        """Online siparis durumunu guncelle"""
+        with self.get_cursor() as cursor:
+            cursor.execute(
+                "UPDATE online_orders SET durum = %s WHERE id = %s",
+                (durum, order_id)
+            )
+
+    # ==================== PUANTAJ İŞLEMLERİ ====================
+
+    def add_puantaj_record(self, personel_adi, rol='garson', giris_saati=None, notlar=None):
+        """Yeni çalışan giriş kaydı ekle"""
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO puantaj (personel_adi, rol, tarih, giris_saati, notlar)
+                VALUES (%s, %s, %s::timestamp::date, %s, %s)
+                RETURNING id
+            """, (
+                personel_adi,
+                rol,
+                giris_saati or datetime.now(),
+                giris_saati or datetime.now(),
+                notlar
+            ))
+            return cursor.fetchone()['id']
+
+    def update_puantaj_checkout(self, record_id, cikis_saati=None, notlar=None):
+        """Çalışan çıkış saatini güncelle, toplam dakikayı hesapla"""
+        with self.get_cursor() as cursor:
+            cikis = cikis_saati or datetime.now()
+            cursor.execute("""
+                UPDATE puantaj
+                SET cikis_saati = %s,
+                    toplam_dakika = EXTRACT(EPOCH FROM (%s - giris_saati))::INTEGER / 60,
+                    notlar = COALESCE(%s, notlar)
+                WHERE id = %s
+            """, (cikis, cikis, notlar, record_id))
+
+    def get_puantaj_records(self, tarih_baslangic=None, tarih_bitis=None, personel_adi=None):
+        """Puantaj kayıtlarını filtreli getir"""
+        with self.get_cursor() as cursor:
+            conditions = []
+            params = []
+            if tarih_baslangic:
+                conditions.append("tarih >= %s")
+                params.append(tarih_baslangic)
+            if tarih_bitis:
+                conditions.append("tarih <= %s")
+                params.append(tarih_bitis)
+            if personel_adi:
+                conditions.append("personel_adi ILIKE %s")
+                params.append(f"%{personel_adi}%")
+            where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+            cursor.execute(f"""
+                SELECT * FROM puantaj {where}
+                ORDER BY tarih DESC, giris_saati DESC
+            """, tuple(params))
+            return cursor.fetchall()
+
+    def get_puantaj_monthly_summary(self, yil, ay):
+        """Aylık kişi bazlı puantaj özeti (toplam gün ve dakika)"""
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                SELECT
+                    personel_adi,
+                    rol,
+                    COUNT(DISTINCT tarih) AS toplam_gun,
+                    COALESCE(SUM(toplam_dakika), 0) AS toplam_dakika
+                FROM puantaj
+                WHERE EXTRACT(YEAR FROM tarih) = %s
+                  AND EXTRACT(MONTH FROM tarih) = %s
+                GROUP BY personel_adi, rol
+                ORDER BY personel_adi
+            """, (yil, ay))
+            return cursor.fetchall()
+
+    def delete_puantaj_record(self, record_id):
+        """Puantaj kaydını sil"""
+        with self.get_cursor() as cursor:
+            cursor.execute("DELETE FROM puantaj WHERE id = %s", (record_id,))
 
     # ==================== GENEL ====================
 

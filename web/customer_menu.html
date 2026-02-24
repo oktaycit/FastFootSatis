@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <html lang="tr">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FastFoot QR Menu</title>
+    <title>FastFoot QR Menü</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,700&display=swap"
+        rel="stylesheet">
     <style>
         :root {
             --bg: #f4f1ea;
@@ -21,7 +24,10 @@
             --radius: 14px;
         }
 
-        * { box-sizing: border-box; }
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             margin: 0;
             color: var(--ink);
@@ -32,7 +38,11 @@
                 var(--bg);
         }
 
-        .wrap { max-width: 1080px; margin: 0 auto; padding: 16px; }
+        .wrap {
+            max-width: 1080px;
+            margin: 0 auto;
+            padding: 16px;
+        }
 
         .hero {
             background: linear-gradient(135deg, #1c2a2b 0%, #2f473f 100%);
@@ -50,6 +60,7 @@
             font-family: Fraunces, Georgia, serif;
             font-weight: 700;
             letter-spacing: 0.3px;
+            font-size: 22px;
         }
 
         .hero-meta {
@@ -67,6 +78,11 @@
             background: rgba(255, 255, 255, 0.07);
         }
 
+        .badge.online-badge {
+            background: rgba(246, 167, 0, 0.25);
+            border-color: rgba(246, 167, 0, 0.5);
+        }
+
         .layout {
             margin-top: 14px;
             display: grid;
@@ -82,7 +98,9 @@
             box-shadow: 0 10px 20px rgba(0, 0, 0, 0.06);
         }
 
-        .menu-pane { padding: 12px; }
+        .menu-pane {
+            padding: 12px;
+        }
 
         .cat-tabs {
             display: flex;
@@ -92,7 +110,10 @@
             margin-bottom: 8px;
             scrollbar-width: none;
         }
-        .cat-tabs::-webkit-scrollbar { display: none; }
+
+        .cat-tabs::-webkit-scrollbar {
+            display: none;
+        }
 
         .tab {
             border: 1px solid var(--line);
@@ -105,13 +126,21 @@
             white-space: nowrap;
             font-size: 13px;
         }
-        .tab.active { background: var(--ink); color: #fff; border-color: var(--ink); }
 
-        .items { display: grid; gap: 8px; }
+        .tab.active {
+            background: var(--ink);
+            color: #fff;
+            border-color: var(--ink);
+        }
+
+        .items {
+            display: grid;
+            gap: 8px;
+        }
 
         .item {
+            grid-template-columns: 64px 1fr auto;
             display: grid;
-            grid-template-columns: 1fr auto;
             gap: 10px;
             align-items: center;
             border: 1px solid var(--line);
@@ -139,13 +168,40 @@
             cursor: pointer;
             font-family: inherit;
         }
-        .btn-main { background: var(--brand); color: #fff; }
-        .btn-main:disabled { opacity: 0.6; cursor: not-allowed; }
-        .btn-danger { background: var(--danger); color: #fff; }
-        .btn-soft { background: #eff3f8; color: #1f2937; }
 
-        .cart-pane { padding: 12px; position: sticky; top: 165px; }
-        .cart-list { max-height: 320px; overflow: auto; display: grid; gap: 7px; margin-bottom: 8px; }
+        .btn-main {
+            background: var(--brand);
+            color: #fff;
+        }
+
+        .btn-main:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: #fff;
+        }
+
+        .btn-soft {
+            background: #eff3f8;
+            color: #1f2937;
+        }
+
+        .cart-pane {
+            padding: 12px;
+            position: sticky;
+            top: 165px;
+        }
+
+        .cart-list {
+            max-height: 280px;
+            overflow: auto;
+            display: grid;
+            gap: 7px;
+            margin-bottom: 8px;
+        }
 
         .cart-row {
             border: 1px solid var(--line);
@@ -174,6 +230,7 @@
             font-family: Fraunces, Georgia, serif;
         }
 
+        /* ---- Masa doğrulama paneli ---- */
         .verify {
             border: 1px dashed var(--line);
             border-radius: 12px;
@@ -182,15 +239,94 @@
             background: #fbfaf7;
         }
 
-        .verify-row { display: flex; gap: 8px; margin-top: 7px; }
+        .verify-row {
+            display: flex;
+            gap: 8px;
+            margin-top: 7px;
+        }
 
-        input {
+        /* ---- Online sipariş formu ---- */
+        .online-form {
+            border: 1px solid #f6a700;
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 10px;
+            background: #fffbf0;
+        }
+
+        .online-form-title {
+            font-size: 14px;
+            font-weight: 800;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .online-form label {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--muted);
+            display: block;
+            margin-bottom: 3px;
+            margin-top: 8px;
+        }
+
+        .online-form label:first-of-type {
+            margin-top: 0;
+        }
+
+        /* Ödeme tipi seçici */
+        .pay-choice {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .pay-btn {
+            padding: 9px 6px;
+            border: 2px solid var(--line);
+            border-radius: 10px;
+            background: #fff;
+            font-weight: 700;
+            font-size: 13px;
+            cursor: pointer;
+            font-family: inherit;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            transition: border-color 0.15s, background 0.15s;
+        }
+
+        .pay-btn.selected-nakit {
+            border-color: var(--brand);
+            background: #e8f8f4;
+            color: var(--brand-dark);
+        }
+
+        .pay-btn.selected-kart {
+            border-color: #4f6ef7;
+            background: #eef1ff;
+            color: #2c3dd1;
+        }
+
+        input,
+        textarea,
+        select {
             width: 100%;
             border: 1px solid var(--line);
             border-radius: 9px;
             padding: 9px 10px;
             font-family: inherit;
             font-size: 14px;
+            background: #fff;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 56px;
         }
 
         .status {
@@ -201,19 +337,34 @@
             margin-top: 5px;
         }
 
-        .ok { color: #116149; }
-        .hint { color: var(--muted); font-size: 12px; line-height: 1.4; }
+        .ok {
+            color: #116149;
+        }
+
+        .hint {
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.4;
+        }
 
         .featured {
             margin-bottom: 10px;
             border: 1px solid #2f4a42;
             border-radius: 12px;
             padding: 10px;
-            background:
-                linear-gradient(115deg, rgba(246,167,0,0.2), rgba(15,139,109,0.16));
+            background: linear-gradient(115deg, rgba(246, 167, 0, 0.2), rgba(15, 139, 109, 0.16));
         }
-        .featured h2 { margin: 0; font-size: 16px; }
-        .featured p { margin: 4px 0 0; font-size: 13px; color: #2f3f3b; }
+
+        .featured h2 {
+            margin: 0;
+            font-size: 16px;
+        }
+
+        .featured p {
+            margin: 4px 0 0;
+            font-size: 13px;
+            color: #2f3f3b;
+        }
 
         .tools-row {
             display: grid;
@@ -231,7 +382,9 @@
             scrollbar-width: none;
         }
 
-        .reco-row::-webkit-scrollbar { display: none; }
+        .reco-row::-webkit-scrollbar {
+            display: none;
+        }
 
         .reco-chip {
             border: 1px solid #d5c8af;
@@ -243,10 +396,6 @@
             font-weight: 800;
             white-space: nowrap;
             cursor: pointer;
-        }
-
-        .item {
-            grid-template-columns: 64px 1fr auto;
         }
 
         .item-media {
@@ -270,24 +419,60 @@
             display: block;
         }
 
+        /* Başarı ekranı */
+        .success-screen {
+            display: none;
+            text-align: center;
+            padding: 32px 16px;
+        }
+
+        .success-icon {
+            font-size: 56px;
+            margin-bottom: 12px;
+        }
+
+        .success-title {
+            font-size: 22px;
+            font-weight: 800;
+            font-family: Fraunces, Georgia, serif;
+            margin-bottom: 8px;
+        }
+
+        .success-sub {
+            color: var(--muted);
+            font-size: 14px;
+        }
+
         @media (max-width: 930px) {
-            .layout { grid-template-columns: 1fr; }
-            .cart-pane { position: static; }
-            .hero { position: static; }
-            .tools-row { grid-template-columns: 1fr; }
+            .layout {
+                grid-template-columns: 1fr;
+            }
+
+            .cart-pane {
+                position: static;
+            }
+
+            .hero {
+                position: static;
+            }
+
+            .tools-row {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
+
 <body>
     <div class="wrap">
         <header class="hero">
-            <h1>FastFoot QR Menü</h1>
+            <h1 id="heroTitle">FastFoot QR Menü</h1>
             <div class="hero-meta">
-                <span class="badge" id="tableInfo">Masa: -</span>
-                <span class="badge">Canlı Menü</span>
+                <span class="badge" id="tableInfo">Menü</span>
+                <span class="badge" id="modeBadge">Canlı Menü</span>
                 <span class="badge">Hızlı Sipariş</span>
             </div>
-            <div class="status" id="verifyStatus">Doğrulama bekleniyor</div>
+            <div class="status" id="verifyStatus">Yükleniyor...</div>
         </header>
 
         <main class="layout">
@@ -315,27 +500,54 @@
                 <div id="cartRoot" class="cart-list"></div>
                 <div id="cartTotal" class="total">0.00 TL</div>
 
-                <div class="verify">
+                <!-- Başarı ekranı -->
+                <div class="success-screen" id="successScreen">
+                    <div class="success-icon">✅</div>
+                    <div class="success-title">Siparişiniz Alındı!</div>
+                    <p class="success-sub" id="successSub">En kısa sürede sizi arayacağız.</p>
+                    <br>
+                    <button class="btn btn-soft" style="width:100%;" onclick="resetAfterOrder()">Yeni Sipariş
+                        Ver</button>
+                </div>
+
+                <!-- MASA MODU: QR / NFC doğrulama paneli -->
+                <div class="verify" id="tableModePanel">
                     <strong style="font-size:14px;">Masa Doğrulama</strong>
                     <div class="hint">Dinamik QR veya NFC ile doğrulayın.</div>
-
-                    <div class="verify-row">
+                    <div class="verify-row" id="qrRow">
                         <input id="qrTokenInput" placeholder="Dinamik QR token" />
                         <button class="btn btn-soft" id="btnVerify">QR</button>
                     </div>
-
-                    <div class="verify-row">
+                    <div class="verify-row" id="nfcRow">
                         <input id="nfcUidInput" placeholder="NFC UID" />
                         <button class="btn btn-soft" id="btnVerifyNfc">NFC</button>
                     </div>
-
-                    <div class="verify-row">
+                    <div class="verify-row" id="nfcReadRow">
                         <button class="btn btn-soft" style="width:100%;" id="btnReadNfc">Telefondan NFC Oku</button>
                     </div>
                 </div>
 
-                <button class="btn btn-main" style="width:100%;" id="btnOrder">Siparişi Gönder</button>
-                <p class="hint">Doğrulama sonrası siparişiniz doğrudan mutfağa düşer.</p>
+                <!-- ONLİNE MODU: Müşteri bilgi formu -->
+                <div class="online-form" id="onlineModePanel" style="display:none;">
+                    <div class="online-form-title">📦 Teslimat Bilgileri</div>
+                    <label>Ad Soyad *</label>
+                    <input id="onlineAd" placeholder="Ali Veli" autocomplete="name" />
+                    <label>Telefon *</label>
+                    <input id="onlineTel" placeholder="0532 000 00 00" type="tel" autocomplete="tel" inputmode="tel" />
+                    <label>Teslimat Adresi *</label>
+                    <textarea id="onlineAdres" placeholder="Mahalle, sokak, no, kat, daire..."></textarea>
+                    <label>Not (opsiyonel)</label>
+                    <input id="onlineNot" placeholder="Kapıyı çalmayın, zil çalın vb." />
+                    <label>Ödeme Yöntemi</label>
+                    <div class="pay-choice">
+                        <button class="pay-btn selected-nakit" id="payNakit" onclick="selectOdeme('nakit')">💵 Kapıda
+                            Nakit</button>
+                        <button class="pay-btn" id="payKart" onclick="selectOdeme('kart')">💳 Kapıda Kart (POS)</button>
+                    </div>
+                </div>
+
+                <button class="btn btn-main" style="width:100%;margin-top:4px;" id="btnOrder">Siparişi Gönder</button>
+                <p class="hint" id="orderHint">Doğrulama sonrası siparişiniz doğrudan mutfağa düşer.</p>
             </aside>
         </main>
     </div>
@@ -344,6 +556,7 @@
         const params = new URLSearchParams(window.location.search);
         const tableHint = (params.get('table_hint') || '').trim();
         const tokenFromUrl = (params.get('qr_token') || '').trim();
+        const isOnlineMode = (params.get('mode') || '').trim().toLowerCase() === 'online';
 
         const state = {
             menu: {},
@@ -356,6 +569,7 @@
             tableName: tableHint,
             verified: false,
             orderPrefs: JSON.parse(localStorage.getItem('menu_order_prefs') || '{}'),
+            odeme_tipi: 'nakit',
             policy: {
                 verify_mode: 'hybrid',
                 verify_required: true,
@@ -364,7 +578,10 @@
             }
         };
 
+        // --- DOM refs ---
+        const heroTitle = document.getElementById('heroTitle');
         const tableInfo = document.getElementById('tableInfo');
+        const modeBadge = document.getElementById('modeBadge');
         const verifyStatus = document.getElementById('verifyStatus');
         const searchInput = document.getElementById('searchInput');
         const sortSelect = document.getElementById('sortSelect');
@@ -373,15 +590,40 @@
         const menuRoot = document.getElementById('menuRoot');
         const cartRoot = document.getElementById('cartRoot');
         const cartTotal = document.getElementById('cartTotal');
+        const tableModePanel = document.getElementById('tableModePanel');
+        const onlineModePanel = document.getElementById('onlineModePanel');
         const qrTokenInput = document.getElementById('qrTokenInput');
         const nfcUidInput = document.getElementById('nfcUidInput');
         const btnVerify = document.getElementById('btnVerify');
         const btnVerifyNfc = document.getElementById('btnVerifyNfc');
         const btnReadNfc = document.getElementById('btnReadNfc');
         const btnOrder = document.getElementById('btnOrder');
+        const orderHint = document.getElementById('orderHint');
+        const successScreen = document.getElementById('successScreen');
 
-        if (tableHint) tableInfo.textContent = `Masa: ${tableHint}`;
-        if (tokenFromUrl) qrTokenInput.value = tokenFromUrl;
+        // --- Mod Başlatma ---
+        function initMode() {
+            if (isOnlineMode) {
+                heroTitle.textContent = 'FastFoot Online Sipariş';
+                modeBadge.textContent = 'Online Sipariş';
+                modeBadge.classList.add('online-badge');
+                tableInfo.textContent = 'Teslimat';
+                tableModePanel.style.display = 'none';
+                onlineModePanel.style.display = 'block';
+                orderHint.textContent = 'Bilgilerinizi doldurup siparişi gönderin, sizi arayacağız.';
+                setStatus('Online sipariş modu — bilgilerinizi girin', true);
+            } else {
+                if (tableHint) tableInfo.textContent = `Masa: ${tableHint}`;
+                if (tokenFromUrl) qrTokenInput.value = tokenFromUrl;
+            }
+        }
+
+        // Ödeme tipi seçici
+        window.selectOdeme = function (tip) {
+            state.odeme_tipi = tip;
+            document.getElementById('payNakit').className = 'pay-btn' + (tip === 'nakit' ? ' selected-nakit' : '');
+            document.getElementById('payKart').className = 'pay-btn' + (tip === 'kart' ? ' selected-kart' : '');
+        };
 
         function fingerprint() {
             const raw = [navigator.userAgent, navigator.language, screen.width, screen.height, Intl.DateTimeFormat().resolvedOptions().timeZone].join('|');
@@ -395,25 +637,14 @@
 
         function escapeHtml(text) {
             return String(text)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#039;');
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
         }
-
         function escapeJs(text) {
             return String(text).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         }
-
-        function getItemName(item) {
-            return String(item[0] || '').trim();
-        }
-
-        function getItemPrice(item) {
-            return Number(item[1] || 0);
-        }
-
+        function getItemName(item) { return String(item[0] || '').trim(); }
+        function getItemPrice(item) { return Number(item[1] || 0); }
         function getItemImageUrl(item) {
             const candidate = item[6] || item[7];
             if (typeof candidate === 'string' && candidate.trim()) {
@@ -422,26 +653,21 @@
             }
             return null;
         }
-
         function getRecommendedScore(item) {
-            const name = getItemName(item);
-            const price = getItemPrice(item);
+            const name = getItemName(item), price = getItemPrice(item);
             const pref = Number(state.orderPrefs[name] || 0);
             const platformBoost = Number(item[2] || 0) + Number(item[3] || 0) + Number(item[4] || 0) + Number(item[5] || 0);
             const priceBoost = price > 0 ? Math.max(0, 120 / price) : 0;
             return pref * 5 + platformBoost + priceBoost;
         }
-
         function getVisibleItemsForCategory(cat) {
             const items = (state.menu[cat] || []).slice();
             const q = state.searchQuery.toLowerCase();
             let visible = q ? items.filter(it => getItemName(it).toLowerCase().includes(q)) : items;
-
             if (state.sortMode === 'price_asc') visible.sort((a, b) => getItemPrice(a) - getItemPrice(b));
             else if (state.sortMode === 'price_desc') visible.sort((a, b) => getItemPrice(b) - getItemPrice(a));
             else if (state.sortMode === 'name_asc') visible.sort((a, b) => getItemName(a).localeCompare(getItemName(b), 'tr'));
             else visible.sort((a, b) => getRecommendedScore(b) - getRecommendedScore(a));
-
             return visible;
         }
 
@@ -451,12 +677,12 @@
             state.menu = data.menu || {};
             state.categories = Object.keys(state.menu);
             state.activeCategory = state.categories[0] || null;
-            renderCategoryTabs();
-            renderRecommendations();
-            renderMenu();
+            renderCategoryTabs(); renderRecommendations(); renderMenu();
+            if (!isOnlineMode) setStatus(tableHint ? `Masa: ${tableHint}` : 'Menüye hoş geldiniz', true);
         }
 
         async function loadPolicy() {
+            if (isOnlineMode) return; // Online modda QR/NFC politikası gerekmez
             try {
                 const r = await fetch('/api/public/policy');
                 const data = await r.json();
@@ -468,76 +694,49 @@
                         allow_nfc: !!data.allow_nfc
                     };
                 }
-            } catch (e) {}
+            } catch (e) { }
             applyPolicyToUi();
         }
 
         function applyPolicyToUi() {
-            const qrRow = qrTokenInput.closest('.verify-row');
-            const nfcRow = nfcUidInput.closest('.verify-row');
-            const nfcReadRow = btnReadNfc.closest('.verify-row');
+            const qrRow = document.getElementById('qrRow');
+            const nfcRow = document.getElementById('nfcRow');
+            const nfcReadRow = document.getElementById('nfcReadRow');
             if (qrRow) qrRow.style.display = state.policy.allow_dynamic_qr ? 'flex' : 'none';
             if (nfcRow) nfcRow.style.display = state.policy.allow_nfc ? 'flex' : 'none';
             if (nfcReadRow) nfcReadRow.style.display = state.policy.allow_nfc ? 'flex' : 'none';
-
-            if (!state.policy.verify_required) {
-                setStatus('Doğrulama gerekmiyor (geliştirme modu)', true);
-            } else {
-                setStatus('Doğrulama bekleniyor');
-            }
+            if (!state.policy.verify_required) setStatus('Doğrulama gerekmiyor', true);
+            else setStatus('Doğrulama bekleniyor');
         }
 
         function renderCategoryTabs() {
-            if (!state.categories.length) {
-                catTabs.innerHTML = '';
-                return;
-            }
+            if (!state.categories.length) { catTabs.innerHTML = ''; return; }
             catTabs.innerHTML = state.categories.map(cat => {
                 const active = cat === state.activeCategory ? 'active' : '';
                 return `<button class="tab ${active}" onclick="selectCategory('${escapeJs(cat)}')">${escapeHtml(cat)}</button>`;
             }).join('');
         }
-
         window.selectCategory = (cat) => {
             state.activeCategory = cat;
-            renderCategoryTabs();
-            renderRecommendations();
-            renderMenu();
+            renderCategoryTabs(); renderRecommendations(); renderMenu();
         };
-
         function renderRecommendations() {
             const allItems = Object.values(state.menu).flat();
-            if (!allItems.length) {
-                recoRow.innerHTML = '';
-                return;
-            }
-            const top = allItems
-                .slice()
-                .sort((a, b) => getRecommendedScore(b) - getRecommendedScore(a))
-                .slice(0, 8);
-
+            if (!allItems.length) { recoRow.innerHTML = ''; return; }
+            const top = allItems.slice().sort((a, b) => getRecommendedScore(b) - getRecommendedScore(a)).slice(0, 8);
             recoRow.innerHTML = top.map(item => {
-                const name = getItemName(item);
-                const price = getItemPrice(item);
+                const name = getItemName(item), price = getItemPrice(item);
                 return `<button class="reco-chip" onclick="addToCart('${escapeJs(name)}', ${price})">★ ${escapeHtml(name)}</button>`;
             }).join('');
         }
-
         function renderMenu() {
             if (!state.activeCategory || !state.menu[state.activeCategory]) {
-                menuRoot.innerHTML = '<p class="hint">Menü bulunamadı.</p>';
-                return;
+                menuRoot.innerHTML = '<p class="hint">Menü bulunamadı.</p>'; return;
             }
-
             const items = getVisibleItemsForCategory(state.activeCategory);
-            if (!items.length) {
-                menuRoot.innerHTML = '<p class="hint">Filtreye uygun ürün bulunamadı.</p>';
-                return;
-            }
-
+            if (!items.length) { menuRoot.innerHTML = '<p class="hint">Filtreye uygun ürün bulunamadı.</p>'; return; }
             menuRoot.innerHTML = items.map(item => {
-                const name = getItemName(item);
-                const price = getItemPrice(item);
+                const name = getItemName(item), price = getItemPrice(item);
                 const imageUrl = getItemImageUrl(item);
                 const fallback = escapeHtml(name.slice(0, 2).toUpperCase() || 'ÜR');
                 return `
@@ -550,8 +749,7 @@
                             <div class="price">${price.toFixed(2)} TL</div>
                         </div>
                         <button class="btn btn-main" onclick="addToCart('${escapeJs(name)}', ${price})">Ekle</button>
-                    </article>
-                `;
+                    </article>`;
             }).join('');
         }
 
@@ -561,20 +759,17 @@
             state.cart[key].adet += 1;
             renderCart();
         };
-
         window.removeFromCart = (key) => {
             if (!state.cart[key]) return;
             state.cart[key].adet -= 1;
             if (state.cart[key].adet <= 0) delete state.cart[key];
             renderCart();
         };
-
         function renderCart() {
             const entries = Object.entries(state.cart);
             if (!entries.length) {
                 cartRoot.innerHTML = '<p class="hint">Sepetiniz boş.</p>';
-                cartTotal.textContent = '0.00 TL';
-                return;
+                cartTotal.textContent = '0.00 TL'; return;
             }
             let total = 0;
             cartRoot.innerHTML = entries.map(([key, item]) => {
@@ -585,140 +780,150 @@
                         <div>${escapeHtml(item.urun)}</div>
                         <div>${item.adet} x ${Number(item.fiyat).toFixed(2)}</div>
                         <button class="btn btn-danger" onclick="removeFromCart('${escapeJs(key)}')">-</button>
-                    </div>
-                `;
+                    </div>`;
             }).join('');
             cartTotal.textContent = `${total.toFixed(2)} TL`;
         }
 
+        // ========== MASA MODU: QR / NFC doğrulama ==========
         async function verifyDynamicQr() {
             const qrToken = qrTokenInput.value.trim();
             if (!qrToken) { setStatus('Dinamik token gerekli'); return false; }
-
             const r = await fetch('/api/public/session/verify-dynamic-qr', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ qr_token: qrToken, table_hint: tableHint, device_fingerprint: fingerprint() })
             });
             const data = await r.json();
             if (!data.success) { setStatus(data.error || 'QR doğrulama başarısız'); return false; }
-
             state.sessionToken = data.session_token;
             state.tableName = data.table_name;
             state.verified = true;
             localStorage.setItem('public_session_token', state.sessionToken);
             tableInfo.textContent = `Masa: ${state.tableName}`;
-            setStatus('QR ile doğrulandı', true);
-            return true;
+            setStatus('QR ile doğrulandı', true); return true;
         }
-
         async function verifyNfc() {
             const nfcUid = nfcUidInput.value.trim();
             if (!nfcUid) { setStatus('NFC UID gerekli'); return false; }
-
             const r = await fetch('/api/public/session/verify-nfc', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ table_hint: tableHint, nfc_uid: nfcUid, device_fingerprint: fingerprint() })
             });
             const data = await r.json();
             if (!data.success) { setStatus(data.error || 'NFC doğrulama başarısız'); return false; }
-
             state.sessionToken = data.session_token;
             state.tableName = data.table_name;
             state.verified = true;
             localStorage.setItem('public_session_token', state.sessionToken);
             tableInfo.textContent = `Masa: ${state.tableName}`;
-            setStatus('NFC ile doğrulandı', true);
-            return true;
+            setStatus('NFC ile doğrulandı', true); return true;
         }
-
         async function readNfcFromDevice() {
             if (!('NDEFReader' in window)) { setStatus('Bu cihaz/tarayıcı Web NFC desteklemiyor'); return; }
             try {
                 const ndef = new NDEFReader();
-                await ndef.scan();
-                setStatus('NFC bekleniyor...');
+                await ndef.scan(); setStatus('NFC bekleniyor...');
                 ndef.onreading = (event) => {
                     const serial = event.serialNumber || '';
-                    if (serial) {
-                        nfcUidInput.value = serial;
-                        setStatus('NFC okundu', true);
-                    } else {
-                        setStatus('NFC seri no okunamadı');
-                    }
+                    if (serial) { nfcUidInput.value = serial; setStatus('NFC okundu', true); }
+                    else { setStatus('NFC seri no okunamadı'); }
                 };
-            } catch (e) {
-                setStatus('NFC okuma başlatılamadı');
-            }
+            } catch (e) { setStatus('NFC okuma başlatılamadı'); }
         }
 
-        async function placeOrder() {
+        // ========== MASA MODU: Sipariş gönder ==========
+        async function placeTableOrder() {
             const items = Object.values(state.cart);
             if (!items.length) { setStatus('Sepet boş'); return; }
-
             if (state.policy.verify_required && !state.sessionToken) {
                 let ok = false;
-                if (state.policy.allow_dynamic_qr && qrTokenInput.value.trim()) {
-                    ok = await verifyDynamicQr();
-                } else if (state.policy.allow_nfc && nfcUidInput.value.trim()) {
-                    ok = await verifyNfc();
-                } else if (state.policy.allow_dynamic_qr) {
-                    ok = await verifyDynamicQr();
-                } else if (state.policy.allow_nfc) {
-                    ok = await verifyNfc();
-                }
+                if (state.policy.allow_dynamic_qr && qrTokenInput.value.trim()) ok = await verifyDynamicQr();
+                else if (state.policy.allow_nfc && nfcUidInput.value.trim()) ok = await verifyNfc();
+                else if (state.policy.allow_dynamic_qr) ok = await verifyDynamicQr();
+                else if (state.policy.allow_nfc) ok = await verifyNfc();
                 if (!ok) return;
             }
-
-            btnOrder.disabled = true;
-            btnOrder.textContent = 'Gönderiliyor...';
+            btnOrder.disabled = true; btnOrder.textContent = 'Gönderiliyor...';
             try {
                 const r = await fetch('/api/public/order', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        session_token: state.sessionToken,
-                        table_name: state.tableName || tableHint,
-                        items
-                    })
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_token: state.sessionToken, table_name: state.tableName || tableHint, items })
                 });
                 const data = await r.json();
                 if (!data.success) { setStatus(data.error || 'Sipariş başarısız'); return; }
-
-                for (const item of items) {
-                    const n = item.urun;
-                    state.orderPrefs[n] = Number(state.orderPrefs[n] || 0) + Number(item.adet || 1);
-                }
-                localStorage.setItem('menu_order_prefs', JSON.stringify(state.orderPrefs));
-
+                recordOrderPrefs(items);
                 state.cart = {};
-                renderRecommendations();
-                renderMenu();
-                renderCart();
-                setStatus('Sipariş mutfağa iletildi', true);
+                renderRecommendations(); renderMenu(); renderCart();
+                setStatus('Sipariş mutfağa iletildi ✓', true);
             } finally {
-                btnOrder.disabled = false;
-                btnOrder.textContent = 'Siparişi Gönder';
+                btnOrder.disabled = false; btnOrder.textContent = 'Siparişi Gönder';
             }
         }
+
+        // ========== ONLİNE MODU: Sipariş gönder ==========
+        async function placeOnlineOrder() {
+            const items = Object.values(state.cart);
+            if (!items.length) { setStatus('Sepet boş'); return; }
+            const musteri_adi = document.getElementById('onlineAd').value.trim();
+            const telefon = document.getElementById('onlineTel').value.trim();
+            const adres = document.getElementById('onlineAdres').value.trim();
+            const not_bilgisi = document.getElementById('onlineNot').value.trim();
+            if (!musteri_adi) { setStatus('Ad Soyad zorunlu'); return; }
+            if (!telefon || telefon.replace(/\D/g, '').length < 10) { setStatus('Geçerli telefon numarası girin'); return; }
+            if (!adres) { setStatus('Teslimat adresi zorunlu'); return; }
+
+            btnOrder.disabled = true; btnOrder.textContent = 'Gönderiliyor...';
+            try {
+                const r = await fetch('/api/online/order', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ musteri_adi, telefon, adres, not: not_bilgisi, odeme_tipi: state.odeme_tipi, items })
+                });
+                const data = await r.json();
+                if (!data.success) { setStatus(data.error || 'Sipariş gönderilemedi'); return; }
+                recordOrderPrefs(items);
+                // Başarı ekranı
+                const odemeMetni = state.odeme_tipi === 'kart' ? 'Kurye kapınıza POS cihazıyla gelecek.' : 'Kurye kapınıza nakit için gelecek.';
+                document.getElementById('successSub').textContent = `Siparişiniz alındı! ${odemeMetni} En kısa sürede sizi arayacağız.`;
+                document.getElementById('successScreen').style.display = 'block';
+                onlineModePanel.style.display = 'none';
+                cartRoot.style.display = 'none'; cartTotal.style.display = 'none';
+                btnOrder.style.display = 'none'; orderHint.style.display = 'none';
+                state.cart = {};
+                renderRecommendations(); renderMenu();
+            } finally {
+                btnOrder.disabled = false; btnOrder.textContent = 'Siparişi Gönder';
+            }
+        }
+
+        function recordOrderPrefs(items) {
+            for (const item of items) {
+                const n = item.urun;
+                state.orderPrefs[n] = Number(state.orderPrefs[n] || 0) + Number(item.adet || 1);
+            }
+            localStorage.setItem('menu_order_prefs', JSON.stringify(state.orderPrefs));
+        }
+
+        window.resetAfterOrder = function () {
+            document.getElementById('successScreen').style.display = 'none';
+            onlineModePanel.style.display = 'block';
+            cartRoot.style.display = ''; cartTotal.style.display = '';
+            btnOrder.style.display = ''; orderHint.style.display = '';
+            renderCart();
+        };
 
         btnVerify.addEventListener('click', verifyDynamicQr);
         btnVerifyNfc.addEventListener('click', verifyNfc);
         btnReadNfc.addEventListener('click', readNfcFromDevice);
-        searchInput.addEventListener('input', (e) => {
-            state.searchQuery = (e.target.value || '').trim();
-            renderMenu();
-        });
-        sortSelect.addEventListener('change', (e) => {
-            state.sortMode = e.target.value || 'recommended';
-            renderMenu();
-        });
-        btnOrder.addEventListener('click', placeOrder);
+        searchInput.addEventListener('input', (e) => { state.searchQuery = (e.target.value || '').trim(); renderMenu(); });
+        sortSelect.addEventListener('change', (e) => { state.sortMode = e.target.value || 'recommended'; renderMenu(); });
+        btnOrder.addEventListener('click', () => isOnlineMode ? placeOnlineOrder() : placeTableOrder());
 
+        // Başlat
+        initMode();
         loadPolicy();
         loadMenu().catch(() => setStatus('Menü yüklenemedi'));
         renderCart();
     </script>
 </body>
+
 </html>
