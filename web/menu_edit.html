@@ -61,7 +61,7 @@
 
         .item-row {
             display: grid;
-            grid-template-columns: 1fr 100px 70px 70px 70px 70px 50px;
+            grid-template-columns: 1fr 100px 70px 70px 70px 70px 1.4fr 80px 50px;
             gap: 10px;
             padding: 10px 0;
             border-bottom: 1px solid #f1f1f1;
@@ -89,6 +89,30 @@
         .item-row input:focus {
             border-color: var(--accent-color);
             outline: none;
+        }
+
+        .img-preview {
+            width: 64px;
+            height: 44px;
+            border: 1px solid #d9dde4;
+            border-radius: 6px;
+            overflow: hidden;
+            background: #f4f6f9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #95a5a6;
+            font-size: 10px;
+            font-weight: 700;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .img-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
         }
 
         .btn-icon {
@@ -244,17 +268,21 @@
                             <div style="text-align:center;">TY %</div>
                             <div style="text-align:center;">GT %</div>
                             <div style="text-align:center;">MG %</div>
+                            <div style="text-align:center;">Görsel URL</div>
+                            <div style="text-align:center;">Önizleme</div>
                             <div></div>
                         </div>
                         <div id="list-${cat}">
                             ${menuData[cat].map((item, idx) => `
                                 <div class="item-row">
-                                    <input type="text" value="${item[0]}" placeholder="Ürün Adı" onchange="updateItem('${cat}', ${idx}, 0, this.value)">
+                                    <input type="text" value="${escapeAttr(item[0] || '')}" placeholder="Ürün Adı" onchange="updateItem('${cat}', ${idx}, 0, this.value)">
                                     <input type="number" value="${item[1]}" placeholder="Fiyat" step="0.01" onchange="updateItem('${cat}', ${idx}, 1, this.value)">
                                     <input type="number" value="${item[2] || 0}" placeholder="YS %" step="1" onchange="updateItem('${cat}', ${idx}, 2, this.value)">
                                     <input type="number" value="${item[3] || 0}" placeholder="TY %" step="1" onchange="updateItem('${cat}', ${idx}, 3, this.value)">
                                     <input type="number" value="${item[4] || 0}" placeholder="GT %" step="1" onchange="updateItem('${cat}', ${idx}, 4, this.value)">
                                     <input type="number" value="${item[5] || 0}" placeholder="MG %" step="1" onchange="updateItem('${cat}', ${idx}, 5, this.value)">
+                                    <input type="text" value="${escapeAttr(item[6] || '')}" placeholder="https://.../urun.jpg" onchange="updateItem('${cat}', ${idx}, 6, this.value)">
+                                    ${renderImagePreview(item[6] || '')}
                                     <button class="btn-icon" onclick="removeItem('${cat}', ${idx})">❌</button>
                                 </div>
                             `).join('')}
@@ -268,13 +296,34 @@
             });
         }
 
+        function escapeAttr(value) {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+        }
+
+        function renderImagePreview(url) {
+            const clean = (url || '').trim();
+            if (!clean) return '<div class="img-preview">YOK</div>';
+            const safe = escapeAttr(clean);
+            return `<div class="img-preview"><img src="${safe}" alt="img" onerror="this.parentNode.textContent='HATALI URL'"></div>`;
+        }
+
         function updateItem(cat, idx, field, value) {
-            if (field >= 1) value = parseFloat(value) || 0;
+            if (field >= 1 && field <= 5) value = parseFloat(value) || 0;
+            if (field === 6) {
+                value = (value || '').trim();
+                menuData[cat][idx][field] = value;
+                renderEditor();
+                return;
+            }
             menuData[cat][idx][field] = value;
         }
 
         function addItem(cat) {
-            menuData[cat].push(["Yeni Ürün", 0.0, 0, 0, 0, 0]);
+            menuData[cat].push(["Yeni Ürün", 0.0, 0, 0, 0, 0, ""]);
             renderEditor();
         }
 

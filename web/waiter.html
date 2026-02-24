@@ -103,6 +103,17 @@
             color: var(--primary);
         }
 
+        .btn-tools {
+            background: #16a085;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 8px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
         .selected-table-info {
             font-weight: bold;
             background: #34495e;
@@ -267,6 +278,89 @@
             font-weight: bold;
             cursor: pointer;
         }
+
+        .tools-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.65);
+            z-index: 2100;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            padding: 15px;
+        }
+
+        .tools-card {
+            width: 100%;
+            max-width: 640px;
+            background: #171717;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 14px;
+        }
+
+        .tools-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .tools-box {
+            background: #202020;
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        .tools-box h3 {
+            margin: 0 0 10px;
+            font-size: 14px;
+            color: #8bd3ff;
+        }
+
+        .tools-box button {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 700;
+            cursor: pointer;
+            margin-top: 6px;
+        }
+
+        .btn-primary {
+            background: #3498db;
+            color: #fff;
+        }
+
+        .btn-ok {
+            background: #2ecc71;
+            color: #fff;
+        }
+
+        .tools-output {
+            margin-top: 10px;
+            background: #0d1117;
+            border: 1px solid #2f3542;
+            border-radius: 8px;
+            padding: 8px;
+            font-size: 12px;
+            color: #d0d7de;
+            word-break: break-all;
+            min-height: 40px;
+        }
+
+        .tools-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 10px;
+        }
+
+        @media (max-width: 720px) {
+            .tools-grid {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 
@@ -288,6 +382,7 @@
         <div class="top-bar">
             <h1 onclick="showScreen('table-screen')">FastFoot 🤵</h1>
             <div style="display: flex; align-items: center; gap: 10px;">
+                <button class="btn-tools" onclick="openQrTools()">QR/NFC</button>
                 <span id="waiterDisplayName" style="color: #999; font-size: 12px;"></span>
                 <div class="selected-table-info" id="activeTableName">MASA SEÇİN</div>
             </div>
@@ -320,6 +415,33 @@
         </div>
     </div>
 
+    <div id="toolsModal" class="tools-modal">
+        <div class="tools-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <strong>QR / NFC Araçları</strong>
+                <span id="toolsCurrentTable" style="font-size:12px;color:#9aa0a6;">Masa: -</span>
+            </div>
+            <div class="tools-grid">
+                <div class="tools-box">
+                    <h3>Dinamik QR Üret</h3>
+                    <input id="qrKasaId" type="number" value="1" min="1" placeholder="Kasa ID">
+                    <button class="btn-primary" onclick="generateDynamicQr()">QR Üret</button>
+                    <div id="qrOutput" class="tools-output">Henüz üretilmedi.</div>
+                </div>
+                <div class="tools-box">
+                    <h3>NFC Etiket Kaydet</h3>
+                    <input id="nfcUidInput" placeholder="NFC UID">
+                    <button class="btn-primary" onclick="readNfcForRegister()">Telefondan NFC Oku</button>
+                    <button class="btn-ok" onclick="registerNfcTag()">NFC Kaydet</button>
+                    <div id="nfcOutput" class="tools-output">Henüz kayıt yapılmadı.</div>
+                </div>
+            </div>
+            <div class="tools-actions">
+                <button class="btn-cancel" onclick="closeQrTools()">Kapat</button>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script>
         let socket = io();
@@ -330,6 +452,7 @@
         let serverItems = []; // Sunucudan gelen aktif siparişler
         let currentCategory = null;
         let loggedWaiter = null;
+        let loggedPin = null;
 
         // Sayfa yüklendiğinde garsonları çek
         async function fetchWaiters() {
@@ -358,6 +481,7 @@
 
             if (res.ok) {
                 loggedWaiter = name;
+                loggedPin = pin;
                 document.getElementById('waiterDisplayName').textContent = '🤵 ' + name;
                 document.getElementById('loginOverlay').style.display = 'none';
                 document.getElementById('mainApp').style.display = 'flex';
@@ -605,6 +729,108 @@
             });
             basket = [];
             updateBasketDisplay();
+        }
+
+        function openQrTools() {
+            if (!loggedWaiter) {
+                alert('Önce giriş yapın');
+                return;
+            }
+            if (!currentTable) {
+                alert('Önce masa seçin');
+                return;
+            }
+            document.getElementById('toolsCurrentTable').textContent = `Masa: ${currentTable}`;
+            document.getElementById('toolsModal').style.display = 'flex';
+        }
+
+        function closeQrTools() {
+            document.getElementById('toolsModal').style.display = 'none';
+        }
+
+        async function generateDynamicQr() {
+            if (!currentTable) return;
+            const kasaId = parseInt(document.getElementById('qrKasaId').value || '1', 10);
+            const out = document.getElementById('qrOutput');
+            out.textContent = 'Üretiliyor...';
+
+            try {
+                const res = await fetch('/api/waiter/table-session/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        table_name: currentTable,
+                        kasa_id: kasaId,
+                        ttl_seconds: 900,
+                        waiter_name: loggedWaiter,
+                        waiter_pin: loggedPin
+                    })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    out.textContent = `Hata: ${data.error || 'QR üretilemedi'}`;
+                    return;
+                }
+                const fullUrl = window.location.origin + data.verify_url;
+                out.textContent = `URL: ${fullUrl}\nToken: ${data.qr_token}`;
+            } catch (e) {
+                out.textContent = 'Hata: Sunucuya erişilemedi';
+            }
+        }
+
+        async function readNfcForRegister() {
+            const out = document.getElementById('nfcOutput');
+            if (!('NDEFReader' in window)) {
+                out.textContent = 'Bu cihaz/tarayıcı Web NFC desteklemiyor.';
+                return;
+            }
+            try {
+                const ndef = new NDEFReader();
+                await ndef.scan();
+                out.textContent = 'NFC bekleniyor...';
+                ndef.onreading = (event) => {
+                    const serial = event.serialNumber || '';
+                    if (serial) {
+                        document.getElementById('nfcUidInput').value = serial;
+                        out.textContent = 'NFC UID okundu.';
+                    } else {
+                        out.textContent = 'NFC seri no okunamadı.';
+                    }
+                };
+            } catch (e) {
+                out.textContent = 'NFC okuma başlatılamadı.';
+            }
+        }
+
+        async function registerNfcTag() {
+            if (!currentTable) return;
+            const uid = (document.getElementById('nfcUidInput').value || '').trim();
+            const out = document.getElementById('nfcOutput');
+            if (!uid) {
+                out.textContent = 'NFC UID gerekli.';
+                return;
+            }
+            out.textContent = 'Kaydediliyor...';
+            try {
+                const res = await fetch('/api/waiter/nfc-tag/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        table_name: currentTable,
+                        nfc_uid: uid,
+                        waiter_name: loggedWaiter,
+                        waiter_pin: loggedPin
+                    })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    out.textContent = `Hata: ${data.error || 'Kayıt başarısız'}`;
+                    return;
+                }
+                out.textContent = `${data.table_name} için NFC kaydedildi.`;
+            } catch (e) {
+                out.textContent = 'Hata: Sunucuya erişilemedi.';
+            }
         }
     </script>
 </body>

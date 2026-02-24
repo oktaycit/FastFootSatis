@@ -335,8 +335,6 @@ function onPaymentCompleted(data) {
 
     // Update table button
     updateTableButton(data.masa);
-
-    showNotification(`${data.type} ödemesi başarıyla alındı!`, 'success');
 }
 
 function onAdisyonlarUpdate(data) {
@@ -391,6 +389,12 @@ function closeOnlineOrderPopup() {
 }
 
 function onSuccess(data) {
+    const message = (data && data.message) ? String(data.message) : '';
+    const normalized = message.toLocaleLowerCase('tr-TR');
+    // Payment-completed success toasts are intentionally suppressed.
+    if (normalized.includes('ödemesi alındı') || normalized.includes('parçalı ödeme alındı')) {
+        return;
+    }
     showNotification(data.message, 'success');
 }
 

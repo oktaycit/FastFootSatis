@@ -96,6 +96,15 @@ socketio = SocketIO(app,
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+def get_env_int(name, default):
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except Exception:
+        return default
+
 def get_local_ip():
     """Yerel IP adresini al"""
     try:
@@ -159,6 +168,17 @@ class RestaurantServer:
         self.public_sessions = {}      # session_id -> session_info
         self.public_nonce_store = {}   # nonce -> nonce_info
         self.public_rate_limit = defaultdict(list)  # session_id -> [timestamps]
+        self.verify_mode = (os.getenv("FASTFOOT_VERIFY_MODE", "hybrid") or "hybrid").strip().lower()
+        if self.verify_mode not in ("none", "dynamic_qr", "nfc", "hybrid"):
+            self.verify_mode = "hybrid"
+        self.public_policy = {
+            'dynamic_qr_ttl_sec': max(120, min(get_env_int("FASTFOOT_DYNAMIC_QR_TTL_SEC", 900), 1800)),
+            'session_ttl_sec': max(300, min(get_env_int("FASTFOOT_PUBLIC_SESSION_TTL_SEC", 3600), 7200)),
+            'session_slide_sec': max(120, min(get_env_int("FASTFOOT_PUBLIC_SESSION_SLIDE_SEC", 900), 1800)),
+            'max_items_per_order': max(1, min(get_env_int("FASTFOOT_MAX_ITEMS_PER_ORDER", 25), 100)),
+            'max_item_qty': max(1, min(get_env_int("FASTFOOT_MAX_ITEM_QTY", 20), 50)),
+            'max_orders_per_minute': max(1, min(get_env_int("FASTFOOT_MAX_ORDERS_PER_MIN", 3), 30))
+        }
 
         if USE_DATABASE:
             try:
@@ -181,6 +201,7 @@ class RestaurantServer:
         logger.info("🚀 RestaurantServer initialized")
         logger.info(f"📊 Masa: {self.masa_sayisi}, Paket: {self.paket_sayisi}")
         logger.info(f"📡 IP: {get_local_ip()}")
+        logger.info(f"🔐 Public verify mode: {self.verify_mode}")
 
     # ==================== PUBLIC QR SESSION HELPERS ====================
     def _b64url_encode(self, raw):
@@ -305,7 +326,7 @@ class RestaurantServer:
                 logger.error(f"Public nonce DB used update hatası: {e}")
 
         session_id = secrets.token_urlsafe(24)
-        expires_at = int(time.time()) + 3600  # 60 dk
+        expires_at = int(time.time()) + int(self.public_policy.get('session_ttl_sec', 3600))
         session_data = {
             'id': session_id,
             'table_name': payload['table_name'],
@@ -353,7 +374,7 @@ class RestaurantServer:
             return None, "NFC etiketi masa ile eşleşmiyor"
 
         session_id = secrets.token_urlsafe(24)
-        expires_at = int(time.time()) + 3600
+        expires_at = int(time.time()) + int(self.public_policy.get('session_ttl_sec', 3600))
         session_data = {
             'id': session_id,
             'table_name': table_name,
@@ -765,10 +786,11 @@ class RestaurantServer:
                         oran_ty = float(parts[4]) if len(parts) > 4 else 0
                         oran_gt = float(parts[5]) if len(parts) > 5 else 0
                         oran_mg = float(parts[6]) if len(parts) > 6 else 0
+                        image_url = parts[7].strip() if len(parts) > 7 else ""
                         
                         if cat not in self.menu_data:
                             self.menu_data[cat] = []
-                        self.menu_data[cat].append([item, float(price), oran_ys, oran_ty, oran_gt, oran_mg])
+                        self.menu_data[cat].append([item, float(price), oran_ys, oran_ty, oran_gt, oran_mg, image_url])
             logger.info(f"✓ Menü dosyadan yüklendi: {len(self.menu_data)} kategori")
         except Exception as e:
             logger.error(f"Menü yükleme hatası: {e}")
@@ -1713,12 +1735,26 @@ def api_public_menu():
         'menu': server.menu_data
     })
 
+@app.route('/api/public/policy')
+def api_public_policy():
+    verify_mode = server.verify_mode
+    return jsonify({
+        'success': True,
+        'verify_mode': verify_mode,
+        'verify_required': verify_mode != 'none',
+        'allow_dynamic_qr': verify_mode in ('dynamic_qr', 'hybrid'),
+        'allow_nfc': verify_mode in ('nfc', 'hybrid'),
+        'max_items_per_order': server.public_policy.get('max_items_per_order', 25),
+        'max_item_qty': server.public_policy.get('max_item_qty', 20),
+        'max_orders_per_minute': server.public_policy.get('max_orders_per_minute', 3)
+    })
+
 @app.route('/api/waiter/table-session/create', methods=['POST'])
 def api_waiter_create_table_session():
     data = request.get_json(silent=True) or {}
     table_name = (data.get('table_name') or "").strip()
     kasa_id = data.get('kasa_id')
-    ttl_seconds = int(data.get('ttl_seconds', 900))
+    ttl_seconds = int(data.get('ttl_seconds', server.public_policy.get('dynamic_qr_ttl_sec', 900)))
     waiter_name = (data.get('waiter_name') or "").strip()
     waiter_pin = (data.get('waiter_pin') or "").strip()
     admin_password = (data.get('admin_password') or "").strip()
@@ -1793,6 +1829,9 @@ def api_waiter_register_nfc_tag():
 
 @app.route('/api/public/session/verify-dynamic-qr', methods=['POST'])
 def api_public_verify_dynamic_qr():
+    if server.verify_mode not in ('dynamic_qr', 'hybrid'):
+        return jsonify({'success': False, 'error': 'Dinamik QR doğrulama kapalı'}), 403
+
     data = request.get_json(silent=True) or {}
     qr_token = (data.get('qr_token') or "").strip()
     table_hint = (data.get('table_hint') or "").strip()
@@ -1823,6 +1862,9 @@ def api_public_verify_dynamic_qr():
 
 @app.route('/api/public/session/verify-nfc', methods=['POST'])
 def api_public_verify_nfc():
+    if server.verify_mode not in ('nfc', 'hybrid'):
+        return jsonify({'success': False, 'error': 'NFC doğrulama kapalı'}), 403
+
     data = request.get_json(silent=True) or {}
     table_hint = (data.get('table_hint') or "").strip()
     nfc_uid = (data.get('nfc_uid') or "").strip()
@@ -1854,28 +1896,35 @@ def api_public_order():
     table_name = (data.get('table_name') or "").strip()
     raw_items = data.get('items') or []
 
-    if not session_token or not table_name:
-        return jsonify({'success': False, 'error': 'Oturum ve masa bilgisi gerekli'}), 400
+    if not table_name:
+        return jsonify({'success': False, 'error': 'Masa bilgisi gerekli'}), 400
     if not isinstance(raw_items, list) or not raw_items:
         return jsonify({'success': False, 'error': 'Sipariş kalemleri gerekli'}), 400
     if table_name not in server.adisyonlar:
         return jsonify({'success': False, 'error': 'Masa bulunamadı'}), 400
 
-    session, err = server.validate_public_session(session_token, table_name=table_name)
-    if err:
-        return jsonify({'success': False, 'error': err}), 401
+    verify_mode = server.verify_mode
+    session = None
+    rate_key = session_token or f"none:{request.remote_addr}:{table_name}"
+    if verify_mode != 'none':
+        if not session_token:
+            return jsonify({'success': False, 'error': 'Doğrulama gerekli'}), 401
+        session, err = server.validate_public_session(session_token, table_name=table_name)
+        if err:
+            return jsonify({'success': False, 'error': err}), 401
+        rate_key = session_token
 
-    if not server.can_place_public_order(session_token, max_per_minute=3):
+    if not server.can_place_public_order(rate_key, max_per_minute=int(server.public_policy.get('max_orders_per_minute', 3))):
         return jsonify({'success': False, 'error': 'Çok sık sipariş gönderildi, lütfen bekleyin'}), 429
 
     added = []
-    for it in raw_items[:25]:
+    for it in raw_items[:int(server.public_policy.get('max_items_per_order', 25))]:
         urun = (it.get('urun') or "").strip()
         adet = int(it.get('adet', 1))
         fiyat = float(it.get('fiyat', 0))
         if not urun or adet <= 0 or fiyat < 0:
             continue
-        for _ in range(min(adet, 20)):
+        for _ in range(min(adet, int(server.public_policy.get('max_item_qty', 20)))):
             order_item = server.add_order_item(
                 masa_adi=table_name,
                 urun=urun,
@@ -1889,21 +1938,28 @@ def api_public_order():
     if not added:
         return jsonify({'success': False, 'error': 'Geçerli sipariş kalemi bulunamadı'}), 400
 
-    session['expires_at'] = min(int(time.time()) + 900, session['created_at'] + 3600)
-    if USE_DATABASE:
-        try:
-            db.update_public_session_expiry(
-                session_token,
-                datetime.datetime.fromtimestamp(session['expires_at'])
-            )
-        except Exception as e:
-            logger.error(f"Public session expiry update DB hatası: {e}")
+    session_exp = None
+    if session:
+        session['expires_at'] = min(
+            int(time.time()) + int(server.public_policy.get('session_slide_sec', 900)),
+            session['created_at'] + int(server.public_policy.get('session_ttl_sec', 3600))
+        )
+        session_exp = session['expires_at']
+        if USE_DATABASE:
+            try:
+                db.update_public_session_expiry(
+                    session_token,
+                    datetime.datetime.fromtimestamp(session['expires_at'])
+                )
+            except Exception as e:
+                logger.error(f"Public session expiry update DB hatası: {e}")
 
     return jsonify({
         'success': True,
         'table_name': table_name,
         'added_count': len(added),
-        'session_expires_at_unix': session['expires_at']
+        'session_expires_at_unix': session_exp,
+        'verify_mode': verify_mode
     })
 
 # ==================== MENÜ ====================
@@ -1922,7 +1978,7 @@ def save_menu_api():
         with open(MENU_FILE, "w", encoding="utf-8") as f:
             for cat, items in new_menu.items():
                 for item in items:
-                    # item structure: [name, price, ys, ty, gt, mg]
+                    # item structure: [name, price, ys, ty, gt, mg, image_url]
                     name = item[0]
                     price = item[1]
                     # Default percentages to 0 if not provided
@@ -1930,7 +1986,9 @@ def save_menu_api():
                     ty = item[3] if len(item) > 3 else 0
                     gt = item[4] if len(item) > 4 else 0
                     mg = item[5] if len(item) > 5 else 0
-                    f.write(f"{cat};{name};{price};{ys};{ty};{gt};{mg}\n")
+                    image_url = str(item[6]).strip() if len(item) > 6 and item[6] is not None else ""
+                    image_url = image_url.replace(";", "")
+                    f.write(f"{cat};{name};{price};{ys};{ty};{gt};{mg};{image_url}\n")
         
         # 2. Veri tabanını güncelle (eğer kullanılıyorsa)
         if USE_DATABASE:

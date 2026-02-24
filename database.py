@@ -138,6 +138,7 @@ class Database:
             cursor.execute("ALTER TABLE menu ADD COLUMN IF NOT EXISTS oran_ty DECIMAL(5, 2) DEFAULT 0")
             cursor.execute("ALTER TABLE menu ADD COLUMN IF NOT EXISTS oran_gt DECIMAL(5, 2) DEFAULT 0")
             cursor.execute("ALTER TABLE menu ADD COLUMN IF NOT EXISTS oran_mg DECIMAL(5, 2) DEFAULT 0")
+            cursor.execute("ALTER TABLE menu ADD COLUMN IF NOT EXISTS image_url TEXT")
             
             # KASALAR TABLOSU
             cursor.execute("""
@@ -489,11 +490,12 @@ class Database:
                         oran_ty = float(parts[4]) if len(parts) > 4 else 0
                         oran_gt = float(parts[5]) if len(parts) > 5 else 0
                         oran_mg = float(parts[6]) if len(parts) > 6 else 0
+                        image_url = parts[7].strip() if len(parts) > 7 else ""
 
                         cursor.execute("""
-                            INSERT INTO menu (kategori, urun_adi, fiyat, sira, oran_ys, oran_ty, oran_gt, oran_mg)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                        """, (kategori.strip(), urun_adi.strip(), float(fiyat.strip()), sira, oran_ys, oran_ty, oran_gt, oran_mg))
+                            INSERT INTO menu (kategori, urun_adi, fiyat, sira, oran_ys, oran_ty, oran_gt, oran_mg, image_url)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """, (kategori.strip(), urun_adi.strip(), float(fiyat.strip()), sira, oran_ys, oran_ty, oran_gt, oran_mg, image_url))
                         sira += 1
             
             print(f"✓ {sira} ürün menu.txt'den yüklendi")
@@ -501,7 +503,7 @@ class Database:
     def get_menu_by_category(self):
         """Kategoriye göre menüyü getir (dictionary)"""
         with self.get_cursor() as cursor:
-            cursor.execute("SELECT kategori, urun_adi, fiyat, oran_ys, oran_ty, oran_gt, oran_mg FROM menu ORDER BY sira")
+            cursor.execute("SELECT kategori, urun_adi, fiyat, oran_ys, oran_ty, oran_gt, oran_mg, image_url FROM menu ORDER BY sira")
             rows = cursor.fetchall()
             
             menu_dict = {}
@@ -515,7 +517,8 @@ class Database:
                     float(row.get('oran_ys', 0)),
                     float(row.get('oran_ty', 0)),
                     float(row.get('oran_gt', 0)),
-                    float(row.get('oran_mg', 0))
+                    float(row.get('oran_mg', 0)),
+                    (row.get('image_url') or "")
                 ])
             
             return menu_dict
@@ -523,12 +526,13 @@ class Database:
     def save_menu_to_file(self, menu_file="menu.txt"):
         """Menüyü menu.txt dosyasına kaydet"""
         with self.get_cursor() as cursor:
-            cursor.execute("SELECT kategori, urun_adi, fiyat, oran_ys, oran_ty, oran_gt, oran_mg FROM menu ORDER BY sira")
+            cursor.execute("SELECT kategori, urun_adi, fiyat, oran_ys, oran_ty, oran_gt, oran_mg, image_url FROM menu ORDER BY sira")
             rows = cursor.fetchall()
             
             with open(menu_file, "w", encoding="utf-8") as f:
                 for row in rows:
-                    line = f"{row['kategori']};{row['urun_adi']};{row['fiyat']};{row['oran_ys']};{row['oran_ty']};{row['oran_gt']};{row['oran_mg']}\n"
+                    image_url = (row.get('image_url') or '').replace(';', '')
+                    line = f"{row['kategori']};{row['urun_adi']};{row['fiyat']};{row['oran_ys']};{row['oran_ty']};{row['oran_gt']};{row['oran_mg']};{image_url}\n"
                     f.write(line)
 
     # ==================== KASA VE VARDIYA İŞLEMLERİ ====================

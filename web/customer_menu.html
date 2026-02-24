@@ -3,101 +3,341 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FastFoot - QR Menu</title>
+    <title>FastFoot QR Menu</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #f5f7f8;
-            --panel: #ffffff;
-            --text: #1f2937;
-            --muted: #64748b;
-            --brand: #0f766e;
-            --danger: #b91c1c;
-            --line: #e2e8f0;
+            --bg: #f4f1ea;
+            --panel: #fffdf8;
+            --ink: #1f2024;
+            --muted: #6d7079;
+            --line: #dfd8ca;
+            --brand: #0f8b6d;
+            --brand-dark: #0a5a47;
+            --accent: #f6a700;
+            --danger: #be1e2d;
+            --radius: 14px;
         }
+
         * { box-sizing: border-box; }
         body {
             margin: 0;
-            font-family: "Segoe UI", Arial, sans-serif;
-            background: linear-gradient(120deg, #f8fafc, #ecfeff);
-            color: var(--text);
+            color: var(--ink);
+            font-family: Manrope, "Avenir Next", "Trebuchet MS", sans-serif;
+            background:
+                radial-gradient(1200px 400px at 10% -20%, #ffe5b4 0%, transparent 60%),
+                radial-gradient(900px 360px at 100% 0%, #d1f7ef 0%, transparent 55%),
+                var(--bg);
         }
-        .wrap { max-width: 1000px; margin: 0 auto; padding: 16px; }
+
+        .wrap { max-width: 1080px; margin: 0 auto; padding: 16px; }
+
+        .hero {
+            background: linear-gradient(135deg, #1c2a2b 0%, #2f473f 100%);
+            color: #f3f6f8;
+            padding: 18px;
+            border-radius: 18px;
+            box-shadow: 0 16px 28px rgba(0, 0, 0, 0.18);
+            position: sticky;
+            top: 10px;
+            z-index: 10;
+        }
+
+        .hero h1 {
+            margin: 0;
+            font-family: Fraunces, Georgia, serif;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+        }
+
+        .hero-meta {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+
+        .badge {
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size: 12px;
+            background: rgba(255, 255, 255, 0.07);
+        }
+
+        .layout {
+            margin-top: 14px;
+            display: grid;
+            grid-template-columns: 1.3fr 1fr;
+            gap: 14px;
+            align-items: start;
+        }
+
         .card {
             background: var(--panel);
             border: 1px solid var(--line);
-            border-radius: 12px;
-            padding: 14px;
-            box-shadow: 0 8px 20px rgba(2, 6, 23, 0.06);
+            border-radius: var(--radius);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.06);
         }
-        .head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
-        .hint { color: var(--muted); font-size: 14px; }
-        .layout { display: grid; grid-template-columns: 1.3fr 1fr; gap: 12px; }
-        .cat { margin-bottom: 12px; }
-        .cat h3 { margin: 8px 0; font-size: 18px; }
-        .item { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px dashed var(--line); }
-        .item:last-child { border-bottom: 0; }
-        .btn {
-            border: 0;
-            border-radius: 8px;
-            padding: 8px 12px;
-            cursor: pointer;
-            font-weight: 600;
+
+        .menu-pane { padding: 12px; }
+
+        .cat-tabs {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+            margin-bottom: 8px;
+            scrollbar-width: none;
         }
-        .btn-main { background: var(--brand); color: white; }
-        .btn-danger { background: var(--danger); color: white; }
-        .cart-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px dashed var(--line); }
-        .cart-row:last-child { border-bottom: 0; }
-        .total { font-size: 20px; font-weight: 700; margin: 10px 0; }
-        .status { font-size: 13px; color: var(--muted); min-height: 18px; }
-        .verify { display: flex; gap: 8px; margin: 8px 0; }
-        input, select {
-            width: 100%;
+        .cat-tabs::-webkit-scrollbar { display: none; }
+
+        .tab {
             border: 1px solid var(--line);
-            border-radius: 8px;
-            padding: 8px;
+            background: #fff;
+            color: var(--ink);
+            border-radius: 999px;
+            padding: 7px 12px;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+            font-size: 13px;
+        }
+        .tab.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+        .items { display: grid; gap: 8px; }
+
+        .item {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 10px;
+            align-items: center;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 10px;
+            background: #fff;
+        }
+
+        .item h3 {
+            margin: 0 0 4px;
+            font-size: 16px;
+        }
+
+        .price {
+            color: var(--brand-dark);
+            font-weight: 800;
             font-size: 14px;
         }
-        @media (max-width: 900px) {
+
+        .btn {
+            border: none;
+            border-radius: 10px;
+            padding: 9px 12px;
+            font-weight: 800;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .btn-main { background: var(--brand); color: #fff; }
+        .btn-main:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-soft { background: #eff3f8; color: #1f2937; }
+
+        .cart-pane { padding: 12px; position: sticky; top: 165px; }
+        .cart-list { max-height: 320px; overflow: auto; display: grid; gap: 7px; margin-bottom: 8px; }
+
+        .cart-row {
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 8px;
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: 8px;
+            align-items: center;
+            font-size: 14px;
+            background: #fff;
+        }
+
+        .section-title {
+            margin: 0 0 8px;
+            font-size: 13px;
+            letter-spacing: .8px;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .total {
+            font-size: 24px;
+            font-weight: 800;
+            margin: 4px 0 10px;
+            font-family: Fraunces, Georgia, serif;
+        }
+
+        .verify {
+            border: 1px dashed var(--line);
+            border-radius: 12px;
+            padding: 10px;
+            margin-bottom: 10px;
+            background: #fbfaf7;
+        }
+
+        .verify-row { display: flex; gap: 8px; margin-top: 7px; }
+
+        input {
+            width: 100%;
+            border: 1px solid var(--line);
+            border-radius: 9px;
+            padding: 9px 10px;
+            font-family: inherit;
+            font-size: 14px;
+        }
+
+        .status {
+            min-height: 20px;
+            font-size: 13px;
+            color: #8a3c00;
+            font-weight: 700;
+            margin-top: 5px;
+        }
+
+        .ok { color: #116149; }
+        .hint { color: var(--muted); font-size: 12px; line-height: 1.4; }
+
+        .featured {
+            margin-bottom: 10px;
+            border: 1px solid #2f4a42;
+            border-radius: 12px;
+            padding: 10px;
+            background:
+                linear-gradient(115deg, rgba(246,167,0,0.2), rgba(15,139,109,0.16));
+        }
+        .featured h2 { margin: 0; font-size: 16px; }
+        .featured p { margin: 4px 0 0; font-size: 13px; color: #2f3f3b; }
+
+        .tools-row {
+            display: grid;
+            grid-template-columns: 1fr 180px;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .reco-row {
+            margin-bottom: 10px;
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+            scrollbar-width: none;
+        }
+
+        .reco-row::-webkit-scrollbar { display: none; }
+
+        .reco-chip {
+            border: 1px solid #d5c8af;
+            background: #fff6df;
+            color: #6f4f00;
+            border-radius: 999px;
+            padding: 6px 10px;
+            font-size: 12px;
+            font-weight: 800;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+
+        .item {
+            grid-template-columns: 64px 1fr auto;
+        }
+
+        .item-media {
+            width: 64px;
+            height: 64px;
+            border-radius: 10px;
+            border: 1px solid var(--line);
+            overflow: hidden;
+            background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #5b2d00;
+            font-weight: 800;
+        }
+
+        .item-media img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        @media (max-width: 930px) {
             .layout { grid-template-columns: 1fr; }
+            .cart-pane { position: static; }
+            .hero { position: static; }
+            .tools-row { grid-template-columns: 1fr; }
         }
     </style>
 </head>
 <body>
     <div class="wrap">
-        <div class="card head">
-            <div>
-                <h2 style="margin:0;">QR Menu</h2>
-                <div class="hint" id="tableInfo">Masa: -</div>
+        <header class="hero">
+            <h1>FastFoot QR Menü</h1>
+            <div class="hero-meta">
+                <span class="badge" id="tableInfo">Masa: -</span>
+                <span class="badge">Canlı Menü</span>
+                <span class="badge">Hızlı Sipariş</span>
             </div>
-            <div class="status" id="verifyStatus">Dogrulama bekleniyor</div>
-        </div>
+            <div class="status" id="verifyStatus">Doğrulama bekleniyor</div>
+        </header>
 
-        <div class="layout">
-            <div class="card">
-                <div id="menuRoot"></div>
-            </div>
+        <main class="layout">
+            <section class="card menu-pane">
+                <div class="featured">
+                    <h2>Bugünün Seçimi</h2>
+                    <p>Öne çıkan ürünleri tek dokunuşla sepete ekleyin.</p>
+                </div>
+                <div class="tools-row">
+                    <input id="searchInput" placeholder="Ürün ara..." />
+                    <select id="sortSelect">
+                        <option value="recommended">Önerilenler</option>
+                        <option value="price_asc">Fiyat Artan</option>
+                        <option value="price_desc">Fiyat Azalan</option>
+                        <option value="name_asc">İsim A-Z</option>
+                    </select>
+                </div>
+                <div id="recoRow" class="reco-row"></div>
+                <div class="cat-tabs" id="catTabs"></div>
+                <div id="menuRoot" class="items"></div>
+            </section>
 
-            <div class="card">
-                <h3 style="margin-top:0;">Sepet</h3>
-                <div id="cartRoot"></div>
-                <div class="total" id="cartTotal">Toplam: 0.00 TL</div>
+            <aside class="card cart-pane">
+                <h3 class="section-title">Sepet</h3>
+                <div id="cartRoot" class="cart-list"></div>
+                <div id="cartTotal" class="total">0.00 TL</div>
 
                 <div class="verify">
-                    <input id="qrTokenInput" placeholder="Dinamik QR token" />
-                    <button class="btn btn-main" id="btnVerify">Dogrula</button>
-                </div>
-                <div class="verify">
-                    <input id="nfcUidInput" placeholder="NFC UID (otomatik/manuel)" />
-                    <button class="btn btn-main" id="btnVerifyNfc">NFC ile Dogrula</button>
-                </div>
-                <div class="verify">
-                    <button class="btn" style="width:100%;" id="btnReadNfc">Telefondan NFC Oku (destekliyse)</button>
+                    <strong style="font-size:14px;">Masa Doğrulama</strong>
+                    <div class="hint">Dinamik QR veya NFC ile doğrulayın.</div>
+
+                    <div class="verify-row">
+                        <input id="qrTokenInput" placeholder="Dinamik QR token" />
+                        <button class="btn btn-soft" id="btnVerify">QR</button>
+                    </div>
+
+                    <div class="verify-row">
+                        <input id="nfcUidInput" placeholder="NFC UID" />
+                        <button class="btn btn-soft" id="btnVerifyNfc">NFC</button>
+                    </div>
+
+                    <div class="verify-row">
+                        <button class="btn btn-soft" style="width:100%;" id="btnReadNfc">Telefondan NFC Oku</button>
+                    </div>
                 </div>
 
-                <button class="btn btn-main" style="width:100%;" id="btnOrder">Siparisi Gonder</button>
-                <p class="hint">Not: Dinamik QR token bir kez kullanilir ve surelidir.</p>
-            </div>
-        </div>
+                <button class="btn btn-main" style="width:100%;" id="btnOrder">Siparişi Gönder</button>
+                <p class="hint">Doğrulama sonrası siparişiniz doğrudan mutfağa düşer.</p>
+            </aside>
+        </main>
     </div>
 
     <script>
@@ -107,14 +347,29 @@
 
         const state = {
             menu: {},
+            categories: [],
+            activeCategory: null,
+            searchQuery: '',
+            sortMode: 'recommended',
             cart: {},
             sessionToken: localStorage.getItem('public_session_token') || '',
             tableName: tableHint,
-            verified: false
+            verified: false,
+            orderPrefs: JSON.parse(localStorage.getItem('menu_order_prefs') || '{}'),
+            policy: {
+                verify_mode: 'hybrid',
+                verify_required: true,
+                allow_dynamic_qr: true,
+                allow_nfc: true
+            }
         };
 
         const tableInfo = document.getElementById('tableInfo');
         const verifyStatus = document.getElementById('verifyStatus');
+        const searchInput = document.getElementById('searchInput');
+        const sortSelect = document.getElementById('sortSelect');
+        const recoRow = document.getElementById('recoRow');
+        const catTabs = document.getElementById('catTabs');
         const menuRoot = document.getElementById('menuRoot');
         const cartRoot = document.getElementById('cartRoot');
         const cartTotal = document.getElementById('cartTotal');
@@ -125,12 +380,8 @@
         const btnReadNfc = document.getElementById('btnReadNfc');
         const btnOrder = document.getElementById('btnOrder');
 
-        if (tableHint) {
-            tableInfo.textContent = `Masa: ${tableHint}`;
-        }
-        if (tokenFromUrl) {
-            qrTokenInput.value = tokenFromUrl;
-        }
+        if (tableHint) tableInfo.textContent = `Masa: ${tableHint}`;
+        if (tokenFromUrl) qrTokenInput.value = tokenFromUrl;
 
         function fingerprint() {
             const raw = [navigator.userAgent, navigator.language, screen.width, screen.height, Intl.DateTimeFormat().resolvedOptions().timeZone].join('|');
@@ -139,46 +390,174 @@
 
         function setStatus(msg, ok = false) {
             verifyStatus.textContent = msg;
-            verifyStatus.style.color = ok ? '#0f766e' : '#9a3412';
-        }
-
-        async function loadMenu() {
-            const r = await fetch(`/api/public/menu?table_hint=${encodeURIComponent(tableHint)}`);
-            const data = await r.json();
-            state.menu = data.menu || {};
-            renderMenu();
-        }
-
-        function renderMenu() {
-            const cats = Object.keys(state.menu || {});
-            if (!cats.length) {
-                menuRoot.innerHTML = '<p>Menu bulunamadi.</p>';
-                return;
-            }
-            menuRoot.innerHTML = cats.map(cat => {
-                const items = state.menu[cat] || [];
-                const html = items.map(item => {
-                    const name = item[0];
-                    const price = Number(item[1] || 0);
-                    return `<div class="item"><div><strong>${escapeHtml(name)}</strong><br><small>${price.toFixed(2)} TL</small></div><button class="btn btn-main" onclick="addToCart('${escapeJs(name)}', ${price})">Ekle</button></div>`;
-                }).join('');
-                return `<div class="cat"><h3>${cat}</h3>${html}</div>`;
-            }).join('');
+            verifyStatus.classList.toggle('ok', !!ok);
         }
 
         function escapeHtml(text) {
-            return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+            return String(text)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
         }
 
         function escapeJs(text) {
             return String(text).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         }
 
+        function getItemName(item) {
+            return String(item[0] || '').trim();
+        }
+
+        function getItemPrice(item) {
+            return Number(item[1] || 0);
+        }
+
+        function getItemImageUrl(item) {
+            const candidate = item[6] || item[7];
+            if (typeof candidate === 'string' && candidate.trim()) {
+                const c = candidate.trim();
+                if (c.startsWith('http://') || c.startsWith('https://') || c.startsWith('/')) return c;
+            }
+            return null;
+        }
+
+        function getRecommendedScore(item) {
+            const name = getItemName(item);
+            const price = getItemPrice(item);
+            const pref = Number(state.orderPrefs[name] || 0);
+            const platformBoost = Number(item[2] || 0) + Number(item[3] || 0) + Number(item[4] || 0) + Number(item[5] || 0);
+            const priceBoost = price > 0 ? Math.max(0, 120 / price) : 0;
+            return pref * 5 + platformBoost + priceBoost;
+        }
+
+        function getVisibleItemsForCategory(cat) {
+            const items = (state.menu[cat] || []).slice();
+            const q = state.searchQuery.toLowerCase();
+            let visible = q ? items.filter(it => getItemName(it).toLowerCase().includes(q)) : items;
+
+            if (state.sortMode === 'price_asc') visible.sort((a, b) => getItemPrice(a) - getItemPrice(b));
+            else if (state.sortMode === 'price_desc') visible.sort((a, b) => getItemPrice(b) - getItemPrice(a));
+            else if (state.sortMode === 'name_asc') visible.sort((a, b) => getItemName(a).localeCompare(getItemName(b), 'tr'));
+            else visible.sort((a, b) => getRecommendedScore(b) - getRecommendedScore(a));
+
+            return visible;
+        }
+
+        async function loadMenu() {
+            const r = await fetch(`/api/public/menu?table_hint=${encodeURIComponent(tableHint)}`);
+            const data = await r.json();
+            state.menu = data.menu || {};
+            state.categories = Object.keys(state.menu);
+            state.activeCategory = state.categories[0] || null;
+            renderCategoryTabs();
+            renderRecommendations();
+            renderMenu();
+        }
+
+        async function loadPolicy() {
+            try {
+                const r = await fetch('/api/public/policy');
+                const data = await r.json();
+                if (data && data.success) {
+                    state.policy = {
+                        verify_mode: data.verify_mode || 'hybrid',
+                        verify_required: !!data.verify_required,
+                        allow_dynamic_qr: !!data.allow_dynamic_qr,
+                        allow_nfc: !!data.allow_nfc
+                    };
+                }
+            } catch (e) {}
+            applyPolicyToUi();
+        }
+
+        function applyPolicyToUi() {
+            const qrRow = qrTokenInput.closest('.verify-row');
+            const nfcRow = nfcUidInput.closest('.verify-row');
+            const nfcReadRow = btnReadNfc.closest('.verify-row');
+            if (qrRow) qrRow.style.display = state.policy.allow_dynamic_qr ? 'flex' : 'none';
+            if (nfcRow) nfcRow.style.display = state.policy.allow_nfc ? 'flex' : 'none';
+            if (nfcReadRow) nfcReadRow.style.display = state.policy.allow_nfc ? 'flex' : 'none';
+
+            if (!state.policy.verify_required) {
+                setStatus('Doğrulama gerekmiyor (geliştirme modu)', true);
+            } else {
+                setStatus('Doğrulama bekleniyor');
+            }
+        }
+
+        function renderCategoryTabs() {
+            if (!state.categories.length) {
+                catTabs.innerHTML = '';
+                return;
+            }
+            catTabs.innerHTML = state.categories.map(cat => {
+                const active = cat === state.activeCategory ? 'active' : '';
+                return `<button class="tab ${active}" onclick="selectCategory('${escapeJs(cat)}')">${escapeHtml(cat)}</button>`;
+            }).join('');
+        }
+
+        window.selectCategory = (cat) => {
+            state.activeCategory = cat;
+            renderCategoryTabs();
+            renderRecommendations();
+            renderMenu();
+        };
+
+        function renderRecommendations() {
+            const allItems = Object.values(state.menu).flat();
+            if (!allItems.length) {
+                recoRow.innerHTML = '';
+                return;
+            }
+            const top = allItems
+                .slice()
+                .sort((a, b) => getRecommendedScore(b) - getRecommendedScore(a))
+                .slice(0, 8);
+
+            recoRow.innerHTML = top.map(item => {
+                const name = getItemName(item);
+                const price = getItemPrice(item);
+                return `<button class="reco-chip" onclick="addToCart('${escapeJs(name)}', ${price})">★ ${escapeHtml(name)}</button>`;
+            }).join('');
+        }
+
+        function renderMenu() {
+            if (!state.activeCategory || !state.menu[state.activeCategory]) {
+                menuRoot.innerHTML = '<p class="hint">Menü bulunamadı.</p>';
+                return;
+            }
+
+            const items = getVisibleItemsForCategory(state.activeCategory);
+            if (!items.length) {
+                menuRoot.innerHTML = '<p class="hint">Filtreye uygun ürün bulunamadı.</p>';
+                return;
+            }
+
+            menuRoot.innerHTML = items.map(item => {
+                const name = getItemName(item);
+                const price = getItemPrice(item);
+                const imageUrl = getItemImageUrl(item);
+                const fallback = escapeHtml(name.slice(0, 2).toUpperCase() || 'ÜR');
+                return `
+                    <article class="item">
+                        <div class="item-media">
+                            ${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(name)}" loading="lazy" onerror="this.parentNode.innerHTML='${fallback}'">` : fallback}
+                        </div>
+                        <div>
+                            <h3>${escapeHtml(name)}</h3>
+                            <div class="price">${price.toFixed(2)} TL</div>
+                        </div>
+                        <button class="btn btn-main" onclick="addToCart('${escapeJs(name)}', ${price})">Ekle</button>
+                    </article>
+                `;
+            }).join('');
+        }
+
         window.addToCart = (name, price) => {
             const key = `${name}__${price}`;
-            if (!state.cart[key]) {
-                state.cart[key] = { urun: name, fiyat: price, adet: 0 };
-            }
+            if (!state.cart[key]) state.cart[key] = { urun: name, fiyat: price, adet: 0 };
             state.cart[key].adet += 1;
             renderCart();
         };
@@ -193,84 +572,69 @@
         function renderCart() {
             const entries = Object.entries(state.cart);
             if (!entries.length) {
-                cartRoot.innerHTML = '<p class="hint">Sepet bos.</p>';
-                cartTotal.textContent = 'Toplam: 0.00 TL';
+                cartRoot.innerHTML = '<p class="hint">Sepetiniz boş.</p>';
+                cartTotal.textContent = '0.00 TL';
                 return;
             }
             let total = 0;
             cartRoot.innerHTML = entries.map(([key, item]) => {
                 const line = Number(item.fiyat) * Number(item.adet);
                 total += line;
-                return `<div class="cart-row"><div>${escapeHtml(item.urun)}</div><div>${item.adet} x ${Number(item.fiyat).toFixed(2)}</div><button class="btn btn-danger" onclick="removeFromCart('${escapeJs(key)}')">-</button></div>`;
+                return `
+                    <div class="cart-row">
+                        <div>${escapeHtml(item.urun)}</div>
+                        <div>${item.adet} x ${Number(item.fiyat).toFixed(2)}</div>
+                        <button class="btn btn-danger" onclick="removeFromCart('${escapeJs(key)}')">-</button>
+                    </div>
+                `;
             }).join('');
-            cartTotal.textContent = `Toplam: ${total.toFixed(2)} TL`;
+            cartTotal.textContent = `${total.toFixed(2)} TL`;
         }
 
         async function verifyDynamicQr() {
             const qrToken = qrTokenInput.value.trim();
-            if (!qrToken) {
-                setStatus('Dinamik token gerekli');
-                return false;
-            }
+            if (!qrToken) { setStatus('Dinamik token gerekli'); return false; }
 
             const r = await fetch('/api/public/session/verify-dynamic-qr', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    qr_token: qrToken,
-                    table_hint: tableHint,
-                    device_fingerprint: fingerprint()
-                })
+                body: JSON.stringify({ qr_token: qrToken, table_hint: tableHint, device_fingerprint: fingerprint() })
             });
             const data = await r.json();
-            if (!data.success) {
-                setStatus(data.error || 'Dogrulama basarisiz');
-                return false;
-            }
+            if (!data.success) { setStatus(data.error || 'QR doğrulama başarısız'); return false; }
 
             state.sessionToken = data.session_token;
             state.tableName = data.table_name;
             state.verified = true;
             localStorage.setItem('public_session_token', state.sessionToken);
             tableInfo.textContent = `Masa: ${state.tableName}`;
-            setStatus('Dogrulandi', true);
+            setStatus('QR ile doğrulandı', true);
             return true;
         }
 
         async function verifyNfc() {
             const nfcUid = nfcUidInput.value.trim();
-            if (!nfcUid) {
-                setStatus('NFC UID gerekli');
-                return false;
-            }
+            if (!nfcUid) { setStatus('NFC UID gerekli'); return false; }
+
             const r = await fetch('/api/public/session/verify-nfc', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    table_hint: tableHint,
-                    nfc_uid: nfcUid,
-                    device_fingerprint: fingerprint()
-                })
+                body: JSON.stringify({ table_hint: tableHint, nfc_uid: nfcUid, device_fingerprint: fingerprint() })
             });
             const data = await r.json();
-            if (!data.success) {
-                setStatus(data.error || 'NFC dogrulama basarisiz');
-                return false;
-            }
+            if (!data.success) { setStatus(data.error || 'NFC doğrulama başarısız'); return false; }
+
             state.sessionToken = data.session_token;
             state.tableName = data.table_name;
             state.verified = true;
             localStorage.setItem('public_session_token', state.sessionToken);
             tableInfo.textContent = `Masa: ${state.tableName}`;
-            setStatus('NFC ile dogrulandi', true);
+            setStatus('NFC ile doğrulandı', true);
             return true;
         }
 
         async function readNfcFromDevice() {
-            if (!('NDEFReader' in window)) {
-                setStatus('Bu cihaz/tarayici Web NFC desteklemiyor');
-                return;
-            }
+            if (!('NDEFReader' in window)) { setStatus('Bu cihaz/tarayıcı Web NFC desteklemiyor'); return; }
             try {
                 const ndef = new NDEFReader();
                 await ndef.scan();
@@ -281,52 +645,79 @@
                         nfcUidInput.value = serial;
                         setStatus('NFC okundu', true);
                     } else {
-                        setStatus('NFC seri no okunamadi');
+                        setStatus('NFC seri no okunamadı');
                     }
                 };
             } catch (e) {
-                setStatus('NFC okuma baslatilamadi');
+                setStatus('NFC okuma başlatılamadı');
             }
         }
 
         async function placeOrder() {
             const items = Object.values(state.cart);
-            if (!items.length) {
-                setStatus('Sepet bos');
-                return;
-            }
+            if (!items.length) { setStatus('Sepet boş'); return; }
 
-            if (!state.sessionToken) {
-                const ok = await verifyDynamicQr();
+            if (state.policy.verify_required && !state.sessionToken) {
+                let ok = false;
+                if (state.policy.allow_dynamic_qr && qrTokenInput.value.trim()) {
+                    ok = await verifyDynamicQr();
+                } else if (state.policy.allow_nfc && nfcUidInput.value.trim()) {
+                    ok = await verifyNfc();
+                } else if (state.policy.allow_dynamic_qr) {
+                    ok = await verifyDynamicQr();
+                } else if (state.policy.allow_nfc) {
+                    ok = await verifyNfc();
+                }
                 if (!ok) return;
             }
 
-            const r = await fetch('/api/public/order', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    session_token: state.sessionToken,
-                    table_name: state.tableName || tableHint,
-                    items
-                })
-            });
-            const data = await r.json();
-            if (!data.success) {
-                setStatus(data.error || 'Siparis basarisiz');
-                return;
-            }
+            btnOrder.disabled = true;
+            btnOrder.textContent = 'Gönderiliyor...';
+            try {
+                const r = await fetch('/api/public/order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_token: state.sessionToken,
+                        table_name: state.tableName || tableHint,
+                        items
+                    })
+                });
+                const data = await r.json();
+                if (!data.success) { setStatus(data.error || 'Sipariş başarısız'); return; }
 
-            state.cart = {};
-            renderCart();
-            setStatus('Siparis mutfaga iletildi', true);
+                for (const item of items) {
+                    const n = item.urun;
+                    state.orderPrefs[n] = Number(state.orderPrefs[n] || 0) + Number(item.adet || 1);
+                }
+                localStorage.setItem('menu_order_prefs', JSON.stringify(state.orderPrefs));
+
+                state.cart = {};
+                renderRecommendations();
+                renderMenu();
+                renderCart();
+                setStatus('Sipariş mutfağa iletildi', true);
+            } finally {
+                btnOrder.disabled = false;
+                btnOrder.textContent = 'Siparişi Gönder';
+            }
         }
 
         btnVerify.addEventListener('click', verifyDynamicQr);
         btnVerifyNfc.addEventListener('click', verifyNfc);
         btnReadNfc.addEventListener('click', readNfcFromDevice);
+        searchInput.addEventListener('input', (e) => {
+            state.searchQuery = (e.target.value || '').trim();
+            renderMenu();
+        });
+        sortSelect.addEventListener('change', (e) => {
+            state.sortMode = e.target.value || 'recommended';
+            renderMenu();
+        });
         btnOrder.addEventListener('click', placeOrder);
 
-        loadMenu().catch(() => setStatus('Menu yuklenemedi'));
+        loadPolicy();
+        loadMenu().catch(() => setStatus('Menü yüklenemedi'));
         renderCart();
     </script>
 </body>

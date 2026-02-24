@@ -6,7 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Terminal Yönetimi - FastFootSatış</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
     <style>
         :root {
             --primary: #0f172a;
@@ -21,14 +22,18 @@
             --info: #06b6d4;
             --text: #f1f5f9;
             --text-muted: #94a3b8;
-            --border: rgba(148,163,184,0.12);
-            --glass: rgba(30,41,59,0.8);
-            --shadow: 0 4px 24px rgba(0,0,0,0.4);
-            --glow-blue: 0 0 20px rgba(59,130,246,0.3);
-            --glow-green: 0 0 20px rgba(34,197,94,0.3);
+            --border: rgba(148, 163, 184, 0.12);
+            --glass: rgba(30, 41, 59, 0.8);
+            --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+            --glow-blue: 0 0 20px rgba(59, 130, 246, 0.3);
+            --glow-green: 0 0 20px rgba(34, 197, 94, 0.3);
         }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
         body {
             font-family: 'Inter', sans-serif;
@@ -36,8 +41,8 @@
             color: var(--text);
             min-height: 100vh;
             background-image:
-                radial-gradient(ellipse at 20% 20%, rgba(59,130,246,0.08) 0%, transparent 50%),
-                radial-gradient(ellipse at 80% 80%, rgba(6,182,212,0.06) 0%, transparent 50%);
+                radial-gradient(ellipse at 20% 20%, rgba(59, 130, 246, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(6, 182, 212, 0.06) 0%, transparent 50%);
         }
 
         /* ─── HEADER ─── */
@@ -73,13 +78,13 @@
             border-radius: 8px;
             border: 1px solid var(--border);
             transition: all 0.2s;
-            background: rgba(255,255,255,0.03);
+            background: rgba(255, 255, 255, 0.03);
         }
 
         .back-btn:hover {
             color: var(--text);
             border-color: var(--accent);
-            background: rgba(59,130,246,0.1);
+            background: rgba(59, 130, 246, 0.1);
         }
 
         .header-title {
@@ -126,7 +131,7 @@
             border: 1px solid var(--border);
             font-size: 13px;
             font-weight: 500;
-            background: rgba(255,255,255,0.03);
+            background: rgba(255, 255, 255, 0.03);
         }
 
         .dot {
@@ -137,11 +142,21 @@
             animation: glow-pulse 2s infinite;
         }
 
-        .dot.offline { background: var(--danger); animation: none; }
+        .dot.offline {
+            background: var(--danger);
+            animation: none;
+        }
 
         @keyframes glow-pulse {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.5); }
-            50% { box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5);
+            }
+
+            50% {
+                box-shadow: 0 0 0 6px rgba(34, 197, 94, 0);
+            }
         }
 
         /* ─── LAYOUT ─── */
@@ -175,28 +190,50 @@
         .stat-card::before {
             content: '';
             position: absolute;
-            top: 0; left: 0; right: 0;
+            top: 0;
+            left: 0;
+            right: 0;
             height: 2px;
             background: linear-gradient(90deg, var(--accent), var(--info));
             opacity: 0;
             transition: opacity 0.3s;
         }
 
-        .stat-card:hover::before { opacity: 1; }
-        .stat-card:hover { background: var(--card-hover); transform: translateY(-2px); }
+        .stat-card:hover::before {
+            opacity: 1;
+        }
+
+        .stat-card:hover {
+            background: var(--card-hover);
+            transform: translateY(-2px);
+        }
 
         .stat-icon {
-            width: 48px; height: 48px;
+            width: 48px;
+            height: 48px;
             border-radius: 12px;
-            display: flex; align-items: center; justify-content: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             font-size: 22px;
             flex-shrink: 0;
         }
 
-        .stat-icon.blue { background: rgba(59,130,246,0.15); }
-        .stat-icon.green { background: rgba(34,197,94,0.15); }
-        .stat-icon.yellow { background: rgba(245,158,11,0.15); }
-        .stat-icon.red { background: rgba(239,68,68,0.15); }
+        .stat-icon.blue {
+            background: rgba(59, 130, 246, 0.15);
+        }
+
+        .stat-icon.green {
+            background: rgba(34, 197, 94, 0.15);
+        }
+
+        .stat-icon.yellow {
+            background: rgba(245, 158, 11, 0.15);
+        }
+
+        .stat-icon.red {
+            background: rgba(239, 68, 68, 0.15);
+        }
 
         .stat-info h3 {
             font-size: 28px;
@@ -240,7 +277,7 @@
             border-radius: 20px;
             font-size: 12px;
             font-weight: 600;
-            background: rgba(59,130,246,0.15);
+            background: rgba(59, 130, 246, 0.15);
             color: var(--accent);
         }
 
@@ -248,7 +285,7 @@
             padding: 8px 16px;
             border-radius: 8px;
             border: 1px solid var(--border);
-            background: rgba(255,255,255,0.04);
+            background: rgba(255, 255, 255, 0.04);
             color: var(--text-muted);
             font-size: 13px;
             font-weight: 500;
@@ -263,7 +300,7 @@
         .btn-sm:hover {
             color: var(--text);
             border-color: var(--accent);
-            background: rgba(59,130,246,0.1);
+            background: rgba(59, 130, 246, 0.1);
         }
 
         .btn-sm.primary {
@@ -277,13 +314,13 @@
         }
 
         .btn-sm.danger {
-            background: rgba(239,68,68,0.1);
-            border-color: rgba(239,68,68,0.3);
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.3);
             color: var(--danger);
         }
 
         .btn-sm.danger:hover {
-            background: rgba(239,68,68,0.2);
+            background: rgba(239, 68, 68, 0.2);
         }
 
         /* ─── TERMINAL CARDS ─── */
@@ -302,13 +339,22 @@
         }
 
         .terminal-card:hover {
-            border-color: rgba(59,130,246,0.3);
+            border-color: rgba(59, 130, 246, 0.3);
             box-shadow: var(--glow-blue);
         }
 
-        .terminal-card.online { border-left: 3px solid var(--success); }
-        .terminal-card.offline { border-left: 3px solid var(--danger); opacity: 0.7; }
-        .terminal-card.warning { border-left: 3px solid var(--warning); }
+        .terminal-card.online {
+            border-left: 3px solid var(--success);
+        }
+
+        .terminal-card.offline {
+            border-left: 3px solid var(--danger);
+            opacity: 0.7;
+        }
+
+        .terminal-card.warning {
+            border-left: 3px solid var(--warning);
+        }
 
         .terminal-header {
             padding: 18px 20px;
@@ -320,20 +366,34 @@
         }
 
         .terminal-avatar {
-            width: 48px; height: 48px;
+            width: 48px;
+            height: 48px;
             border-radius: 12px;
-            display: flex; align-items: center; justify-content: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             font-size: 22px;
             font-weight: 700;
             color: white;
             flex-shrink: 0;
         }
 
-        .avatar-online { background: linear-gradient(135deg, #22c55e, #16a34a); }
-        .avatar-offline { background: linear-gradient(135deg, #4b5563, #374151); }
-        .avatar-warning { background: linear-gradient(135deg, #f59e0b, #d97706); }
+        .avatar-online {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+        }
 
-        .terminal-meta { flex: 1; min-width: 0; }
+        .avatar-offline {
+            background: linear-gradient(135deg, #4b5563, #374151);
+        }
+
+        .avatar-warning {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+        }
+
+        .terminal-meta {
+            flex: 1;
+            min-width: 0;
+        }
 
         .terminal-name {
             font-size: 15px;
@@ -353,7 +413,7 @@
             font-family: 'Courier New', monospace;
             font-size: 12px;
             color: var(--text-muted);
-            background: rgba(255,255,255,0.05);
+            background: rgba(255, 255, 255, 0.05);
             padding: 2px 8px;
             border-radius: 4px;
         }
@@ -372,9 +432,20 @@
             letter-spacing: 0.5px;
         }
 
-        .badge-online { background: rgba(34,197,94,0.15); color: var(--success); }
-        .badge-offline { background: rgba(239,68,68,0.15); color: var(--danger); }
-        .badge-warning { background: rgba(245,158,11,0.15); color: var(--warning); }
+        .badge-online {
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--success);
+        }
+
+        .badge-offline {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--danger);
+        }
+
+        .badge-warning {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--warning);
+        }
 
         .terminal-actions {
             display: flex;
@@ -394,7 +465,9 @@
             border-right: 1px solid var(--border);
         }
 
-        .terminal-stat:last-child { border-right: none; }
+        .terminal-stat:last-child {
+            border-right: none;
+        }
 
         .terminal-stat-value {
             font-size: 20px;
@@ -416,7 +489,9 @@
             display: none;
         }
 
-        .terminal-detail.open { display: block; }
+        .terminal-detail.open {
+            display: block;
+        }
 
         .detail-grid {
             display: grid;
@@ -437,7 +512,7 @@
 
         .detail-field input {
             width: 100%;
-            background: rgba(255,255,255,0.05);
+            background: rgba(255, 255, 255, 0.05);
             border: 1px solid var(--border);
             border-radius: 8px;
             padding: 10px 14px;
@@ -450,7 +525,7 @@
 
         .detail-field input:focus {
             border-color: var(--accent);
-            background: rgba(59,130,246,0.05);
+            background: rgba(59, 130, 246, 0.05);
         }
 
         .detail-actions {
@@ -497,20 +572,29 @@
             align-items: flex-start;
             gap: 12px;
             transition: background 0.2s;
-            border-bottom: 1px solid rgba(148,163,184,0.05);
+            border-bottom: 1px solid rgba(148, 163, 184, 0.05);
         }
 
-        .activity-item:hover { background: rgba(255,255,255,0.02); }
-        .activity-item:last-child { border-bottom: none; }
+        .activity-item:hover {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .activity-item:last-child {
+            border-bottom: none;
+        }
 
         .activity-dot {
-            width: 8px; height: 8px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
             margin-top: 5px;
             flex-shrink: 0;
         }
 
-        .activity-content { flex: 1; min-width: 0; }
+        .activity-content {
+            flex: 1;
+            min-width: 0;
+        }
 
         .activity-text {
             font-size: 13px;
@@ -518,7 +602,9 @@
             line-height: 1.5;
         }
 
-        .activity-text strong { color: var(--accent); }
+        .activity-text strong {
+            color: var(--accent);
+        }
 
         .activity-time {
             font-size: 11px;
@@ -546,9 +632,10 @@
             margin-bottom: 8px;
         }
 
-        .form-group input, .form-group select {
+        .form-group input,
+        .form-group select {
             width: 100%;
-            background: rgba(255,255,255,0.05);
+            background: rgba(255, 255, 255, 0.05);
             border: 1px solid var(--border);
             border-radius: 10px;
             padding: 11px 14px;
@@ -559,9 +646,10 @@
             outline: none;
         }
 
-        .form-group input:focus, .form-group select:focus {
+        .form-group input:focus,
+        .form-group select:focus {
             border-color: var(--accent);
-            background: rgba(59,130,246,0.05);
+            background: rgba(59, 130, 246, 0.05);
         }
 
         .form-group select option {
@@ -580,7 +668,7 @@
             cursor: pointer;
             font-family: inherit;
             transition: all 0.3s;
-            box-shadow: 0 4px 14px rgba(59,130,246,0.35);
+            box-shadow: 0 4px 14px rgba(59, 130, 246, 0.35);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -589,10 +677,12 @@
 
         .btn-full:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(59,130,246,0.5);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
         }
 
-        .btn-full:active { transform: translateY(0); }
+        .btn-full:active {
+            transform: translateY(0);
+        }
 
         /* ─── SERVER INFO ─── */
         .server-info-grid {
@@ -603,7 +693,7 @@
         }
 
         .info-item {
-            background: rgba(255,255,255,0.03);
+            background: rgba(255, 255, 255, 0.03);
             border-radius: 10px;
             padding: 12px 14px;
             border: 1px solid var(--border);
@@ -632,8 +722,14 @@
             color: var(--text-muted);
         }
 
-        .empty-state .emoji { font-size: 40px; margin-bottom: 12px; }
-        .empty-state p { font-size: 14px; }
+        .empty-state .emoji {
+            font-size: 40px;
+            margin-bottom: 12px;
+        }
+
+        .empty-state p {
+            font-size: 14px;
+        }
 
         /* ─── TOAST ─── */
         .toast-container {
@@ -660,31 +756,72 @@
             min-width: 280px;
         }
 
-        .toast.success { border-left: 3px solid var(--success); }
-        .toast.error { border-left: 3px solid var(--danger); }
-        .toast.info { border-left: 3px solid var(--info); }
+        .toast.success {
+            border-left: 3px solid var(--success);
+        }
+
+        .toast.error {
+            border-left: 3px solid var(--danger);
+        }
+
+        .toast.info {
+            border-left: 3px solid var(--info);
+        }
 
         @keyframes slide-in {
-            from { transform: translateX(60px); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
+            from {
+                transform: translateX(60px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
         }
 
         /* ─── SCROLLBAR ─── */
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.2); border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,0.4); }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.2);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(148, 163, 184, 0.4);
+        }
 
         /* ─── RESPONSIVE ─── */
         @media (max-width: 1024px) {
-            .main-grid { grid-template-columns: 1fr; }
-            .stats-bar { grid-template-columns: repeat(2, 1fr); }
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .stats-bar {
+                grid-template-columns: repeat(2, 1fr);
+            }
         }
 
         @media (max-width: 640px) {
-            .stats-bar { grid-template-columns: 1fr 1fr; }
-            .detail-grid { grid-template-columns: 1fr; }
-            .terminal-stats-row { grid-template-columns: repeat(3, 1fr); }
+            .stats-bar {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .detail-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .terminal-stats-row {
+                grid-template-columns: repeat(3, 1fr);
+            }
         }
     </style>
 </head>
@@ -694,7 +831,8 @@
     <!-- HEADER -->
     <header>
         <div class="header-left">
-            <a href="/" class="back-btn">← Kasaya Dön</a>
+            <a href="settings.html" class="back-btn">← Ayarlar</a>
+            <a href="/" class="back-btn">⌂ Ana Sayfa</a>
             <div class="header-title">
                 <div class="header-icon">📡</div>
                 <div>
@@ -842,7 +980,8 @@
                 <div class="panel-card">
                     <div class="panel-card-header">
                         📋 Son Aktiviteler
-                        <button class="btn-sm" onclick="clearLog()" style="font-size:11px; padding:4px 10px;">Temizle</button>
+                        <button class="btn-sm" onclick="clearLog()"
+                            style="font-size:11px; padding:4px 10px;">Temizle</button>
                     </div>
                     <div class="activity-list" id="activityList">
                         <div class="empty-state" style="padding: 24px;">
@@ -954,7 +1093,7 @@
 
         function addTerminal() {
             const name = document.getElementById('newTermName').value.trim();
-            const ip   = document.getElementById('newTermIP').value.trim();
+            const ip = document.getElementById('newTermIP').value.trim();
             const type = document.getElementById('newTermType').value;
             const pass = document.getElementById('newTermPass').value.trim();
 
@@ -1002,7 +1141,7 @@
             const term = terminals.find(t => t.id === id);
             if (!term) return;
             term.name = document.getElementById(`name_${id}`).value.trim() || term.name;
-            term.ip   = document.getElementById(`ip_${id}`).value.trim() || null;
+            term.ip = document.getElementById(`ip_${id}`).value.trim() || null;
             term.pass = document.getElementById(`pass_${id}`).value.trim() || term.pass;
             saveTerminals();
             renderTerminals();
@@ -1066,8 +1205,8 @@
             container.innerHTML = terminals.map(t => {
                 const statusClass = t.status === 'online' ? 'online' : 'offline';
                 const avatarClass = t.status === 'online' ? 'avatar-online' : 'avatar-offline';
-                const badgeClass  = t.status === 'online' ? 'badge-online' : 'badge-offline';
-                const badgeText   = t.status === 'online' ? '● Çevrimiçi' : '○ Çevrimdışı';
+                const badgeClass = t.status === 'online' ? 'badge-online' : 'badge-offline';
+                const badgeText = t.status === 'online' ? '● Çevrimiçi' : '○ Çevrimdışı';
                 const icon = TYPE_ICONS[t.type] || '📡';
                 const orders = terminalOrderCount[t.id] || 0;
                 const lastSeen = t.lastSeen || '—';
@@ -1134,11 +1273,11 @@
         }
 
         function updateStats() {
-            const total   = terminals.length;
-            const online  = terminals.filter(t => t.status === 'online').length;
+            const total = terminals.length;
+            const online = terminals.filter(t => t.status === 'online').length;
             const offline = terminals.filter(t => t.status === 'offline').length;
-            document.getElementById('statTotal').textContent   = total;
-            document.getElementById('statOnline').textContent  = online;
+            document.getElementById('statTotal').textContent = total;
+            document.getElementById('statOnline').textContent = online;
             document.getElementById('statOffline').textContent = offline;
         }
 
@@ -1192,4 +1331,5 @@
     </script>
 
 </body>
+
 </html>
