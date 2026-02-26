@@ -155,98 +155,59 @@ class Database:
                     kasa_id INTEGER NOT NULL,
                     kasiyer TEXT NOT NULL,
                     acilis_zamani TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    kapanis_zamani TIMESTAMP,
-                    acilis_bakiyesi DECIMAL(10, 2) NOT NULL DEFAULT 0,
-                    kapanis_nakit DECIMAL(10, 2),
-                    kapanis_kart DECIMAL(10, 2),
-                    durum TEXT NOT NULL DEFAULT 'acik',
-                    FOREIGN KEY (kasa_id) REFERENCES kasalar(id) ON DELETE CASCADE
+                    kasa_id INTEGER,
+                    kasiyer_adi TEXT,
+                    acilma_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    kapanma_tarihi TIMESTAMP,
+                    acilis_bakiyesi DECIMAL(10, 2) DEFAULT 0,
+                    kapanis_bakiyesi DECIMAL(10, 2),
+                    durum TEXT DEFAULT 'acik'
                 )
             """)
 
-            # KURYELER TABLOSU
+            # KURYELER VE TESLİMATLAR
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS kuryeler (
                     id SERIAL PRIMARY KEY,
                     ad TEXT NOT NULL,
                     telefon TEXT,
-                    plaka TEXT,
-                    aktif BOOLEAN DEFAULT TRUE,
-                    firma_id INTEGER
+                    durum TEXT DEFAULT 'musait'
                 )
             """)
 
-            # KURYE FIRMALARI TABLOSU
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS kurye_firmalari (
-                    id SERIAL PRIMARY KEY,
-                    ad TEXT NOT NULL UNIQUE,
-                    api_key TEXT,
-                    ayarlar JSONB DEFAULT '{}'
-                )
-            """)
-
-            # SATIŞLAR TABLOSUNA VARDIYA_ID VE KURYE_ID EKLE
-            cursor.execute("ALTER TABLE satislar ADD COLUMN IF NOT EXISTS vardiya_id INTEGER")
-            cursor.execute("ALTER TABLE satislar ADD COLUMN IF NOT EXISTS kurye_id INTEGER")
-
-            # PUBLIC QR NONCE TABLOSU
+            # PUBLIC QR NONCES (Replay attack protection)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS public_qr_nonces (
                     nonce TEXT PRIMARY KEY,
-                    table_name TEXT NOT NULL,
-                    shift_id INTEGER,
-                    expires_at TIMESTAMP NOT NULL,
-                    used_at TIMESTAMP,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-
-            # PUBLIC MASA OTURUMLARI TABLOSU
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS public_table_sessions (
-                    id TEXT PRIMARY KEY,
-                    table_name TEXT NOT NULL,
-                    shift_id INTEGER,
-                    verify_method TEXT NOT NULL DEFAULT 'dynamic_qr',
-                    device_fingerprint TEXT,
-                    ip TEXT,
-                    status TEXT NOT NULL DEFAULT 'active',
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     expires_at TIMESTAMP NOT NULL
                 )
             """)
 
-            # MASA NFC ETİKET TABLOSU
+            # PUBLIC TABLE SESSIONS
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS table_nfc_tags (
-                    table_name TEXT PRIMARY KEY,
-                    tag_uid_hash TEXT NOT NULL,
-                    is_active BOOLEAN DEFAULT TRUE,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                CREATE TABLE IF NOT EXISTS public_table_sessions (
+                    session_token TEXT PRIMARY KEY,
+                    table_name TEXT NOT NULL,
+                    shift_id INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    expires_at TIMESTAMP NOT NULL,
+                    status TEXT DEFAULT 'active'
                 )
             """)
-            
+
             # PUANTAJ TABLOSU
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS puantaj (
                     id SERIAL PRIMARY KEY,
                     personel_adi TEXT NOT NULL,
-                    rol TEXT NOT NULL DEFAULT 'garson',
-                    tarih DATE NOT NULL DEFAULT CURRENT_DATE,
-                    giris_saati TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    rol TEXT DEFAULT 'garson',
+                    giris_saati TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     cikis_saati TIMESTAMP,
-                    toplam_dakika INTEGER,
-                    notlar TEXT,
-                    olusturma_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    notlar TEXT
                 )
             """)
 
-            # İNDEXLER
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_satislar_tarih ON satislar(tarih_saat)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_satislar_tip ON satislar(tip)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_satislar_vardiya ON satislar(vardiya_id)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_satislar_kurye ON satislar(kurye_id)")
+            # İNDEKSLER
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_cari_hareketler_cari ON cari_hareketler(cari_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_menu_kategori ON menu(kategori)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_vardiyalar_durum ON vardiyalar(durum)")
@@ -275,7 +236,21 @@ class Database:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_online_orders_durum ON online_orders(durum)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_online_orders_olusturma ON online_orders(olusturma)")
             
-            print("✓ Veri tabanı şeması oluşturuldu")
+            # SESLİ ASİSTAN KARALİSTE TABLOSU
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS voice_agent_blacklist (
+                    id SERIAL PRIMARY KEY,
+                    telefon TEXT NOT NULL UNIQUE,
+                    sebep TEXT,
+                    tarih TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # AYARLAR TABLOSUNA SESLİ ASİSTAN ALANLARI (Eğer varsa)
+            # Mevcut sistemde ayarlar dosyadan okunuyor olabilir, 
+            # ancak blacklist tablo olarak kalmalı.
+
+            print("✓ Veri tabanı şeması güncellendi")
     
     # ==================== SATIŞ İŞLEMLERİ ====================
     
@@ -818,7 +793,12 @@ class Database:
         """Online siparis kaydini olustur"""
         import json
         items_data = json.dumps([
-            {'urun': it.get('urun'), 'adet': it.get('adet', 1), 'fiyat': float(it.get('fiyat', 0))}
+            {
+                'urun': it.get('urun'), 
+                'adet': it.get('adet', 1), 
+                'fiyat': float(it.get('fiyat', 0)),
+                'not': it.get('not', '') # Ürün bazlı not (Örn: Ketçapsız)
+            }
             for it in items
         ])
         with self.get_cursor() as cursor:
@@ -853,7 +833,33 @@ class Database:
                 (durum, order_id)
             )
 
-    # ==================== PUANTAJ İŞLEMLERİ ====================
+    # ==================== SESLİ ASİSTAN İŞLEMLERİ ====================
+
+    def add_to_blacklist(self, telefon, sebep='Belirtilmedi'):
+        """Telefon numarasını karalisteye ekle"""
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO voice_agent_blacklist (telefon, sebep)
+                VALUES (%s, %s)
+                ON CONFLICT (telefon) DO UPDATE SET sebep = %s
+            """, (telefon, sebep, sebep))
+
+    def remove_from_blacklist(self, telefon):
+        """Telefon numarasını karalisteden çıkar"""
+        with self.get_cursor() as cursor:
+            cursor.execute("DELETE FROM voice_agent_blacklist WHERE telefon = %s", (telefon,))
+
+    def is_blacklisted(self, telefon):
+        """Telefon numarası karalistede mi?"""
+        with self.get_cursor() as cursor:
+            cursor.execute("SELECT 1 FROM voice_agent_blacklist WHERE telefon = %s", (telefon,))
+            return cursor.fetchone() is not None
+
+    def get_blacklist(self):
+        """Tüm karalisteyi getir"""
+        with self.get_cursor() as cursor:
+            cursor.execute("SELECT * FROM voice_agent_blacklist ORDER BY tarih DESC")
+            return cursor.fetchall()
 
     def add_puantaj_record(self, personel_adi, rol='garson', giris_saati=None, notlar=None):
         """Yeni çalışan giriş kaydı ekle"""

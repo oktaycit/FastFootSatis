@@ -465,7 +465,7 @@ class RestaurantServer:
             if session.get('shift_id') == shift_id and session.get('status') == 'active':
                 session['status'] = 'revoked'
 
-    def add_order_item(self, masa_adi, urun, fiyat, garson='Bilinmiyor', adet=1):
+    def add_order_item(self, masa_adi, urun, fiyat, garson='Bilinmiyor', adet=1, not_bilgisi=''):
         if masa_adi not in self.adisyonlar:
             return None
 
@@ -477,6 +477,7 @@ class RestaurantServer:
             'fiyat': float(fiyat),
             'tip': 'normal',
             'garson': garson,
+            'not': not_bilgisi,
             'durum': 'mutfakta',
             'saat': datetime.datetime.now().strftime("%H:%M:%S")
         }
@@ -495,11 +496,12 @@ class RestaurantServer:
             'masa': masa_adi,
             'urun': urun,
             'adet': int(adet),
+            'not': not_bilgisi,
             'saat': siparis['saat'],
             'garson': garson,
             'terminal_id': f"public:{masa_adi}"
         })
-        self.send_to_kitchen_legacy(masa_adi, urun, int(adet))
+        self.send_to_kitchen_legacy(masa_adi, f"{urun} ({not_bilgisi})" if not_bilgisi else urun, int(adet))
         return siparis
     
     def load_settings(self):
@@ -520,7 +522,11 @@ class RestaurantServer:
             "pos_port": "5000",
             "pos_type": "demo",
             "verify_mode": "hybrid",
-            "online_orders_enabled": "EVET"
+            "online_orders_enabled": "EVET",
+            "va_max_duration": "3",
+            "va_rate_limit": "5",
+            "va_sms_verify": "HAYIR",
+            "va_kitchen_approval": "EVET"
         }
         
         if os.path.exists(SETTINGS_FILE):
@@ -560,6 +566,12 @@ class RestaurantServer:
         )
         self.online_orders_enabled = (defaults.get("online_orders_enabled", "EVET") == "EVET")
     
+    # Sesli Asistan Güvenlik Ayarları
+    self.va_max_duration = int(defaults.get("va_max_duration", 3))
+    self.va_rate_limit = int(defaults.get("va_rate_limit", 5))
+    self.va_sms_verify = (defaults.get("va_sms_verify", "HAYIR") == "EVET")
+    self.va_kitchen_approval = (defaults.get("va_kitchen_approval", "EVET") == "EVET")
+    
     def save_settings(self):
         """Ayarları dosyaya kaydet"""
         try:
@@ -580,6 +592,10 @@ class RestaurantServer:
                 f.write(f"pos_type:{self.pos_type}\n")
                 f.write(f"verify_mode:{self.verify_mode}\n")
                 f.write(f"online_orders_enabled:{'EVET' if self.online_orders_enabled else 'HAYIR'}\n")
+                f.write(f"va_max_duration:{self.va_max_duration}\n")
+                f.write(f"va_rate_limit:{self.va_rate_limit}\n")
+                f.write(f"va_sms_verify:{'EVET' if self.va_sms_verify else 'HAYIR'}\n")
+                f.write(f"va_kitchen_approval:{'EVET' if self.va_kitchen_approval else 'HAYIR'}\n")
             return True
         except Exception as e:
             logger.error(f"Ayar kaydetme hatası: {e}")
@@ -2973,4 +2989,52 @@ if __name__ == '__main__':
     
     # Web sunucuyu başlat
     logger.info(f"🌐 Web sunucu başlatılıyor: http://{get_local_ip()}:8000")
+# ==================== SESLİ ASİSTAN GÜVENLİK ENDPOINTLERİ ====================
+
+@app.route('/api/va/blacklist', methods=['GET'])
+@admin_required
+def api_get_va_blacklist():
+    try:
+        if not db:
+            return jsonify({'success': False, 'error': 'Veritabanı bağlantısı yok'}), 500
+        
+        raw_list = db.get_blacklist()
+        blacklist = []
+        for item in raw_list:
+            blacklist.append({
+                'id': item[0],
+                'telefon': item[1],
+                'sebep': item[2],
+                'tarih': item[3].isoformat() if item[3] else None
+            })
+        return jsonify({'success': True, 'blacklist': blacklist})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/va/blacklist', methods=['POST'])
+@admin_required
+def api_add_va_blacklist():
+    try:
+        data = request.json
+        telefon = data.get('telefon')
+        sebep = data.get('sebep', 'Belirtilmedi')
+        
+        if not telefon:
+            return jsonify({'success': False, 'error': 'Telefon numarası eksik'}), 400
+            
+        db.add_to_blacklist(telefon, sebep)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/va/blacklist/<telefon>', methods=['DELETE'])
+@admin_required
+def api_remove_va_blacklist(telefon):
+    try:
+        db.remove_from_blacklist(telefon)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=8000, debug=False, allow_unsafe_werkzeug=True)

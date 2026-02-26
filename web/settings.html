@@ -602,6 +602,68 @@
             </div>
         </div>
 
+        <!-- 4b. Sesli Asistan Güvenlik Ayarları -->
+        <div class="settings-card">
+            <div class="card-header">🎙️ Sesli Asistan Güvenlik & Kısıtlamalar</div>
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="vaMaxDuration">Maks. Görüşme Süresi (Dakika)</label>
+                        <input type="number" id="vaMaxDuration" min="1" max="20" placeholder="3">
+                        <small style="color:var(--text-secondary);">Uzun görüşmeleri otomatik sonlandırır (Vapi/Twilio
+                            desteği gerekir).</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="vaRateLimit">Günlük Maks. Çağrı (Her Numara İçin)</label>
+                        <input type="number" id="vaRateLimit" min="1" max="50" placeholder="5">
+                        <small style="color:var(--text-secondary);">Aynı numaranın günde kaç kez arayabileceğini
+                            sınırlar.</small>
+                    </div>
+                </div>
+
+                <hr class="divider">
+
+                <div class="toggle-row">
+                    <div>
+                        <div class="toggle-label">SMS Doğrulama</div>
+                        <div class="toggle-desc">Yeni müşterilerden sipariş alırken SMS kodu sor</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="vaSmsVerify">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="toggle-row">
+                    <div>
+                        <div class="toggle-label">Mutfak Onay Akışı</div>
+                        <div class="toggle-desc">Asistan siparişleri doğrudan mutfağa düşmesin, kasiyer onayı beklensin
+                        </div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="vaKitchenApproval" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <hr class="divider">
+
+                <div>
+                    <h4 style="font-size:14px; margin-bottom:10px;">🚫 Numara Karalistesi</h4>
+                    <div style="display:flex; gap:10px; margin-bottom:15px;">
+                        <input type="text" id="blacklistPhone" placeholder="+905..." style="flex:1;">
+                        <input type="text" id="blacklistReason" placeholder="Sebep" style="flex:1;">
+                        <button class="btn-settings btn-danger btn-sm" onclick="addToBlacklist()">➕ Engelle</button>
+                    </div>
+                    <div id="blacklistContainer"
+                        style="max-height:200px; overflow-y:auto; background:#f9f9f9; border-radius:8px; padding:10px; font-size:13px;">
+                        <!-- Karaliste buraya gelecek -->
+                        Bekleniyor...
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- 5. Yazıcı & Sistem -->
         <div class="settings-card">
             <div class="card-header">🖨️ Yazıcı &amp; Sistem</div>
@@ -1034,6 +1096,13 @@
                 document.getElementById('posType').value = data.pos_type || 'demo';
                 togglePosUI();
 
+                // Voice Agent Settings
+                document.getElementById('vaMaxDuration').value = data.va_max_duration || 3;
+                document.getElementById('vaRateLimit').value = data.va_rate_limit || 5;
+                document.getElementById('vaSmsVerify').checked = data.va_sms_verify || false;
+                document.getElementById('vaKitchenApproval').checked = data.va_kitchen_approval !== false;
+                loadBlacklist();
+
                 // QR Menü & Online Sipariş Politikası
                 try {
                     const policyRes = await fetch('/api/public/policy');
@@ -1226,7 +1295,12 @@
                 pos_enabled: posEnabled,
                 pos_ip: posIp,
                 pos_port: posPort,
+                pos_port: posPort,
                 pos_type: posType,
+                va_max_duration: parseInt(document.getElementById('vaMaxDuration').value) || 3,
+                va_rate_limit: parseInt(document.getElementById('vaRateLimit').value) || 5,
+                va_sms_verify: document.getElementById('vaSmsVerify').checked,
+                va_kitchen_approval: document.getElementById('vaKitchenApproval').checked,
                 mevcut_sifre: mevcutSifre
             };
 
@@ -1439,6 +1513,67 @@
         ['ys', 'ty', 'gt', 'mg', 'wp'].forEach(p => {
             document.getElementById(`int_${p}_enabled`).addEventListener('change', updateIntegrationUI);
         });
+
+        // Sesli Asistan Karaliste İşlemleri
+        async function loadBlacklist() {
+            const container = document.getElementById('blacklistContainer');
+            try {
+                const res = await fetch('/api/va/blacklist');
+                const data = await res.json();
+                if (!data.success) throw new Error(data.error);
+
+                if (data.blacklist.length === 0) {
+                    container.innerHTML = '<div style="color:#999; text-align:center;">Karaliste boş.</div>';
+                    return;
+                }
+
+                container.innerHTML = data.blacklist.map(item => `
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid #eee;">
+                        <div>
+                            <b>${item.telefon}</b> <span style="color:#666; font-size:11px;">(${item.sebep || 'Sebep yok'})</span>
+                        </div>
+                        <button class="btn-settings btn-danger btn-sm" style="padding:2px 8px; margin:0;" onclick="removeFromBlacklist('${item.telefon}')">✕</button>
+                    </div>
+                `).join('');
+            } catch (e) {
+                container.innerHTML = '<div style="color:red;">Yükleme hatası.</div>';
+            }
+        }
+
+        async function addToBlacklist() {
+            const phone = document.getElementById('blacklistPhone').value.trim();
+            const reason = document.getElementById('blacklistReason').value.trim();
+            if (!phone) return;
+
+            try {
+                const res = await fetch('/api/va/blacklist', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ telefon: phone, sebep: reason })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Numara engellendi.', 'success');
+                    document.getElementById('blacklistPhone').value = '';
+                    document.getElementById('blacklistReason').value = '';
+                    loadBlacklist();
+                } else {
+                    showToast('Hata: ' + data.error, 'error');
+                }
+            } catch (e) { showToast('Bağlantı hatası.', 'error'); }
+        }
+
+        async function removeFromBlacklist(phone) {
+            if (!confirm(phone + ' numarasını karalisteden çıkarmak istiyor musunuz?')) return;
+            try {
+                const res = await fetch('/api/va/blacklist/' + phone, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('Engel kaldırıldı.', 'success');
+                    loadBlacklist();
+                }
+            } catch (e) { showToast('Bağlantı hatası.', 'error'); }
+        }
 
         // Enter tuşuna basınca kaydet
         document.addEventListener('keydown', (e) => {

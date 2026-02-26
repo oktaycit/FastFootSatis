@@ -112,7 +112,7 @@
                 const newItem = document.createElement('div');
                 newItem.className = 'order-card-item';
                 newItem.dataset.uid = data.uid;
-                newItem.textContent = `${data.adet}x ${data.urun} (${data.garson || '?'})`;
+                newItem.textContent = `${data.adet}x ${data.urun}${data.not ? ' (' + data.not + ')' : ''} (${data.garson || '?'})`;
                 itemsContainer.appendChild(newItem);
 
                 // Garsonları güncelle
@@ -148,7 +148,7 @@
                         <span class="order-card-time">${data.saat}</span>
                     </div>
                     <div class="order-card-items">
-                        <div class="order-card-item" data-uid="${data.uid}">${data.adet}x ${data.urun} (${data.garson || '?'})</div>
+                        <div class="order-card-item" data-uid="${data.uid}">${data.adet}x ${data.urun}${data.not ? ' (' + data.not + ')' : ''} (${data.garson || '?'})</div>
                     </div>
                     <div class="order-card-actions">
                         <button class="btn btn-kitchen-done" onclick="completeOrder('${cardId}')">TAMAMLANDI</button>
@@ -190,7 +190,7 @@
                     <hr>
                     <h1 style="margin: 10px 0;">${data.masa}</h1>
                     <div style="text-align: left; font-size: 20px; font-weight: bold;">
-                        ${data.adet} x ${data.urun}
+                        ${data.adet} x ${data.urun}${data.not ? '<br><small>(' + data.not + ')</small>' : ''}
                     </div>
                     <hr>
                     <div style="font-size: 12px;">${data.saat}</div>

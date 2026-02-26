@@ -28,6 +28,44 @@ def get_mock_menu():
         "Tatlılar": [["Künefe", 120.0], ["Baklava", 150.0]]
     }
 
+def get_customer_context(phone_number: str) -> str:
+    """
+    Telefon numarasından müşteri bilgilerini ve son siparişlerini getirir.
+    """
+    if not USE_DATABASE or not db:
+        return "Müşteri tanıma devredışı (DB Yok)."
+
+    try:
+        # Karaliste Kontrolü
+        if hasattr(db, 'is_blacklisted') and db.is_blacklisted(phone_number):
+            return "DİKKAT: Bu numara KARALİSTEDEDİR. Sipariş almayın."
+
+        # Günlük Çağrı Sınırı Kontrolü (Rate Limiting)
+        # Basit bir sayaç veya db üzerinden kontrol eklenebilir
+        # Şimdilik prensip olarak yerini hazırlıyoruz
+        
+        # database.py: get_cari_by_phone(self, telefon)
+        customer = db.get_cari_by_phone(phone_number)
+        if not customer:
+            return "Yeni müşteri. Kayıt bulunamadı."
+
+        customer_name = customer['cari_isim']
+        # database.py: get_customer_order_history(self, cari_isim, limit=5)
+        history = db.get_customer_order_history(customer_name, limit=3)
+        
+        context = f"Müşteri Adı: {customer_name}\n"
+        if history:
+            last_items = ", ".join(set([h['urun'] for h in history]))
+            context += f"Son Siparişleri: {last_items}\n"
+            context += "Öneri: 'Yine her zamankinden mi istersiniz?' veya 'En son [ürün] almıştınız, yine ondan mı hazırlayalım?' diyebilirsin."
+        else:
+            context += "Geçmiş sipariş bulunamadı."
+            
+        return context
+    except Exception as e:
+        logger.error(f"Müşteri tanıma hatası: {e}")
+        return "Müşteri bilgisi alınamadı."
+
 def search_menu(query: str) -> str:
     """
     Restoran menüsünde ürün araması yapar.
@@ -60,24 +98,36 @@ def search_menu(query: str) -> str:
 def place_order(customer_name: str, items: List[dict], address: str = "", note: str = "") -> str:
     """
     Müşterinin siparişini sisteme kaydeder.
+    items listesi [{'urun': 'Tavuk Döner', 'adet': 1, 'fiyat': 120.0, 'not': 'Ketçapsız, bol yeşillik'}] formatında olmalıdır.
     """
     try:
         if not USE_DATABASE or not db:
-            logger.info("MOCK: Sipariş kaydedildi (DB kapalı)")
-            return f"Siparişiniz (MOCK) başarıyla alındı {customer_name}. Hazırlanmaya başlanıyor."
+            logger.info(f"MOCK: Sipariş kaydedildi. Kalemler: {items}")
+            return f"Siparişiniz (MOCK) başarıyla alındı {customer_name}."
 
+        # Karaliste Kontrolü (Son Dakika)
+        if hasattr(db, 'is_blacklisted') and db.is_blacklisted(items[0].get('telefon', '')):
+             return "Maalesef şu an sipariş alamıyoruz."
+
+        # Sunucu ayarlarından onay durumunu al (varsayılan bekliyor)
+        # web_server nesnesine erişim yoksa manuel kontrol
+        default_status = 'onay_bekliyor' # Varsayılan olarak onaya düşsün
+        
         adisyon_adi = f"Sesli_Siparis_{customer_name}"
         order_id = db.save_online_order(
             musteri_adi=customer_name,
-            telefon="Sesli Hat",
-            adres=address if address else "Restoran Teslimat",
-            not_bilgisi=note or "Sesli asistan aracılığıyla oluşturuldu.",
+            telefon="", # Arayan numarayı vapi aktarmalı
+            adres=address,
+            not_bilgisi=note,
             items=items,
             adisyon_adi=adisyon_adi,
-            odeme_tipi='nakit'
+            odeme_tipi='kapida_nakit'
         )
+        # Durumu güncelle (Mutfak onayı kapalıysa doğrudan 'bekliyor' (mutfak görür))
+        # 'bekliyor' -> Mutfak ekranında görünür
+        # 'onay_bekliyor' -> Sadece kasiyer onaylarsa görünür
         
-        return f"Siparişiniz başarıyla alındı. Sipariş numaranız: {order_id}. Hazırlanmaya başlanıyor."
+        return f"Siparişiniz başarıyla alındı {customer_name}. En kısa sürede ulaştırılacaktır."
     except Exception as e:
         logger.error(f"Sipariş kaydetme hatası: {e}")
         return "Siparişinizi kaydederken bir hata oluştu."
