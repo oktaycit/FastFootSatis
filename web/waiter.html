@@ -426,7 +426,10 @@
                     <h3>Dinamik QR Üret</h3>
                     <input id="qrKasaId" type="number" value="1" min="1" placeholder="Kasa ID">
                     <button class="btn-primary" onclick="generateDynamicQr()">QR Üret</button>
-                    <div id="qrOutput" class="tools-output">Henüz üretilmedi.</div>
+                    <div id="qrOutput" class="tools-output" style="text-align: center;">
+                        <div id="qrImageContainer" style="margin: 10px 0;"></div>
+                        <div id="qrTextInfo" style="font-size: 11px; color: #9aa0a6;">Henüz üretilmedi.</div>
+                    </div>
                 </div>
                 <div class="tools-box">
                     <h3>NFC Etiket Kaydet</h3>
@@ -443,6 +446,7 @@
     </div>
 
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     <script>
         let socket = io();
         let menuData = {};
@@ -751,8 +755,11 @@
         async function generateDynamicQr() {
             if (!currentTable) return;
             const kasaId = parseInt(document.getElementById('qrKasaId').value || '1', 10);
-            const out = document.getElementById('qrOutput');
-            out.textContent = 'Üretiliyor...';
+            const qrContainer = document.getElementById('qrImageContainer');
+            const textInfo = document.getElementById('qrTextInfo');
+
+            qrContainer.innerHTML = '';
+            textInfo.textContent = 'Üretiliyor...';
 
             try {
                 const res = await fetch('/api/waiter/table-session/create', {
@@ -768,13 +775,46 @@
                 });
                 const data = await res.json();
                 if (!data.success) {
-                    out.textContent = `Hata: ${data.error || 'QR üretilemedi'}`;
+                    qrContainer.innerHTML = '';
+                    textInfo.innerHTML = `<span style="color: #e74c3c;">Hata: ${data.error || 'QR üretilemedi'}</span>`;
                     return;
                 }
+
                 const fullUrl = window.location.origin + data.verify_url;
-                out.textContent = `URL: ${fullUrl}\nToken: ${data.qr_token}`;
+
+                // QR kod görselini oluştur
+                const canvas = document.createElement('canvas');
+                canvas.style.borderRadius = '8px';
+                canvas.style.background = '#fff';
+                canvas.style.padding = '8px';
+                qrContainer.appendChild(canvas);
+
+                QRCode.toCanvas(canvas, fullUrl, {
+                    width: 180,
+                    margin: 2,
+                    color: {
+                        dark: '#000000',
+                        light: '#ffffff'
+                    }
+                }, function (error) {
+                    if (error) {
+                        qrContainer.innerHTML = '<span style="color: #e74c3c;">QR oluşturulamadı</span>';
+                        textInfo.textContent = fullUrl;
+                        return;
+                    }
+                });
+
+                // Alt bilgi
+                const expireDate = new Date(data.expires_at_unix * 1000);
+                const expireTime = expireDate.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+                textInfo.innerHTML = `
+                    <div style="margin-top: 8px; color: #2ecc71; font-weight: bold;">✓ QR Oluşturuldu</div>
+                    <div style="margin-top: 4px;"><strong>${currentTable}</strong> - ${expireTime}'ya kadar geçerli</div>
+                    <div style="margin-top: 4px; font-size: 10px; word-break: break-all; color: #666;">${fullUrl}</div>
+                `;
             } catch (e) {
-                out.textContent = 'Hata: Sunucuya erişilemedi';
+                qrContainer.innerHTML = '';
+                textInfo.innerHTML = `<span style="color: #e74c3c;">Hata: Sunucuya erişilemedi</span>`;
             }
         }
 
