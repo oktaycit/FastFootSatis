@@ -1481,7 +1481,7 @@ function initResizer() {
 
     let startY, startHeight;
 
-    resizer.addEventListener('mousedown', (e) => {
+    function onMouseDown(e) {
         startY = e.clientY;
         startHeight = parseInt(document.defaultView.getComputedStyle(container).height, 10);
 
@@ -1491,10 +1491,32 @@ function initResizer() {
         // Disable text selection and add active class
         document.body.style.userSelect = 'none';
         resizer.style.background = 'var(--accent-color)';
-    });
+    }
+
+    function onTouchStart(e) {
+        const touch = e.touches[0];
+        startY = touch.clientY;
+        startHeight = parseInt(document.defaultView.getComputedStyle(container).height, 10);
+
+        document.addEventListener('touchmove', onTouchMove, { passive: false });
+        document.addEventListener('touchend', onTouchEnd);
+
+        document.body.style.userSelect = 'none';
+        resizer.style.background = 'var(--accent-color)';
+    }
 
     function onMouseMove(e) {
         const newHeight = startHeight + (e.clientY - startY);
+        if (newHeight > 100 && newHeight < (window.innerHeight * 0.7)) {
+            container.style.height = newHeight + 'px';
+            container.style.flex = `0 0 ${newHeight}px`;
+        }
+    }
+
+    function onTouchMove(e) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const newHeight = startHeight + (touch.clientY - startY);
         if (newHeight > 100 && newHeight < (window.innerHeight * 0.7)) {
             container.style.height = newHeight + 'px';
             container.style.flex = `0 0 ${newHeight}px`;
@@ -1511,6 +1533,20 @@ function initResizer() {
         // Save preference to localStorage
         localStorage.setItem('order_list_height', container.style.height);
     }
+
+    function onTouchEnd() {
+        document.removeEventListener('touchmove', onTouchMove);
+        document.removeEventListener('touchend', onTouchEnd);
+
+        document.body.style.userSelect = '';
+        resizer.style.background = '';
+
+        // Save preference to localStorage
+        localStorage.setItem('order_list_height', container.style.height);
+    }
+
+    resizer.addEventListener('mousedown', onMouseDown);
+    resizer.addEventListener('touchstart', onTouchStart, { passive: true });
 
     // Restore saved height
     const savedHeight = localStorage.getItem('order_list_height');
@@ -1531,7 +1567,8 @@ function initHorizontalResizers() {
 
     if (resizerLeft && leftPanel) {
         let startX, startWidth;
-        resizerLeft.addEventListener('mousedown', (e) => {
+
+        function onMouseDown(e) {
             startX = e.clientX;
             startWidth = parseInt(document.defaultView.getComputedStyle(leftPanel).width, 10);
 
@@ -1540,10 +1577,32 @@ function initHorizontalResizers() {
 
             document.body.style.userSelect = 'none';
             resizerLeft.style.background = 'var(--accent-color)';
-        });
+        }
+
+        function onTouchStart(e) {
+            const touch = e.touches[0];
+            startX = touch.clientX;
+            startWidth = parseInt(document.defaultView.getComputedStyle(leftPanel).width, 10);
+
+            document.addEventListener('touchmove', onTouchMoveLeft, { passive: false });
+            document.addEventListener('touchend', onTouchEndLeft);
+
+            document.body.style.userSelect = 'none';
+            resizerLeft.style.background = 'var(--accent-color)';
+        }
 
         function onMouseMoveLeft(e) {
             const newWidth = startWidth + (e.clientX - startX);
+            // Min 150px, Max 50vw
+            if (newWidth > 150 && newWidth < (window.innerWidth * 0.5)) {
+                leftPanel.style.flex = `0 0 ${newWidth}px`;
+            }
+        }
+
+        function onTouchMoveLeft(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const newWidth = startWidth + (touch.clientX - startX);
             // Min 150px, Max 50vw
             if (newWidth > 150 && newWidth < (window.innerWidth * 0.5)) {
                 leftPanel.style.flex = `0 0 ${newWidth}px`;
@@ -1558,6 +1617,17 @@ function initHorizontalResizers() {
             localStorage.setItem('left_panel_width', leftPanel.style.flex);
         }
 
+        function onTouchEndLeft() {
+            document.removeEventListener('touchmove', onTouchMoveLeft);
+            document.removeEventListener('touchend', onTouchEndLeft);
+            document.body.style.userSelect = '';
+            resizerLeft.style.background = '';
+            localStorage.setItem('left_panel_width', leftPanel.style.flex);
+        }
+
+        resizerLeft.addEventListener('mousedown', onMouseDown);
+        resizerLeft.addEventListener('touchstart', onTouchStart, { passive: true });
+
         // Restore saved width
         const savedLeftWidth = localStorage.getItem('left_panel_width');
         if (savedLeftWidth) {
@@ -1567,7 +1637,8 @@ function initHorizontalResizers() {
 
     if (resizerRight && rightPanel) {
         let startX, startWidth;
-        resizerRight.addEventListener('mousedown', (e) => {
+
+        function onMouseDown(e) {
             startX = e.clientX;
             startWidth = parseInt(document.defaultView.getComputedStyle(rightPanel).width, 10);
 
@@ -1576,11 +1647,33 @@ function initHorizontalResizers() {
 
             document.body.style.userSelect = 'none';
             resizerRight.style.background = 'var(--accent-color)';
-        });
+        }
+
+        function onTouchStart(e) {
+            const touch = e.touches[0];
+            startX = touch.clientX;
+            startWidth = parseInt(document.defaultView.getComputedStyle(rightPanel).width, 10);
+
+            document.addEventListener('touchmove', onTouchMoveRight, { passive: false });
+            document.addEventListener('touchend', onTouchEndRight);
+
+            document.body.style.userSelect = 'none';
+            resizerRight.style.background = 'var(--accent-color)';
+        }
 
         function onMouseMoveRight(e) {
             // Right resizer moves left to expand right panel
             const newWidth = startWidth - (e.clientX - startX);
+            // Min 300px, Max 60vw
+            if (newWidth > 300 && newWidth < (window.innerWidth * 0.6)) {
+                rightPanel.style.flex = `0 0 ${newWidth}px`;
+            }
+        }
+
+        function onTouchMoveRight(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const newWidth = startWidth - (touch.clientX - startX);
             // Min 300px, Max 60vw
             if (newWidth > 300 && newWidth < (window.innerWidth * 0.6)) {
                 rightPanel.style.flex = `0 0 ${newWidth}px`;
@@ -1594,6 +1687,17 @@ function initHorizontalResizers() {
             resizerRight.style.background = '';
             localStorage.setItem('right_panel_width', rightPanel.style.flex);
         }
+
+        function onTouchEndRight() {
+            document.removeEventListener('touchmove', onTouchMoveRight);
+            document.removeEventListener('touchend', onTouchEndRight);
+            document.body.style.userSelect = '';
+            resizerRight.style.background = '';
+            localStorage.setItem('right_panel_width', rightPanel.style.flex);
+        }
+
+        resizerRight.addEventListener('mousedown', onMouseDown);
+        resizerRight.addEventListener('touchstart', onTouchStart, { passive: true });
 
         // Restore saved width
         const savedRightWidth = localStorage.getItem('right_panel_width');

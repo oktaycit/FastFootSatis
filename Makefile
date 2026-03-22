@@ -19,7 +19,7 @@ endif
 
 # Remote Server Variables
 REMOTE_USER = vet
-REMOTE_HOST = kuvoz.local
+REMOTE_HOST = 192.168.1.197
 REMOTE_DIR = ~/restoran
 REMOTE_SERVICE = kuvoz-web.service
 

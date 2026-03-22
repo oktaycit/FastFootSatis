@@ -346,7 +346,7 @@ body {
 
 /* Vertical Resizer Handle */
 .resizer-v {
-    height: 8px;
+    height: 12px;
     background: #e0e0e0;
     cursor: row-resize;
     position: relative;
@@ -357,6 +357,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    touch-action: none;
+    /* Prevent scroll on touch devices */
 }
 
 .resizer-v::after {
@@ -377,7 +379,7 @@ body {
 
 /* Horizontal Resizer Handle */
 .resizer-h {
-    width: 8px;
+    width: 12px;
     background: #e0e0e0;
     cursor: col-resize;
     position: relative;
@@ -386,6 +388,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    touch-action: none;
+    /* Prevent scroll on touch devices */
 }
 
 .resizer-h::after {
