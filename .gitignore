@@ -31,3 +31,6 @@ dosya.zip
 
 # Phone Agent Docs
 PhoneAgent_Docs/
+
+# Environment variables (sensitive)
+.env
