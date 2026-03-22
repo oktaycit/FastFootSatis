@@ -324,6 +324,15 @@ body {
     /* Panel geneli scroll olmasın */
 }
 
+/* Right Panel - Mobile Landscape Fix */
+/* When keyboard appears or orientation changes, allow scrolling */
+@media (max-height: 500px) and (orientation: landscape) {
+    .right-panel {
+        overflow-y: auto !important;
+        min-height: 400px !important;
+    }
+}
+
 .order-list-container {
     flex: 1 1 300px;
     /* Flex grow, flex shrink, initial height */
@@ -1285,6 +1294,22 @@ body {
     .table-btn {
         padding: 15px 10px;
     }
+
+    /* Courier Assignment - Tablet Fix */
+    #courierAssignmentArea {
+        padding: 12px !important;
+        margin-top: 8px !important;
+    }
+
+    #courierSelect {
+        font-size: 13px !important;
+        padding: 8px !important;
+    }
+
+    #btnAssignCourier {
+        padding: 8px 15px !important;
+        font-size: 13px !important;
+    }
 }
 
 /* SMARTPHONES (Max 768px) */
@@ -1341,10 +1366,48 @@ body {
         width: 100% !important;
         max-width: 100% !important;
         height: auto !important;
-        min-height: 400px;
+        min-height: 500px !important;
+        max-height: none !important;
+        overflow-y: auto !important;
         border-right: none;
         border-left: none;
         border-bottom: 2px solid #ddd;
+    }
+
+    /* Courier Assignment Area - Mobile Fix */
+    /* Keep styling consistent, JS controls display */
+    #courierAssignmentArea {
+        margin: 10px !important;
+        padding: 12px !important;
+        background: #2c3e50 !important;
+        border-radius: 8px !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+    }
+
+    #courierSelect {
+        min-width: 150px !important;
+        font-size: 14px !important;
+        padding: 10px !important;
+    }
+
+    #btnAssignCourier {
+        padding: 10px 20px !important;
+        font-size: 14px !important;
+        white-space: nowrap !important;
+    }
+
+    #assignedCourierInfo {
+        margin-top: 10px !important;
+        padding: 10px !important;
+        background: #34495e !important;
+        border-radius: 4px !important;
+    }
+
+    #btnSendCourierInfo {
+        width: 100% !important;
+        margin-top: 8px !important;
+        padding: 8px !important;
+        font-size: 13px !important;
     }
 
     .left-panel {

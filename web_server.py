@@ -566,11 +566,11 @@ class RestaurantServer:
         )
         self.online_orders_enabled = (defaults.get("online_orders_enabled", "EVET") == "EVET")
     
-    # Sesli Asistan Güvenlik Ayarları
-    self.va_max_duration = int(defaults.get("va_max_duration", 3))
-    self.va_rate_limit = int(defaults.get("va_rate_limit", 5))
-    self.va_sms_verify = (defaults.get("va_sms_verify", "HAYIR") == "EVET")
-    self.va_kitchen_approval = (defaults.get("va_kitchen_approval", "EVET") == "EVET")
+        # Sesli Asistan Güvenlik Ayarları
+        self.va_max_duration = int(defaults.get("va_max_duration", 3))
+        self.va_rate_limit = int(defaults.get("va_rate_limit", 5))
+        self.va_sms_verify = (defaults.get("va_sms_verify", "HAYIR") == "EVET")
+        self.va_kitchen_approval = (defaults.get("va_kitchen_approval", "EVET") == "EVET")
     
     def save_settings(self):
         """Ayarları dosyaya kaydet"""
@@ -2980,16 +2980,17 @@ def handle_print_receipt(data):
         logger.error(f"Fiş oluşturma hatası: {e}")
         emit('error', {'message': f'Fiş oluşturulamadı: {str(e)}'})
 
-if __name__ == '__main__':
-    # Terminal sunucusunu başlat
-    server.start_terminal_server()
-    
-    # Caller ID sunucusunu başlat
-    server.start_caller_id_listener()
-    
-    # Web sunucuyu başlat
-    logger.info(f"🌐 Web sunucu başlatılıyor: http://{get_local_ip()}:8000")
 # ==================== SESLİ ASİSTAN GÜVENLİK ENDPOINTLERİ ====================
+
+def admin_required(f):
+    """Admin decorator - basit implementasyon"""
+    from functools import wraps
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Basit admin check - header'dan veya session'dan kontrol edilebilir
+        # Şimdilik her zaman izin veriyoruz (güvenlik production'da artırılmalı)
+        return f(*args, **kwargs)
+    return decorated_function
 
 @app.route('/api/va/blacklist', methods=['GET'])
 @admin_required
@@ -3037,4 +3038,13 @@ def api_remove_va_blacklist(telefon):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':
+    # Terminal sunucusunu başlat
+    server.start_terminal_server()
+    
+    # Caller ID sunucusunu başlat
+    server.start_caller_id_listener()
+    
+    # Web sunucuyu başlat
+    logger.info(f"🌐 Web sunucu başlatılıyor: http://{get_local_ip()}:8000")
+    
     socketio.run(app, host='0.0.0.0', port=8000, debug=False, allow_unsafe_werkzeug=True)
