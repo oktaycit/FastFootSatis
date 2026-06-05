@@ -13,7 +13,7 @@
         }
 
         .edit-wrapper {
-            max-width: 1000px;
+            max-width: 1320px;
             margin: 30px auto;
             padding: 0 20px 60px;
         }
@@ -61,7 +61,7 @@
 
         .item-row {
             display: grid;
-            grid-template-columns: 1fr 100px 70px 70px 70px 70px 1.4fr 80px 50px;
+            grid-template-columns: minmax(150px, 1.2fr) 88px 58px 58px 58px 58px minmax(230px, 1.6fr) 80px 82px 44px;
             gap: 10px;
             padding: 10px 0;
             border-bottom: 1px solid #f1f1f1;
@@ -84,11 +84,112 @@
             border: 1px solid #ddd;
             border-radius: 6px;
             font-size: 14px;
+            background: #fff;
         }
 
         .item-row input:focus {
             border-color: var(--accent-color);
             outline: none;
+        }
+
+        .category-title-editor {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            flex: 1;
+            min-width: 220px;
+        }
+
+        .category-name-input {
+            width: min(360px, 100%);
+            border: 1px solid #d9dde4;
+            border-radius: 6px;
+            padding: 8px 10px;
+            font-size: 18px;
+            font-weight: 700;
+            color: #333;
+            background: #fff;
+        }
+
+        .category-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .daily-category-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            min-height: 34px;
+            border: 1px solid #d9dde4;
+            border-radius: 8px;
+            padding: 0 10px;
+            background: #fff;
+            color: #34495e;
+            font-size: 12px;
+            font-weight: 800;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+
+        .daily-category-toggle input {
+            width: 17px;
+            height: 17px;
+            margin: 0;
+            accent-color: var(--success-color);
+            cursor: pointer;
+        }
+
+        .daily-category-toggle.is-active {
+            border-color: #16a34a;
+            background: #ecfdf3;
+            color: #166534;
+        }
+
+        .image-editor {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 6px;
+        }
+
+        .image-actions {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 4px;
+        }
+
+        .btn-mini {
+            border: 1px solid #d9dde4;
+            background: #fff;
+            color: #34495e;
+            border-radius: 6px;
+            padding: 6px 4px;
+            font-size: 11px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .btn-mini:hover {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+            background: #f8fbff;
+        }
+
+        .visible-cell {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .visible-check {
+            width: 20px;
+            height: 20px;
+            accent-color: var(--success-color);
+            cursor: pointer;
         }
 
         .img-preview {
@@ -205,6 +306,101 @@
             padding: 50px;
             color: #7f8c8d;
         }
+
+        .image-upload-input {
+            display: none;
+        }
+
+        .image-picker {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.62);
+            z-index: 300;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .image-picker.show {
+            display: flex;
+        }
+
+        .image-picker-panel {
+            width: min(860px, 94vw);
+            max-height: 82vh;
+            background: #fff;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 20px 70px rgba(0, 0, 0, 0.25);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .image-picker-header {
+            padding: 14px 18px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e8edf3;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .image-picker-title {
+            font-size: 15px;
+            font-weight: 800;
+            color: #2c3e50;
+        }
+
+        .image-picker-grid {
+            padding: 16px;
+            overflow: auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 12px;
+        }
+
+        .image-picker-item {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background: #fff;
+            overflow: hidden;
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .image-picker-item:hover {
+            border-color: var(--accent-color);
+            box-shadow: 0 8px 24px rgba(52, 152, 219, 0.16);
+        }
+
+        .image-picker-item img {
+            width: 100%;
+            aspect-ratio: 4 / 3;
+            object-fit: cover;
+            display: block;
+            background: #f4f6f9;
+        }
+
+        .image-picker-item span {
+            display: block;
+            padding: 8px;
+            font-size: 11px;
+            color: #64748b;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .image-picker-empty {
+            grid-column: 1 / -1;
+            padding: 36px;
+            text-align: center;
+            color: #64748b;
+            background: #f8fafc;
+            border-radius: 8px;
+        }
     </style>
 </head>
 
@@ -223,6 +419,23 @@
         </div>
     </div>
 
+    <input class="image-upload-input" id="imageUploadInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+
+    <div class="image-picker" id="imagePicker">
+        <div class="image-picker-panel">
+            <div class="image-picker-header">
+                <div>
+                    <div class="image-picker-title">Yerel Görsel Deposu</div>
+                    <small style="color:#64748b;">Depoya yüklenen görseller burada görünür.</small>
+                </div>
+                <button class="btn-mini" type="button" onclick="closeImagePicker()">Kapat</button>
+            </div>
+            <div class="image-picker-grid" id="imagePickerGrid">
+                <div class="image-picker-empty">Görseller yükleniyor...</div>
+            </div>
+        </div>
+    </div>
+
     <div class="footer-actions">
         <button class="btn-edit btn-cancel" onclick="window.location.href='/settings'">❌ Vazgeç</button>
         <button class="btn-edit btn-save" onclick="saveMenu()">💾 Değişiklikleri Kaydet</button>
@@ -230,11 +443,22 @@
 
     <script>
         let menuData = {};
+        let menuMeta = { daily_meal_categories: [] };
+        let imageTarget = null;
 
         async function loadMenu() {
             try {
-                const res = await fetch('/api/menu');
-                menuData = await res.json();
+                const [menuRes, metaRes] = await Promise.all([
+                    fetch('/api/menu'),
+                    fetch('/api/menu/meta')
+                ]);
+                menuData = await menuRes.json();
+                const meta = await metaRes.json();
+                menuMeta = meta && meta.success
+                    ? { daily_meal_categories: meta.daily_meal_categories || [] }
+                    : { daily_meal_categories: [] };
+                normalizeMenuData();
+                normalizeMenuMeta();
                 renderEditor();
             } catch (e) {
                 alert('Menü yüklenemedi: ' + e.message);
@@ -257,8 +481,16 @@
 
                 card.innerHTML = `
                     <div class="category-header">
-                        <span class="category-name">${cat}</span>
-                        <button class="btn-icon" onclick="removeCategory('${cat}')" title="Kategoriyi Sil">🗑️</button>
+                        <div class="category-title-editor">
+                            <input class="category-name-input" type="text" value="${escapeAttr(cat)}" onchange="renameCategory('${escapeJs(cat)}', this.value)">
+                            <span class="category-name">${menuData[cat].length} ürün</span>
+                            ${renderDailyCategoryToggle(cat)}
+                        </div>
+                        <div class="category-actions">
+                            ${isDailyMealCategory(cat) ? '<a class="btn-mini" href="/porsiyon" target="_blank" style="text-decoration:none;">Porsiyon Detayı</a>' : ''}
+                            <button class="btn-mini" type="button" onclick="bulkAddItems('${escapeJs(cat)}')">Toplu Ürün</button>
+                            <button class="btn-icon" onclick="removeCategory('${escapeJs(cat)}')" title="Kategoriyi Sil">🗑️</button>
+                        </div>
                     </div>
                     <div class="item-list">
                         <div class="item-row" style="border-bottom: 2px solid #eee; font-weight: bold; font-size: 11px; color: #777;">
@@ -268,28 +500,39 @@
                             <div style="text-align:center;">TY %</div>
                             <div style="text-align:center;">GT %</div>
                             <div style="text-align:center;">MG %</div>
-                            <div style="text-align:center;">Görsel URL</div>
+                            <div style="text-align:center;">Görsel</div>
                             <div style="text-align:center;">Önizleme</div>
+                            <div style="text-align:center;">Menüde Göster</div>
                             <div></div>
                         </div>
-                        <div id="list-${cat}">
+                        <div id="list-${escapeAttr(cat)}">
                             ${menuData[cat].map((item, idx) => `
                                 <div class="item-row">
-                                    <input type="text" value="${escapeAttr(item[0] || '')}" placeholder="Ürün Adı" onchange="updateItem('${cat}', ${idx}, 0, this.value)">
-                                    <input type="number" value="${item[1]}" placeholder="Fiyat" step="0.01" onchange="updateItem('${cat}', ${idx}, 1, this.value)">
-                                    <input type="number" value="${item[2] || 0}" placeholder="YS %" step="1" onchange="updateItem('${cat}', ${idx}, 2, this.value)">
-                                    <input type="number" value="${item[3] || 0}" placeholder="TY %" step="1" onchange="updateItem('${cat}', ${idx}, 3, this.value)">
-                                    <input type="number" value="${item[4] || 0}" placeholder="GT %" step="1" onchange="updateItem('${cat}', ${idx}, 4, this.value)">
-                                    <input type="number" value="${item[5] || 0}" placeholder="MG %" step="1" onchange="updateItem('${cat}', ${idx}, 5, this.value)">
-                                    <input type="text" value="${escapeAttr(item[6] || '')}" placeholder="https://.../urun.jpg" onchange="updateItem('${cat}', ${idx}, 6, this.value)">
+                                    <input type="text" value="${escapeAttr(item[0] || '')}" placeholder="Ürün Adı" onchange="updateItem('${escapeJs(cat)}', ${idx}, 0, this.value)">
+                                    <input type="number" value="${item[1]}" placeholder="Fiyat" step="0.01" onchange="updateItem('${escapeJs(cat)}', ${idx}, 1, this.value)">
+                                    <input type="number" value="${item[2] || 0}" placeholder="YS %" step="1" onchange="updateItem('${escapeJs(cat)}', ${idx}, 2, this.value)">
+                                    <input type="number" value="${item[3] || 0}" placeholder="TY %" step="1" onchange="updateItem('${escapeJs(cat)}', ${idx}, 3, this.value)">
+                                    <input type="number" value="${item[4] || 0}" placeholder="GT %" step="1" onchange="updateItem('${escapeJs(cat)}', ${idx}, 4, this.value)">
+                                    <input type="number" value="${item[5] || 0}" placeholder="MG %" step="1" onchange="updateItem('${escapeJs(cat)}', ${idx}, 5, this.value)">
+                                    <div class="image-editor">
+                                        <input type="text" value="${escapeAttr(item[6] || '')}" placeholder="/uploads/menu/urun.jpg veya https://..." onchange="updateItem('${escapeJs(cat)}', ${idx}, 6, this.value)">
+                                        <div class="image-actions">
+                                            <button class="btn-mini" type="button" onclick="chooseImageUpload('${escapeJs(cat)}', ${idx})">Dosya</button>
+                                            <button class="btn-mini" type="button" onclick="pasteImageFromClipboard('${escapeJs(cat)}', ${idx})">Yapıştır</button>
+                                            <button class="btn-mini" type="button" onclick="openImagePicker('${escapeJs(cat)}', ${idx})">Depo</button>
+                                        </div>
+                                    </div>
                                     ${renderImagePreview(item[6] || '')}
-                                    <button class="btn-icon" onclick="removeItem('${cat}', ${idx})">❌</button>
+                                    <label class="visible-cell" title="Web menüde göster">
+                                        <input class="visible-check" type="checkbox" ${isMenuVisible(item) ? 'checked' : ''} onchange="updateItem('${escapeJs(cat)}', ${idx}, 7, this.checked)">
+                                    </label>
+                                    <button class="btn-icon" onclick="removeItem('${escapeJs(cat)}', ${idx})">❌</button>
                                 </div>
                             `).join('')}
                         </div>
                     </div>
                     <div class="add-row">
-                        <button class="btn-add-item" onclick="addItem('${cat}')">+ Yeni Ürün Ekle</button>
+                        <button class="btn-add-item" onclick="addItem('${escapeJs(cat)}')">+ Yeni Ürün Ekle</button>
                     </div>
                 `;
                 container.appendChild(card);
@@ -304,6 +547,192 @@
                 .replace(/>/g, '&gt;');
         }
 
+        function escapeJs(value) {
+            return String(value)
+                .replace(/\\/g, '\\\\')
+                .replace(/'/g, "\\'")
+                .replace(/\r/g, '')
+                .replace(/\n/g, '\\n');
+        }
+
+        function getDailyMealCategories() {
+            return Array.isArray(menuMeta.daily_meal_categories) ? menuMeta.daily_meal_categories : [];
+        }
+
+        function normalizeCategoryKey(value) {
+            return String(value || '').trim().toLocaleLowerCase('tr-TR');
+        }
+
+        function isDailyMealCategory(cat) {
+            const key = normalizeCategoryKey(cat);
+            return getDailyMealCategories().some(category => normalizeCategoryKey(category) === key);
+        }
+
+        function normalizeMenuMeta() {
+            const categories = Object.keys(menuData);
+            const canonicalByKey = new Map(categories.map(category => [normalizeCategoryKey(category), category]));
+            const next = [];
+            const seen = new Set();
+            getDailyMealCategories().forEach(category => {
+                const key = normalizeCategoryKey(category);
+                const canonical = canonicalByKey.get(key);
+                if (!canonical || seen.has(key)) return;
+                next.push(canonical);
+                seen.add(key);
+            });
+            menuMeta.daily_meal_categories = next;
+        }
+
+        function setDailyMealCategory(cat, checked) {
+            const key = normalizeCategoryKey(cat);
+            const next = getDailyMealCategories().filter(category => normalizeCategoryKey(category) !== key);
+            if (checked) next.push(cat);
+            menuMeta.daily_meal_categories = next;
+            renderEditor();
+        }
+
+        function renderDailyCategoryToggle(cat) {
+            const checked = isDailyMealCategory(cat);
+            return `
+                <label class="daily-category-toggle ${checked ? 'is-active' : ''}" title="Bu kategorinin yemek çeşitleri Porsiyon Takibi ekranından girilir">
+                    <input type="checkbox" ${checked ? 'checked' : ''} onchange="setDailyMealCategory('${escapeJs(cat)}', this.checked)">
+                    Günlük yemek
+                </label>
+            `;
+        }
+
+        function rebuildMenuDataWithRename(oldCat, newCat, mergeIntoExisting) {
+            const nextMenu = {};
+            Object.keys(menuData).forEach(cat => {
+                if (cat === oldCat) {
+                    if (!mergeIntoExisting) nextMenu[newCat] = menuData[oldCat];
+                    return;
+                }
+
+                nextMenu[cat] = menuData[cat];
+                if (mergeIntoExisting && cat === newCat) {
+                    nextMenu[cat].push(...menuData[oldCat]);
+                }
+            });
+            menuData = nextMenu;
+        }
+
+        function renameCategory(oldCat, value) {
+            const newCat = String(value || '').trim();
+            if (!menuData[oldCat]) return;
+            if (!newCat || newCat === oldCat) {
+                renderEditor();
+                return;
+            }
+
+            const mergeIntoExisting = !!menuData[newCat];
+            if (mergeIntoExisting && !confirm(`"${newCat}" kategorisi zaten var. Ürünler bu kategoriye taşınsın mı?`)) {
+                renderEditor();
+                return;
+            }
+
+            const shouldBeDaily = isDailyMealCategory(oldCat) || isDailyMealCategory(newCat);
+            rebuildMenuDataWithRename(oldCat, newCat, mergeIntoExisting);
+            const oldKey = normalizeCategoryKey(oldCat);
+            const newKey = normalizeCategoryKey(newCat);
+            menuMeta.daily_meal_categories = getDailyMealCategories()
+                .filter(category => {
+                    const key = normalizeCategoryKey(category);
+                    return key !== oldKey && key !== newKey;
+                });
+            if (shouldBeDaily) menuMeta.daily_meal_categories.push(newCat);
+            normalizeMenuMeta();
+            renderEditor();
+        }
+
+        function normalizeMenuName(value) {
+            return String(value || '').trim().toLocaleLowerCase('tr-TR');
+        }
+
+        function stripPortionPrefix(value) {
+            return String(value || '').trim().replace(/^(tam|yarım|yarim)\s+porsiyon\s+/i, '').trim();
+        }
+
+        function splitBulkNames(value) {
+            return String(value || '')
+                .split(/[\n,;]+/)
+                .map(name => stripPortionPrefix(name))
+                .filter(Boolean);
+        }
+
+        function inferPrice(cat, matcher) {
+            const items = menuData[cat] || [];
+            const found = items.find(item => matcher(normalizeMenuName(item[0])));
+            if (found) return Number(found[1] || 0);
+            return items.length ? Number(items[0][1] || 0) : 0;
+        }
+
+        function inferImage(cat, matcher) {
+            const items = menuData[cat] || [];
+            const found = items.find(item => matcher(normalizeMenuName(item[0])) && item[6]);
+            return found ? (found[6] || '') : '';
+        }
+
+        function addUniqueMenuItem(cat, item, existingNames) {
+            const key = normalizeMenuName(item[0]);
+            if (existingNames.has(key)) return false;
+            menuData[cat].push(item);
+            existingNames.add(key);
+            return true;
+        }
+
+        function bulkAddItems(cat) {
+            if (!menuData[cat]) return;
+            const rawNames = prompt('Ürün adlarını giriniz:');
+            if (rawNames === null) return;
+
+            const names = splitBulkNames(rawNames);
+            if (!names.length) {
+                alert('Eklenecek ürün adı bulunamadı.');
+                return;
+            }
+
+            const withPortions = confirm('Tam ve yarım porsiyon olarak eklensin mi?');
+            const existingNames = new Set((menuData[cat] || []).map(item => normalizeMenuName(item[0])));
+            let added = 0;
+            let skipped = 0;
+
+            if (withPortions) {
+                const defaultFullPrice = inferPrice(cat, name => name.startsWith('tam porsiyon'));
+                const defaultHalfPrice = inferPrice(cat, name => name.startsWith('yarım porsiyon') || name.startsWith('yarim porsiyon'));
+                const fullPriceRaw = prompt('Tam porsiyon fiyatı:', defaultFullPrice || '');
+                if (fullPriceRaw === null) return;
+                const halfPriceRaw = prompt('Yarım porsiyon fiyatı:', defaultHalfPrice || '');
+                if (halfPriceRaw === null) return;
+
+                const fullPrice = parseFloat(fullPriceRaw) || 0;
+                const halfPrice = parseFloat(halfPriceRaw) || 0;
+                const fullImage = inferImage(cat, name => name.startsWith('tam porsiyon'));
+                const halfImage = inferImage(cat, name => name.startsWith('yarım porsiyon') || name.startsWith('yarim porsiyon'));
+
+                names.forEach(name => {
+                    if (addUniqueMenuItem(cat, [`Tam Porsiyon ${name}`, fullPrice, 0, 0, 0, 0, fullImage, true], existingNames)) added++;
+                    else skipped++;
+
+                    if (addUniqueMenuItem(cat, [`Yarım Porsiyon ${name}`, halfPrice, 0, 0, 0, 0, halfImage, true], existingNames)) added++;
+                    else skipped++;
+                });
+            } else {
+                const defaultPrice = inferPrice(cat, () => true);
+                const priceRaw = prompt('Fiyat:', defaultPrice || '');
+                if (priceRaw === null) return;
+                const price = parseFloat(priceRaw) || 0;
+
+                names.forEach(name => {
+                    if (addUniqueMenuItem(cat, [name, price, 0, 0, 0, 0, '', true], existingNames)) added++;
+                    else skipped++;
+                });
+            }
+
+            renderEditor();
+            alert(`${added} ürün eklendi.${skipped ? ` ${skipped} mevcut ürün atlandı.` : ''}`);
+        }
+
         function renderImagePreview(url) {
             const clean = (url || '').trim();
             if (!clean) return '<div class="img-preview">YOK</div>';
@@ -311,8 +740,141 @@
             return `<div class="img-preview"><img src="${safe}" alt="img" onerror="this.parentNode.textContent='HATALI URL'"></div>`;
         }
 
+        function isMenuVisible(item) {
+            if (!Array.isArray(item) || item.length <= 7) return true;
+            const value = item[7];
+            if (typeof value === 'boolean') return value;
+            return !['0', 'false', 'hayir', 'hayır', 'no', 'off'].includes(String(value).trim().toLowerCase());
+        }
+
+        function normalizeMenuItem(item) {
+            const next = Array.isArray(item) ? item.slice(0, 8) : ["Yeni Ürün", 0.0, 0, 0, 0, 0, "", true];
+            while (next.length < 7) next.push(0);
+            if (next.length === 7) next.push(true);
+            next[1] = parseFloat(next[1]) || 0;
+            for (let i = 2; i <= 5; i++) next[i] = parseFloat(next[i]) || 0;
+            next[6] = (next[6] || '').trim();
+            next[7] = isMenuVisible(next);
+            return next;
+        }
+
+        function normalizeMenuData() {
+            Object.keys(menuData).forEach(cat => {
+                menuData[cat] = (menuData[cat] || []).map(normalizeMenuItem);
+            });
+        }
+
+        function getTargetItem(target) {
+            if (!target || !menuData[target.cat] || !menuData[target.cat][target.idx]) return null;
+            return menuData[target.cat][target.idx];
+        }
+
+        function setTargetImage(target, url) {
+            const item = getTargetItem(target);
+            if (!item) return;
+            item[6] = url;
+            renderEditor();
+        }
+
+        async function uploadImageFile(file, target) {
+            if (!file || !target) return;
+            const item = getTargetItem(target);
+            if (!item) {
+                alert('Ürün bulunamadı.');
+                return;
+            }
+
+            const form = new FormData();
+            form.append('image', file);
+            form.append('product_name', item[0] || 'menu-gorsel');
+            form.append('category', target.cat);
+
+            const response = await fetch('/api/menu/images/upload', {
+                method: 'POST',
+                body: form
+            });
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                throw new Error(data.error || 'Görsel yüklenemedi');
+            }
+            setTargetImage(target, data.url);
+        }
+
+        function chooseImageUpload(cat, idx) {
+            imageTarget = { cat, idx };
+            document.getElementById('imageUploadInput').click();
+        }
+
+        async function pasteImageFromClipboard(cat, idx) {
+            imageTarget = { cat, idx };
+            if (!navigator.clipboard || !navigator.clipboard.read) {
+                alert('Bu tarayıcı panodan görsel okumayı desteklemiyor.');
+                return;
+            }
+
+            try {
+                const clipboardItems = await navigator.clipboard.read();
+                for (const clipboardItem of clipboardItems) {
+                    const imageType = clipboardItem.types.find(type => type.startsWith('image/'));
+                    if (!imageType) continue;
+                    const blob = await clipboardItem.getType(imageType);
+                    const extension = imageType.split('/')[1] || 'png';
+                    const file = new File([blob], `pano-gorsel.${extension}`, { type: imageType });
+                    await uploadImageFile(file, imageTarget);
+                    return;
+                }
+                alert('Panoda görsel bulunamadı.');
+            } catch (e) {
+                alert('Görsel yapıştırılamadı: ' + e.message);
+            }
+        }
+
+        async function openImagePicker(cat, idx) {
+            imageTarget = { cat, idx };
+            const picker = document.getElementById('imagePicker');
+            const grid = document.getElementById('imagePickerGrid');
+            picker.classList.add('show');
+            grid.innerHTML = '<div class="image-picker-empty">Görseller yükleniyor...</div>';
+
+            try {
+                const response = await fetch('/api/menu/images');
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.error || 'Görseller alınamadı');
+                }
+                renderImagePicker(data.images || []);
+            } catch (e) {
+                grid.innerHTML = `<div class="image-picker-empty">Görseller alınamadı: ${escapeAttr(e.message)}</div>`;
+            }
+        }
+
+        function closeImagePicker() {
+            document.getElementById('imagePicker').classList.remove('show');
+        }
+
+        function renderImagePicker(images) {
+            const grid = document.getElementById('imagePickerGrid');
+            if (!images.length) {
+                grid.innerHTML = '<div class="image-picker-empty">Yerel depoda henüz görsel yok. Dosya seçerek veya panodan yapıştırarak ekleyebilirsiniz.</div>';
+                return;
+            }
+
+            grid.innerHTML = images.map(image => `
+                <button class="image-picker-item" type="button" onclick="selectRepositoryImage('${escapeJs(image.url)}')">
+                    <img src="${escapeAttr(image.url)}" alt="${escapeAttr(image.filename)}" loading="lazy">
+                    <span>${escapeAttr(image.filename)}</span>
+                </button>
+            `).join('');
+        }
+
+        function selectRepositoryImage(url) {
+            setTargetImage(imageTarget, url);
+            closeImagePicker();
+        }
+
         function updateItem(cat, idx, field, value) {
             if (field >= 1 && field <= 5) value = parseFloat(value) || 0;
+            if (field === 7) value = !!value;
             if (field === 6) {
                 value = (value || '').trim();
                 menuData[cat][idx][field] = value;
@@ -323,7 +885,7 @@
         }
 
         function addItem(cat) {
-            menuData[cat].push(["Yeni Ürün", 0.0, 0, 0, 0, 0, ""]);
+            menuData[cat].push(["Yeni Ürün", 0.0, 0, 0, 0, 0, "", true]);
             renderEditor();
         }
 
@@ -350,18 +912,26 @@
         function removeCategory(cat) {
             if (confirm(`"${cat}" kategorisini ve içindeki TÜM ürünleri silmek istediğinize emin misiniz?`)) {
                 delete menuData[cat];
+                const key = normalizeCategoryKey(cat);
+                menuMeta.daily_meal_categories = getDailyMealCategories()
+                    .filter(category => normalizeCategoryKey(category) !== key);
                 renderEditor();
             }
         }
 
         async function saveMenu() {
             if (!confirm('Değişiklikleri kaydetmek istiyor musunuz?')) return;
+            normalizeMenuData();
+            normalizeMenuMeta();
 
             try {
                 const res = await fetch('/api/menu/save', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ menu: menuData })
+                    body: JSON.stringify({
+                        menu: menuData,
+                        daily_meal_categories: getDailyMealCategories()
+                    })
                 });
 
                 const result = await res.json();
@@ -375,6 +945,21 @@
                 alert('Kaydetme hatası: ' + e.message);
             }
         }
+
+        document.getElementById('imageUploadInput').addEventListener('change', async function () {
+            const file = this.files && this.files[0];
+            this.value = '';
+            if (!file) return;
+            try {
+                await uploadImageFile(file, imageTarget);
+            } catch (e) {
+                alert('Görsel yüklenemedi: ' + e.message);
+            }
+        });
+
+        document.getElementById('imagePicker').addEventListener('click', function (event) {
+            if (event.target === this) closeImagePicker();
+        });
 
         window.onload = loadMenu;
     </script>

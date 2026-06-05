@@ -402,6 +402,80 @@
             padding: 6px 12px;
             font-size: 12px;
         }
+
+        .prep-panel-grid {
+            display: grid;
+            gap: 14px;
+        }
+
+        .prep-panel-row {
+            border: 1px solid #e5e7eb;
+            border-radius: var(--radius-md);
+            padding: 14px;
+            background: #f9fafb;
+        }
+
+        .prep-panel-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .prep-panel-title {
+            font-weight: 800;
+            color: var(--primary-color);
+        }
+
+        .prep-link {
+            color: var(--accent-color);
+            font-size: 12px;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        .prep-textarea {
+            min-height: 62px;
+            resize: vertical;
+            padding: 10px 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: var(--radius-md);
+            background: #fff;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        .category-route-list {
+            display: grid;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .category-route-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 180px;
+            gap: 10px;
+            align-items: center;
+            padding: 10px 12px;
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: var(--radius-md);
+        }
+
+        .category-route-row strong {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .settings-select {
+            padding: 11px;
+            border: 2px solid #e0e0e0;
+            border-radius: var(--radius-md);
+            background: #f8f9fa;
+        }
     </style>
 </head>
 
@@ -679,6 +753,20 @@
                     </label>
                 </div>
 
+                <div class="form-row" style="margin-top:16px;">
+                    <div class="form-group" style="max-width:360px;">
+                        <label for="defaultPaymentMethod">Varsayılan Ödeme Yöntemi</label>
+                        <select id="defaultPaymentMethod" class="settings-select">
+                            <option value="Nakit">💵 Nakit</option>
+                            <option value="Kredi Kartı">💳 Kredi Kartı</option>
+                            <option value="Açık Hesap">📝 Açık Hesap</option>
+                        </select>
+                        <small style="color:var(--text-secondary);">
+                            Ödeme al ekranı açıldığında tutar bu yönteme otomatik yazılır.
+                        </small>
+                    </div>
+                </div>
+
                 <hr class="divider">
 
                 <!-- Sistem Durumu -->
@@ -703,6 +791,30 @@
                         <div class="s-sub">Yerel ağ</div>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- 5b. Reyon Ekranları ve Yazıcıları -->
+        <div class="settings-card">
+            <div class="card-header">🍳 Reyon Ekranları &amp; IP Yazıcılar</div>
+            <div class="card-body">
+                <div id="prepPanelEditor" class="prep-panel-grid">
+                    <!-- Reyon ayarları buraya gelecek -->
+                </div>
+
+                <hr class="divider">
+
+                <p
+                    style="font-size:13px; font-weight:600; color:var(--text-secondary); margin-bottom:10px; text-transform:uppercase;">
+                    Menü Kategorisi → Reyon
+                </p>
+                <div class="category-route-list" id="prepCategoryRoutes">
+                    <!-- Kategori yönlendirmeleri buraya gelecek -->
+                </div>
+                <small style="display:block; margin-top:10px; color:var(--text-secondary);">
+                    Ürün adı anahtarları kategori yönlendirmesinden önce çalışır. Örneğin "Adana Kebap" ürün adı
+                    Izgara anahtarında ise kategori "Yemek" olsa bile Izgara reyonuna düşer.
+                </small>
             </div>
         </div>
 
@@ -949,6 +1061,7 @@
                             <select id="posType"
                                 style="padding: 11px; border: 2px solid #e0e0e0; border-radius: var(--radius-md); background: #f8f9fa;">
                                 <option value="demo">🧪 Demo / Simülatör</option>
+                                <option value="token-bridge">🔌 Beko YN ÖKC (Windows Bridge)</option>
                                 <option value="beko-json">📦 Beko (JSON API)</option>
                                 <option value="hugin">📦 Hugin (JSON API)</option>
                                 <option value="generic">📦 Genel (Generic JSON)</option>
@@ -963,7 +1076,7 @@
                             <input type="number" id="posPort" placeholder="5000">
                         </div>
                     </div>
-                    <small style="color:var(--text-secondary);">
+                    <small id="posHint" style="color:var(--text-secondary);">
                         Cihaz üzerinden TCP/IP bağlantısının aktif olduğundan emin olun.
                     </small>
                 </div>
@@ -1051,7 +1164,7 @@
                 🔄 Yenile
             </button>
             <button class="btn-settings btn-warning" onclick="window.location.href='/menu_edit'">
-                🍽️ Menü Düzenle
+                🍽️ Menü ve Garson Grupları
             </button>
             <button class="btn-settings btn-back" onclick="window.location.href='/'">
                 🏠 Ana Sayfa
@@ -1065,6 +1178,45 @@
 
     <script>
         /* ── Ayarlar sayfası JS ── */
+        const fallbackPrepPanels = [
+            { id: 'izgara', name: 'Izgara', title: 'IZGARA SİPARİŞ TAKİP', ticket_title: 'IZGARA FİŞİ', emoji: '🔥', aggregate: false, category_keywords: ['izgara', 'kebap', 'kofte', 'sis'], product_keywords: ['izgara', 'kofte', 'kebap', 'adana', 'beyti', 'sis', 'kanat', 'incik', 'biftek', 'karisik', 'tepsi'] },
+            { id: 'mutfak', name: 'Mutfak', title: 'MUTFAK SİPARİŞ TAKİP', ticket_title: 'MUTFAK FİŞİ', emoji: '👨‍🍳', aggregate: false, category_keywords: [], product_keywords: [] },
+            { id: 'icecek', name: 'İçecek', title: 'İÇECEK SİPARİŞ TAKİP', ticket_title: 'İÇECEK FİŞİ', emoji: '🥤', aggregate: true, category_keywords: ['icecek', 'mesrubat', 'cay', 'kahve', 'soda'], product_keywords: ['ayran', 'salgam', 'soda', 'gazoz', 'meyve suyu', 'mesrubat', 'kahve', 'cay'] },
+            { id: 'tatli', name: 'Tatlı', title: 'TATLI SİPARİŞ TAKİP', ticket_title: 'TATLI FİŞİ', emoji: '🍰', aggregate: false, category_keywords: ['tatli', 'baklava', 'dondurma', 'sut tatlilari', 'sutlu tatli'], product_keywords: ['baklava', 'sutlac', 'kazandibi', 'supangle', 'dondurma'] }
+        ];
+        let prepPanels = fallbackPrepPanels;
+        let prepPrinters = {};
+        let prepCategoryOverrides = {};
+        let menuCategories = [];
+
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[char]));
+        }
+
+        function panelUrl(panelId) {
+            if (panelId === 'izgara') return '/izgara';
+            if (panelId === 'mutfak') return '/mutfak';
+            if (panelId === 'icecek') return '/icecek';
+            if (panelId === 'tatli') return '/tatli';
+            return `/reyon/${encodeURIComponent(panelId)}`;
+        }
+
+        function keywordsToText(value) {
+            return Array.isArray(value) ? value.join(', ') : String(value || '');
+        }
+
+        function textToKeywords(value) {
+            return String(value || '')
+                .split(/[\n,]+/)
+                .map(item => item.trim())
+                .filter(Boolean);
+        }
 
         async function loadSettings() {
             try {
@@ -1077,6 +1229,7 @@
                 document.getElementById('masaSayisi').value = data.masa_sayisi ?? '';
                 document.getElementById('paketSayisi').value = data.paket_sayisi ?? '';
                 document.getElementById('directPrint').checked = data.direct_print || false;
+                document.getElementById('defaultPaymentMethod').value = data.default_payment_method || 'Nakit';
 
                 document.getElementById('cidEnabled').checked = data.cid_enabled || false;
                 document.getElementById('cidType').value = data.cid_type || 'tcp';
@@ -1102,6 +1255,12 @@
                 document.getElementById('vaSmsVerify').checked = data.va_sms_verify || false;
                 document.getElementById('vaKitchenApproval').checked = data.va_kitchen_approval !== false;
                 loadBlacklist();
+
+                prepPanels = Array.isArray(data.prep_panels) && data.prep_panels.length ? data.prep_panels : fallbackPrepPanels;
+                prepPrinters = data.prep_printers || {};
+                prepCategoryOverrides = data.prep_category_overrides || {};
+                menuCategories = Array.isArray(data.menu_categories) ? data.menu_categories : [];
+                renderPrepSettings();
 
                 // QR Menü & Online Sipariş Politikası
                 try {
@@ -1206,6 +1365,154 @@
             });
         }
 
+        function renderPrepSettings() {
+            const panelEditor = document.getElementById('prepPanelEditor');
+            const categoryRoutes = document.getElementById('prepCategoryRoutes');
+            if (!panelEditor || !categoryRoutes) return;
+
+            panelEditor.innerHTML = prepPanels.map(panel => {
+                const printer = prepPrinters[panel.id] || {};
+                return `
+                    <div class="prep-panel-row" data-panel-id="${escapeHtml(panel.id)}">
+                        <div class="prep-panel-head">
+                            <div class="prep-panel-title">${escapeHtml(panel.emoji || '')} ${escapeHtml(panel.name)} <span style="color:#94a3b8;">(${escapeHtml(panel.id)})</span></div>
+                            <a class="prep-link" href="${panelUrl(panel.id)}" target="_blank">Ekranı Aç</a>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Reyon Adı</label>
+                                <input type="text" id="prep_name_${panel.id}" value="${escapeHtml(panel.name)}">
+                            </div>
+                            <div class="form-group">
+                                <label>Ekran Başlığı</label>
+                                <input type="text" id="prep_title_${panel.id}" value="${escapeHtml(panel.title || panel.name)}">
+                            </div>
+                            <div class="form-group">
+                                <label>Fiş Başlığı</label>
+                                <input type="text" id="prep_ticket_${panel.id}" value="${escapeHtml(panel.ticket_title || panel.name)}">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Kategori Anahtarları</label>
+                                <textarea class="prep-textarea" id="prep_category_keywords_${panel.id}">${escapeHtml(keywordsToText(panel.category_keywords))}</textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>Ürün Adı Anahtarları</label>
+                                <textarea class="prep-textarea" id="prep_product_keywords_${panel.id}">${escapeHtml(keywordsToText(panel.product_keywords))}</textarea>
+                            </div>
+                        </div>
+                        <div class="toggle-row">
+                            <div>
+                                <div class="toggle-label">Aynı ürünü tek kartta topla</div>
+                                <div class="toggle-desc">İçecek gibi hızlı reyonlarda ürünleri masa yerine ürün toplamı olarak gösterir</div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="prep_aggregate_${panel.id}" ${panel.aggregate ? 'checked' : ''}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <hr class="divider">
+                        <div class="toggle-row">
+                            <div>
+                                <div class="toggle-label">IP Termal Yazıcı</div>
+                                <div class="toggle-desc">Bu reyon için yeni sipariş geldiğinde sunucudan otomatik fiş gönder</div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="prep_printer_enabled_${panel.id}" ${printer.enabled ? 'checked' : ''}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="form-row" style="margin-top:12px;">
+                            <div class="form-group">
+                                <label>Yazıcı IP</label>
+                                <input type="text" id="prep_printer_ip_${panel.id}" placeholder="192.168.1.50" value="${escapeHtml(printer.ip || '')}">
+                            </div>
+                            <div class="form-group">
+                                <label>Port</label>
+                                <input type="number" id="prep_printer_port_${panel.id}" placeholder="9100" value="${escapeHtml(printer.port || 9100)}">
+                            </div>
+                            <div class="form-group">
+                                <label>Kopya</label>
+                                <input type="number" id="prep_printer_copies_${panel.id}" min="1" max="5" value="${escapeHtml(printer.copies || 1)}">
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            const panelOptions = prepPanels.map(panel => (
+                `<option value="${escapeHtml(panel.id)}">${escapeHtml(panel.emoji || '')} ${escapeHtml(panel.name)}</option>`
+            )).join('');
+
+            categoryRoutes.innerHTML = menuCategories.length ? menuCategories.map((category, index) => {
+                const selectedPanel = prepCategoryOverrides[category] || guessPanelForCategory(category);
+                return `
+                    <div class="category-route-row">
+                        <strong title="${escapeHtml(category)}">${escapeHtml(category)}</strong>
+                        <select class="settings-select" id="prep_category_route_${index}" data-category="${escapeHtml(category)}">
+                            ${panelOptions}
+                        </select>
+                    </div>
+                `;
+            }).join('') : '<div style="color:#999; padding:12px;">Menü kategorisi bulunamadı.</div>';
+
+            menuCategories.forEach((category, index) => {
+                const select = document.getElementById(`prep_category_route_${index}`);
+                if (select) select.value = prepCategoryOverrides[category] || guessPanelForCategory(category);
+            });
+        }
+
+        function guessPanelForCategory(category) {
+            const normalized = normalizeForPrep(category);
+            for (const panel of prepPanels) {
+                const keywords = panel.category_keywords || [];
+                if (keywords.some(keyword => normalized.includes(normalizeForPrep(keyword)))) {
+                    return panel.id;
+                }
+            }
+            return 'mutfak';
+        }
+
+        function normalizeForPrep(value) {
+            return String(value ?? '')
+                .toLocaleLowerCase('tr-TR')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/ı/g, 'i');
+        }
+
+        function collectPrepSettings() {
+            const panels = prepPanels.map(panel => ({
+                id: panel.id,
+                emoji: panel.emoji || '',
+                name: document.getElementById(`prep_name_${panel.id}`)?.value.trim() || panel.name,
+                title: document.getElementById(`prep_title_${panel.id}`)?.value.trim() || panel.title,
+                ticket_title: document.getElementById(`prep_ticket_${panel.id}`)?.value.trim() || panel.ticket_title,
+                aggregate: document.getElementById(`prep_aggregate_${panel.id}`)?.checked || false,
+                category_keywords: textToKeywords(document.getElementById(`prep_category_keywords_${panel.id}`)?.value),
+                product_keywords: textToKeywords(document.getElementById(`prep_product_keywords_${panel.id}`)?.value)
+            }));
+
+            const printers = {};
+            panels.forEach(panel => {
+                printers[panel.id] = {
+                    enabled: document.getElementById(`prep_printer_enabled_${panel.id}`)?.checked || false,
+                    ip: document.getElementById(`prep_printer_ip_${panel.id}`)?.value.trim() || '',
+                    port: parseInt(document.getElementById(`prep_printer_port_${panel.id}`)?.value) || 9100,
+                    copies: parseInt(document.getElementById(`prep_printer_copies_${panel.id}`)?.value) || 1
+                };
+            });
+
+            const categoryOverrides = {};
+            menuCategories.forEach((category, index) => {
+                const panelId = document.getElementById(`prep_category_route_${index}`)?.value;
+                if (panelId) categoryOverrides[category] = panelId;
+            });
+
+            return { panels, printers, categoryOverrides };
+        }
+
         async function loadSystemInfo() {
             try {
                 const res = await fetch('/api/system/info');
@@ -1214,7 +1521,10 @@
 
                 document.getElementById('sysIp').textContent = 'IP: ' + (data.ip || '---');
                 document.getElementById('sv-ip').textContent = data.ip || '---';
-                document.getElementById('sv-masa').textContent = (data.masa_sayisi || 0) + ' / ' + (data.paket_sayisi || 0);
+                const masaStatus = document.getElementById('sv-masa');
+                if (masaStatus) {
+                    masaStatus.textContent = (data.masa_sayisi || 0) + ' / ' + (data.paket_sayisi || 0);
+                }
 
                 // DB durumu
                 const dbEl = document.getElementById('sv-db');
@@ -1249,6 +1559,7 @@
             const masaSayisi = parseInt(document.getElementById('masaSayisi').value);
             const paketSayisi = parseInt(document.getElementById('paketSayisi').value);
             const directPrint = document.getElementById('directPrint').checked;
+            const defaultPaymentMethod = document.getElementById('defaultPaymentMethod').value || 'Nakit';
 
             const posEnabled = document.getElementById('posEnabled').checked;
             const posIp = document.getElementById('posIp').value.trim();
@@ -1281,6 +1592,19 @@
                 showToast('Yeni şifreler eşleşmiyor!', 'error');
                 return;
             }
+            if (!mevcutSifre) {
+                document.getElementById('mevcutSifre').focus();
+                showToast('Ayarları kaydetmek için mevcut şifreyi girin.', 'warning');
+                return;
+            }
+            const prepSettings = collectPrepSettings();
+            const missingPrinter = prepSettings.panels.find(panel =>
+                prepSettings.printers[panel.id]?.enabled && !prepSettings.printers[panel.id]?.ip
+            );
+            if (missingPrinter) {
+                showToast(`${missingPrinter.name} yazıcısı açık ama IP adresi boş.`, 'warning');
+                return;
+            }
 
             const payload = {
                 firma_ismi: firmaIsmi,
@@ -1288,6 +1612,7 @@
                 masa_sayisi: masaSayisi,
                 paket_sayisi: paketSayisi,
                 direct_print: directPrint,
+                default_payment_method: defaultPaymentMethod,
                 cid_enabled: cidEnabled,
                 cid_type: cidType,
                 cid_port: cidPort,
@@ -1295,12 +1620,14 @@
                 pos_enabled: posEnabled,
                 pos_ip: posIp,
                 pos_port: posPort,
-                pos_port: posPort,
                 pos_type: posType,
                 va_max_duration: parseInt(document.getElementById('vaMaxDuration').value) || 3,
                 va_rate_limit: parseInt(document.getElementById('vaRateLimit').value) || 5,
                 va_sms_verify: document.getElementById('vaSmsVerify').checked,
                 va_kitchen_approval: document.getElementById('vaKitchenApproval').checked,
+                prep_panels: prepSettings.panels,
+                prep_printers: prepSettings.printers,
+                prep_category_overrides: prepSettings.categoryOverrides,
                 mevcut_sifre: mevcutSifre
             };
 
@@ -1325,13 +1652,6 @@
                     throw new Error(data.error || 'Kaydetme başarısız');
                 }
 
-                showToast('✅ Ayarlar başarıyla kaydedildi!', 'success');
-
-                // Şifre alanlarını temizle
-                document.getElementById('mevcutSifre').value = '';
-                document.getElementById('yeniSifre').value = '';
-                document.getElementById('yeniSifreTekrar').value = '';
-
                 // Header güncelle
                 document.getElementById('companyName').textContent = '⚙️ ' + firmaIsmi;
 
@@ -1339,7 +1659,14 @@
                 await saveIntegrationSettings();
 
                 // QR Menu & Online Siparis politikasini kaydet
-                await saveQrMenuPolicy();
+                await saveQrMenuPolicy(mevcutSifre);
+
+                showToast('✅ Ayarlar başarıyla kaydedildi!', 'success');
+
+                // Şifre alanlarını temizle
+                document.getElementById('mevcutSifre').value = '';
+                document.getElementById('yeniSifre').value = '';
+                document.getElementById('yeniSifreTekrar').value = '';
 
             } catch (e) {
                 showToast('Hata: ' + e.message, 'error');
@@ -1437,7 +1764,15 @@
 
         function togglePosUI() {
             const enabled = document.getElementById('posEnabled').checked;
+            const type = document.getElementById('posType').value;
             document.getElementById('posConfigArea').style.display = enabled ? 'block' : 'none';
+
+            const hint = document.getElementById('posHint');
+            if (type === 'token-bridge') {
+                hint.textContent = 'Windows terminalde OKC Bridge çalışmalı. IP Windows makinenin yerel IP adresi, port varsayılan 8787.';
+            } else {
+                hint.textContent = 'Cihaz veya simülatör üzerinden TCP/IP bağlantısının aktif olduğundan emin olun.';
+            }
         }
 
         function toggleAccountingUI() {
@@ -1446,10 +1781,9 @@
             document.getElementById('acc_kolaybi_fields').style.display = platform === 'kolaybi' ? 'block' : 'none';
         }
 
-        async function saveQrMenuPolicy() {
+        async function saveQrMenuPolicy(adminPassword) {
             const verifyMode = document.getElementById('verifyMode').value;
             const onlineOrdersEnabled = document.getElementById('onlineOrdersEnabled').checked;
-            const adminPassword = document.getElementById('mevcutSifre').value;
             try {
                 const res = await fetch('/api/public/policy/update', {
                     method: 'POST',
@@ -1481,6 +1815,7 @@
         }
 
         document.getElementById('posEnabled').addEventListener('change', togglePosUI);
+        document.getElementById('posType').addEventListener('change', togglePosUI);
 
         async function loadSerialPorts() {
             try {
@@ -1577,10 +1912,25 @@
 
         // Enter tuşuna basınca kaydet
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                const tag = document.activeElement.tagName;
-                if (tag === 'INPUT') saveSettings();
+            if (e.key !== 'Enter' || e.shiftKey) return;
+
+            const active = document.activeElement;
+            if (!active || active.tagName !== 'INPUT') return;
+
+            if (active.id === 'newSalonName') {
+                e.preventDefault();
+                addSalonUI();
+                return;
             }
+
+            if (active.id && active.id.startsWith('newTable_')) {
+                e.preventDefault();
+                const salonIndex = Number(active.id.replace('newTable_', ''));
+                if (Number.isInteger(salonIndex)) addTable(salonIndex);
+                return;
+            }
+
+            saveSettings();
         });
 
         /* --- Salon Builder JS --- */
@@ -1624,7 +1974,7 @@
                 addRow.style.display = 'flex';
                 addRow.style.gap = '8px';
                 addRow.innerHTML = `
-                    <input type="text" id="newTable_${sIdx}" placeholder="Masa Kodu (Örn: B1)" style="margin:0; flex:1; padding:8px; border:2px solid #e0e0e0; border-radius:var(--radius-md);" onkeypress="if(event.key==='Enter') addTable(${sIdx})">
+                    <input type="text" id="newTable_${sIdx}" placeholder="Masa Kodu (Örn: D1-4, E1-8)" style="margin:0; flex:1; padding:8px; border:2px solid #e0e0e0; border-radius:var(--radius-md);">
                     <button class="btn-settings btn-info-s btn-sm" onclick="addTable(${sIdx})" style="margin:0;">➕ Masa</button>
                 `;
                 itemDiv.appendChild(addRow);
@@ -1651,17 +2001,70 @@
             }
         }
 
+        function expandTableInput(input) {
+            return input
+                .split(',')
+                .flatMap(part => {
+                    const text = part.trim();
+                    if (!text) return [];
+
+                    const rangeMatch = text.match(/^(\D*)(\d+)\s*-\s*(?:(\D*)(\d+)|(\d+))$/);
+                    if (!rangeMatch) return [text];
+
+                    const prefix = rangeMatch[1];
+                    const startText = rangeMatch[2];
+                    const endPrefix = rangeMatch[3];
+                    const endText = rangeMatch[4] || rangeMatch[5];
+                    const start = Number(startText);
+                    const end = Number(endText);
+                    if ((endPrefix && endPrefix !== prefix) || !Number.isInteger(start) || !Number.isInteger(end) || end < start) {
+                        return [text];
+                    }
+
+                    const padLength = Math.max(startText.length, endText.length);
+                    const tables = [];
+                    for (let i = start; i <= end; i++) {
+                        tables.push(prefix + String(i).padStart(padLength, '0'));
+                    }
+                    return tables;
+                });
+        }
+
+        function getAllTableNames() {
+            return localSalons.flatMap(salon => salon.tables || []);
+        }
+
         function addTable(sIdx) {
             const el = document.getElementById(`newTable_${sIdx}`);
-            const tName = el.value.trim();
-            if (!tName) return;
+            const rawInput = el.value.trim();
+            if (!rawInput) return;
             if (!localSalons[sIdx].tables) localSalons[sIdx].tables = [];
-            if (localSalons[sIdx].tables.includes(tName)) {
+
+            const existingTables = new Set(getAllTableNames());
+            const requestedTables = expandTableInput(rawInput);
+            const newTables = [];
+            const seenInInput = new Set();
+            let skippedCount = 0;
+
+            requestedTables.forEach(tableName => {
+                if (existingTables.has(tableName) || seenInInput.has(tableName)) {
+                    skippedCount++;
+                    return;
+                }
+                seenInInput.add(tableName);
+                newTables.push(tableName);
+            });
+
+            if (newTables.length === 0) {
                 showToast('Bu masa kodu zaten var!', 'warning');
                 return;
             }
-            localSalons[sIdx].tables.push(tName);
+
+            localSalons[sIdx].tables.push(...newTables);
+            el.value = '';
             renderSalonsDesigner();
+            const skippedText = skippedCount ? ` ${skippedCount} mevcut masa atlandı.` : '';
+            showToast(`${newTables.length} masa eklendi.${skippedText}`, 'success');
         }
 
         function deleteTable(sIdx, tIdx) {

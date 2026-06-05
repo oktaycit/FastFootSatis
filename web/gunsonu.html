@@ -574,6 +574,7 @@
 
                 const ozet = d.ozet || [];
                 const genel = d.genel_toplam || 0;
+                const genelIkram = d.genel_ikram_toplam || 0;
 
                 // Kartları güncelle
                 document.getElementById('statCiro').textContent = formatTL(genel);
@@ -590,8 +591,10 @@
                 document.getElementById('statKartAdet').textContent = `${kartAdet} işlem`;
 
                 const digerToplam = genel - nakit - kart;
-                document.getElementById('statOtherPayments').textContent =
-                    digerToplam > 0.01 ? `+ ${formatTL(digerToplam)} diğer` : '';
+                const statParts = [];
+                if (digerToplam > 0.01) statParts.push(`+ ${formatTL(digerToplam)} diğer`);
+                if (genelIkram > 0.01) statParts.push(`İkram: ${formatTL(genelIkram)}`);
+                document.getElementById('statOtherPayments').textContent = statParts.join(' • ');
 
                 // Özet tablosu
                 document.getElementById('ozetSayi').textContent = `${ozet.length} grup`;
@@ -604,7 +607,14 @@
 
                 // Grupla: ödeme tipine göre topla
                 const grouped = {};
+                let ikramAdet = 0;
+                let ikramToplam = 0;
                 ozet.forEach(o => {
+                    if ((o.tip || '') === 'ikram') {
+                        ikramAdet += o.adet;
+                        ikramToplam += o.ikram_toplam || 0;
+                        return;
+                    }
                     const key = o.odeme || 'Diğer';
                     if (!grouped[key]) grouped[key] = { toplam: 0, adet: 0 };
                     grouped[key].toplam += o.toplam;
@@ -621,6 +631,14 @@
                     <td class="tutar-cell">${formatTL(v.toplam)}</td>
                 </tr>`;
                 });
+                if (ikramToplam > 0.01) {
+                    genelAdet += ikramAdet;
+                    rows += `<tr>
+                    <td><span class="odeme-badge odeme-diger">🎁 İkram</span></td>
+                    <td>${ikramAdet}</td>
+                    <td class="tutar-cell">${formatTL(ikramToplam)}</td>
+                </tr>`;
+                }
                 // Toplam satırı
                 rows += `<tr class="ozet-total">
                 <td><strong>TOPLAM</strong></td>
@@ -652,15 +670,16 @@
                 }
 
                 document.getElementById('detayBody').innerHTML = detay.map((s, i) => {
-                    const toplam = s.adet * s.fiyat;
                     const saat = formatSaat(s.tarih_saat);
                     const isIkram = (s.tip || '') === 'ikram';
+                    const listeToplam = s.adet * s.fiyat;
+                    const toplam = isIkram ? 0 : listeToplam;
                     return `<tr>
                     <td style="color:var(--muted);font-size:12px;">${i + 1}</td>
                     <td style="font-weight:600;">${escHtml(s.urun)}${isIkram ? ' <span style="color:#fbbf24;font-size:11px;">(İkram)</span>' : ''}</td>
                     <td style="text-align:center;">${s.adet}</td>
                     <td>${formatTL(s.fiyat)}</td>
-                    <td class="tutar-cell">${formatTL(toplam)}</td>
+                    <td class="tutar-cell">${isIkram ? `0,00 TL<br><span style="font-size:11px;color:var(--muted)">İkram ${formatTL(listeToplam)}</span>` : formatTL(toplam)}</td>
                     <td><span class="odeme-badge ${getOdemeCls(s.odeme)}">${getOdemeEmoji(s.odeme)} ${escHtml(s.odeme)}</span></td>
                     <td style="color:var(--muted);font-size:12px;font-family:monospace;">${saat}</td>
                 </tr>`;
@@ -699,6 +718,7 @@
         }
         function getOdemeCls(odeme) {
             const o = (odeme || '').toLowerCase();
+            if (o.includes('ikram')) return 'odeme-diger';
             if (o.includes('nakit')) return 'odeme-nakit';
             if (o.includes('kart') || o.includes('kredi')) return 'odeme-kart';
             if (o.includes('açık') || o.includes('acik') || o.includes('cari')) return 'odeme-acik';
@@ -706,6 +726,7 @@
         }
         function getOdemeEmoji(odeme) {
             const o = (odeme || '').toLowerCase();
+            if (o.includes('ikram')) return '🎁';
             if (o.includes('nakit')) return '💵';
             if (o.includes('kart') || o.includes('kredi')) return '💳';
             if (o.includes('açık') || o.includes('acik') || o.includes('cari')) return '📝';

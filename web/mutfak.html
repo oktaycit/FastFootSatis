@@ -14,8 +14,220 @@
             overflow: auto;
         }
 
+        .kitchen-title-block {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            min-width: 0;
+        }
+
+        .kitchen-title-block h1 {
+            margin: 0;
+        }
+
+        .panel-nav {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .panel-link {
+            color: #dbeafe;
+            background: #1f2937;
+            border: 1px solid #374151;
+            border-radius: 8px;
+            padding: 7px 10px;
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        .panel-link.active {
+            color: #111827;
+            background: #f8fafc;
+            border-color: #f8fafc;
+        }
+
         .kitchen-grid {
             padding: 20px;
+        }
+
+        .aggregate-total {
+            color: #111827;
+            font-size: 30px;
+            font-weight: 900;
+            line-height: 1.15;
+            margin-bottom: 10px;
+        }
+
+        .aggregate-breakdown {
+            color: #475569;
+            font-size: 14px;
+            line-height: 1.5;
+            margin-bottom: 12px;
+        }
+
+        .aggregate-source-items {
+            display: none;
+        }
+
+        .portion-panel {
+            background: #111827;
+            border: 1px solid #2f3a4a;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            padding: 14px;
+        }
+
+        .daily-meals-panel {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            padding: 14px;
+        }
+
+        .daily-meals-toolbar {
+            display: grid;
+            grid-template-columns: minmax(180px, 1fr) auto;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .daily-meals-title {
+            font-weight: 900;
+            color: #f8fafc;
+            font-size: 18px;
+        }
+
+        .daily-meals-meta {
+            color: #94a3b8;
+            font-size: 12px;
+            margin-top: 3px;
+        }
+
+        .daily-meals-text {
+            width: 100%;
+            min-height: 160px;
+            resize: vertical;
+            box-sizing: border-box;
+            background: #020617;
+            color: #e2e8f0;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 10px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 13px;
+            line-height: 1.45;
+        }
+
+        .daily-meals-status {
+            margin-top: 8px;
+            min-height: 18px;
+            color: #94a3b8;
+            font-size: 12px;
+        }
+
+        .portion-toolbar {
+            display: grid;
+            grid-template-columns: minmax(180px, 1fr) 220px auto;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .portion-title {
+            font-weight: 800;
+            color: #f8fafc;
+            font-size: 18px;
+        }
+
+        .portion-search,
+        .portion-input {
+            width: 100%;
+            background: #0b1220;
+            color: #fff;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        .portion-save,
+        .portion-zero {
+            border: 0;
+            border-radius: 8px;
+            padding: 10px 12px;
+            color: #fff;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        .portion-save {
+            background: #16a34a;
+        }
+
+        .portion-zero {
+            background: #dc2626;
+        }
+
+        .portion-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 8px;
+            max-height: 260px;
+            overflow: auto;
+        }
+
+        .portion-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 84px 74px;
+            gap: 8px;
+            align-items: center;
+            background: #1f2937;
+            border: 1px solid #374151;
+            border-radius: 8px;
+            padding: 9px;
+        }
+
+        .portion-name {
+            min-width: 0;
+        }
+
+        .portion-name strong {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: #fff;
+        }
+
+        .portion-name span {
+            display: block;
+            margin-top: 3px;
+            color: #94a3b8;
+            font-size: 11px;
+        }
+
+        @media (max-width: 760px) {
+            .kitchen-header {
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .portion-toolbar {
+                grid-template-columns: 1fr;
+            }
+
+            .daily-meals-toolbar {
+                grid-template-columns: 1fr;
+            }
+
+            .portion-row {
+                grid-template-columns: minmax(0, 1fr) 76px 70px;
+            }
         }
     </style>
 </head>
@@ -23,7 +235,10 @@
 <body>
     <div class="kitchen-container">
         <header class="kitchen-header">
-            <h1>👨‍🍳 MUTFAK SİPARİŞ TAKİP</h1>
+            <div class="kitchen-title-block">
+                <h1 id="panelTitle">👨‍🍳 MUTFAK SİPARİŞ TAKİP</h1>
+                <nav class="panel-nav" id="panelNav" aria-label="Hazırlık panelleri"></nav>
+            </div>
             <div class="auto-print-switch">
                 <label>Otomatik Yazdır</label>
                 <input type="checkbox" id="autoPrintToggle">
@@ -43,6 +258,217 @@
         const kitchenGrid = document.getElementById('kitchenGrid');
         const autoPrintToggle = document.getElementById('autoPrintToggle');
         const orders = [];
+        let menuData = {};
+        let portionStock = {};
+        let portionDraft = {};
+        let dailyMeals = { items: [], text: '', date: '' };
+        const DEFAULT_PORTION_STOCK = 40;
+        const defaultPanels = [
+            { id: 'izgara', name: 'Izgara', title: 'IZGARA SİPARİŞ TAKİP', ticket_title: 'IZGARA FİŞİ', emoji: '🔥', aggregate: false, category_keywords: ['izgara', 'kebap', 'kofte', 'sis'], product_keywords: ['izgara', 'kofte', 'kebap', 'adana', 'beyti', 'sis', 'kanat', 'incik', 'biftek', 'karisik', 'tepsi'] },
+            { id: 'mutfak', name: 'Mutfak', title: 'MUTFAK SİPARİŞ TAKİP', ticket_title: 'MUTFAK FİŞİ', emoji: '👨‍🍳', aggregate: false },
+            { id: 'icecek', name: 'İçecek', title: 'İÇECEK SİPARİŞ TAKİP', ticket_title: 'İÇECEK FİŞİ', emoji: '🥤', aggregate: true, category_keywords: ['icecek', 'mesrubat', 'cay', 'kahve', 'soda'], product_keywords: ['ayran', 'salgam', 'soda', 'gazoz', 'meyve suyu', 'mesrubat', 'kahve', 'cay'] },
+            { id: 'tatli', name: 'Tatlı', title: 'TATLI SİPARİŞ TAKİP', ticket_title: 'TATLI FİŞİ', emoji: '🍰', aggregate: false, category_keywords: ['tatli', 'baklava', 'dondurma', 'sut tatlilari', 'sutlu tatli'], product_keywords: ['baklava', 'sutlac', 'kazandibi', 'supangle', 'dondurma'] }
+        ];
+        let prepPanels = defaultPanels;
+        let prepCategoryOverrides = {};
+        function panelFromLocation() {
+            const pathParts = window.location.pathname.split('/').filter(Boolean);
+            if (pathParts[0] === 'reyon' && pathParts[1]) return pathParts[1];
+            if (window.location.pathname.includes('izgara')) return 'izgara';
+            if (window.location.pathname.includes('icecek')) return 'icecek';
+            if (window.location.pathname.includes('tatli')) return 'tatli';
+            return 'mutfak';
+        }
+        const panelFromPath = panelFromLocation();
+        const currentPanelId = new URLSearchParams(window.location.search).get('panel') || panelFromPath;
+
+        function currentPanel() {
+            return prepPanels.find(panel => panel.id === currentPanelId) || prepPanels[0] || defaultPanels[0];
+        }
+
+        function normalizeTextForMatch(value) {
+            return String(value ?? '')
+                .toLocaleLowerCase('tr-TR')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/ı/g, 'i');
+        }
+
+        function normalizeProductKey(value) {
+            return String(value ?? '').trim().toLocaleLowerCase('tr-TR');
+        }
+
+        function getMenuCategoryForProduct(urun) {
+            const target = normalizeProductKey(urun);
+            for (const [category, items] of Object.entries(menuData)) {
+                const match = (items || []).some(item => normalizeProductKey(item[0]) === target);
+                if (match) return category;
+            }
+            return '';
+        }
+
+        function getPanelIdForCategory(category) {
+            const categoryName = String(category ?? '').trim();
+            if (prepCategoryOverrides[categoryName]) {
+                return prepCategoryOverrides[categoryName];
+            }
+
+            const normalized = normalizeTextForMatch(category);
+            for (const panel of prepPanels) {
+                const keywords = panel.category_keywords || [];
+                if (keywords.some(keyword => normalized.includes(keyword))) {
+                    return panel.id;
+                }
+            }
+            return 'mutfak';
+        }
+
+        function getOrderPanelId(data) {
+            if (data.panel) return data.panel;
+            const category = data.kategori || getMenuCategoryForProduct(data.urun);
+            const productText = normalizeTextForMatch(data.urun);
+            let productPanelId = null;
+            for (const panel of prepPanels) {
+                if (panel.id === 'izgara' && productText.includes('kiremitte')) {
+                    continue;
+                }
+                const keywords = panel.product_keywords || panel.category_keywords || [];
+                if (keywords.some(keyword => productText.includes(keyword))) {
+                    productPanelId = panel.id;
+                    break;
+                }
+            }
+            if (productPanelId === 'izgara') return productPanelId;
+
+            const panelId = getPanelIdForCategory(category);
+            if (category && panelId !== 'mutfak') return panelId;
+
+            if (productPanelId) return productPanelId;
+            if (` ${productText} `.includes(' su ')) {
+                return 'icecek';
+            }
+            return panelId;
+        }
+
+        function shouldShowOrder(data) {
+            return getOrderPanelId(data) === currentPanelId;
+        }
+
+        function isWaitingForKitchen(item) {
+            return !item.durum || item.durum === 'mutfakta';
+        }
+
+        function panelUrl(panelId) {
+            if (panelId === 'izgara') return '/izgara';
+            if (panelId === 'mutfak') return '/mutfak';
+            if (panelId === 'icecek') return '/icecek';
+            if (panelId === 'tatli') return '/tatli';
+            return `/reyon/${encodeURIComponent(panelId)}`;
+        }
+
+        function renderPanelChrome() {
+            const panel = currentPanel();
+            document.title = `${panel.name} Ekranı - FastFootSatıs`;
+            document.getElementById('panelTitle').textContent = `${panel.emoji || ''} ${panel.title || panel.name}`;
+            const nav = document.getElementById('panelNav');
+            nav.innerHTML = prepPanels.map(panelItem => `
+                <a class="panel-link ${panelItem.id === currentPanelId ? 'active' : ''}" href="${panelUrl(panelItem.id)}">
+                    ${escapeHtml(panelItem.emoji || '')} ${escapeHtml(panelItem.name)}
+                </a>
+            `).join('') + `
+                <a class="panel-link" href="/porsiyon" target="_blank">📦 Porsiyon</a>
+            `;
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[char]));
+        }
+
+        function escapeJs(value) {
+            return String(value ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        }
+
+        function getPortionStockName(name) {
+            return String(name ?? '').trim().replace(/^(tam|yarım|yarim)\s+porsiyon\s+/i, '').trim();
+        }
+
+        function getPortionStock(name) {
+            const stockName = getPortionStockName(name);
+            return portionStock[stockName] || portionStock[String(name ?? '').trim()] || null;
+        }
+
+        function setDailyMealsPayload(payload) {
+            dailyMeals = payload || { items: [], text: '', date: '' };
+            const textArea = document.getElementById('dailyMealsText');
+            const meta = document.getElementById('dailyMealsMeta');
+            if (textArea && document.activeElement !== textArea) {
+                textArea.value = dailyMeals.text || '';
+            }
+            if (meta) {
+                const count = Array.isArray(dailyMeals.items) ? dailyMeals.items.length : 0;
+                meta.textContent = `${dailyMeals.date || 'Bugün'} • ${count} çeşit • Format: Kategori;Yemek;Porsiyon`;
+            }
+        }
+
+        function setDailyMealsStatus(message, ok = true) {
+            const status = document.getElementById('dailyMealsStatus');
+            if (!status) return;
+            status.textContent = message || '';
+            status.style.color = ok ? '#86efac' : '#fca5a5';
+        }
+
+        async function loadDailyMeals() {
+            try {
+                const res = await fetch('/api/daily-meals');
+                const data = await res.json();
+                if (!data.success) {
+                    setDailyMealsStatus(data.error || 'Günlük liste yüklenemedi', false);
+                    return;
+                }
+                portionStock = data.portion_stock || portionStock;
+                setDailyMealsPayload(data.daily_meals);
+                renderPortionStock();
+                setDailyMealsStatus('Günlük liste hazır');
+            } catch (e) {
+                setDailyMealsStatus('Günlük liste okunamadı', false);
+            }
+        }
+
+        async function saveDailyMeals() {
+            const textArea = document.getElementById('dailyMealsText');
+            const text = textArea ? textArea.value : '';
+            setDailyMealsStatus('Kaydediliyor...');
+            try {
+                const res = await fetch('/api/daily-meals', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    setDailyMealsStatus(data.error || 'Günlük liste kaydedilemedi', false);
+                    return;
+                }
+                portionStock = data.portion_stock || {};
+                portionDraft = {};
+                setDailyMealsPayload(data.daily_meals);
+                renderPortionStock();
+                setDailyMealsStatus('Günlük liste kaydedildi');
+            } catch (e) {
+                setDailyMealsStatus('Sunucuya erişilemedi', false);
+            }
+        }
+
+        renderPanelChrome();
+
+        const portionSearch = document.getElementById('portionSearch');
+        if (portionSearch) portionSearch.addEventListener('input', renderPortionStock);
 
         // Saat güncelleme
         setInterval(() => {
@@ -51,6 +477,9 @@
 
         socket.on('kitchen_new_order', (data) => {
             console.log('New order received:', data);
+            if (!shouldShowOrder(data)) {
+                return;
+            }
             addOrderToGrid(data);
             if (autoPrintToggle.checked) {
                 printOrder(data);
@@ -60,7 +489,11 @@
 
         socket.on('kitchen_cancel_order', (data) => {
             console.log('Order cancelled:', data);
-            const card = document.querySelector(`.order-card[data-masa="${data.masa}"]`);
+            let card = document.querySelector(`.order-card[data-masa="${data.masa}"]`);
+            if (!card) {
+                const itemElem = document.querySelector(`.order-card-item[data-uid="${data.uid}"]`);
+                card = itemElem ? itemElem.closest('.order-card') : null;
+            }
             if (card) {
                 const itemElem = card.querySelector(`.order-card-item[data-uid="${data.uid}"]`);
                 if (itemElem) {
@@ -71,6 +504,8 @@
                         // Eğer kartta ürün kalmadıysa kartı sil
                         if (card.querySelectorAll('.order-card-item').length === 0) {
                             card.remove();
+                        } else if (card.dataset.aggregate === '1') {
+                            updateAggregateCard(card);
                         }
                     }, 1000);
                 }
@@ -79,6 +514,13 @@
 
         socket.on('initial_data', (data) => {
             console.log('Initial data received:', data);
+            menuData = data.menu || {};
+            prepPanels = Array.isArray(data.prep_panels) && data.prep_panels.length ? data.prep_panels : defaultPanels;
+            prepCategoryOverrides = data.prep_category_overrides || {};
+            portionStock = data.portion_stock || {};
+            setDailyMealsPayload(data.daily_meals);
+            renderPanelChrome();
+            renderPortionStock();
             kitchenGrid.innerHTML = ''; // Temizle
             const adisyonlar = data.adisyonlar || {};
 
@@ -87,22 +529,237 @@
                 if (items && items.length > 0) {
                     // Masadaki her ürün için karta ekle
                     items.forEach(item => {
-                        if (item.durum !== 'hazir') { // Sadece hazır olmayanları göster
-                            addOrderToGrid({
+                        if (isWaitingForKitchen(item)) {
+                            const orderData = {
                                 uid: item.uid,
                                 masa: masa,
                                 urun: item.urun,
+                                kategori: item.kategori || getMenuCategoryForProduct(item.urun),
+                                panel: item.panel,
                                 adet: item.adet,
                                 garson: item.garson,
+                                not: item.not || '',
                                 saat: item.saat || '--:--:--'
-                            }, false);
+                            };
+                            if (shouldShowOrder(orderData)) {
+                                addOrderToGrid(orderData, false);
+                            }
                         }
                     });
                 }
             }
         });
 
+        socket.on('portion_stock_update', (data) => {
+            portionStock = data.portion_stock || {};
+            renderPortionStock();
+        });
+
+        socket.on('daily_meals_update', (data) => {
+            portionStock = data.portion_stock || portionStock;
+            setDailyMealsPayload(data.daily_meals);
+            renderPortionStock();
+        });
+
+        function getPortionValue(name) {
+            const stockName = getPortionStockName(name);
+            if (Object.prototype.hasOwnProperty.call(portionDraft, stockName)) {
+                return portionDraft[stockName];
+            }
+            const stock = getPortionStock(name);
+            return stock && stock.tracked ? stock.kalan : DEFAULT_PORTION_STOCK;
+        }
+
+        function updatePortionDraft(name, value) {
+            portionDraft[getPortionStockName(name)] = String(value ?? '').trim();
+        }
+
+        function markPortionSoldOut(name) {
+            portionDraft[getPortionStockName(name)] = '0';
+            renderPortionStock();
+        }
+
+        function renderPortionStock() {
+            const grid = document.getElementById('portionStockGrid');
+            if (!grid) return;
+            const query = (document.getElementById('portionSearch').value || '').trim().toLocaleLowerCase('tr-TR');
+            const rows = [];
+            const seen = new Set();
+
+            (dailyMeals.items || []).forEach(item => {
+                const category = String(item.kategori || '').trim();
+                const stockName = String(item.yemek || '').trim();
+                if (!stockName || getPanelIdForCategory(category) !== currentPanelId) return;
+                if (query && !stockName.toLocaleLowerCase('tr-TR').includes(query) && !category.toLocaleLowerCase('tr-TR').includes(query)) {
+                    return;
+                }
+                if (seen.has(stockName)) return;
+                seen.add(stockName);
+                const value = getPortionValue(stockName);
+                const safeJsName = escapeHtml(escapeJs(stockName));
+                rows.push(`
+                    <div class="portion-row" data-urun="${escapeHtml(stockName)}">
+                        <div class="portion-name">
+                            <strong title="${escapeHtml(stockName)}">${escapeHtml(stockName)}</strong>
+                            <span>${escapeHtml(category)} • günlük çeşit</span>
+                        </div>
+                        <input class="portion-input" type="number" min="0" step="0.5" value="${escapeHtml(value)}"
+                            oninput="updatePortionDraft('${safeJsName}', this.value)">
+                        <button class="portion-zero" onclick="markPortionSoldOut('${safeJsName}')">Tükendi</button>
+                    </div>
+                `);
+            });
+
+            Object.entries(menuData).forEach(([category, items]) => {
+                if (getPanelIdForCategory(category) !== currentPanelId) {
+                    return;
+                }
+                (items || []).forEach(item => {
+                    const name = String(item[0] || '').trim();
+                    if (!name) return;
+                    const stockName = getPortionStockName(name);
+                    if (query && !name.toLocaleLowerCase('tr-TR').includes(query) && !stockName.toLocaleLowerCase('tr-TR').includes(query) && !category.toLocaleLowerCase('tr-TR').includes(query)) {
+                        return;
+                    }
+                    if (seen.has(stockName)) return;
+                    seen.add(stockName);
+                    const value = getPortionValue(stockName);
+                    const safeJsName = escapeHtml(escapeJs(stockName));
+                    rows.push(`
+                        <div class="portion-row" data-urun="${escapeHtml(stockName)}">
+                            <div class="portion-name">
+                                <strong title="${escapeHtml(stockName)}">${escapeHtml(stockName)}</strong>
+                                <span>${escapeHtml(category)}</span>
+                            </div>
+                            <input class="portion-input" type="number" min="0" step="0.5" value="${escapeHtml(value)}"
+                                oninput="updatePortionDraft('${safeJsName}', this.value)">
+                            <button class="portion-zero" onclick="markPortionSoldOut('${safeJsName}')">Tükendi</button>
+                        </div>
+                    `);
+                });
+            });
+
+            grid.innerHTML = rows.length ? rows.join('') : '<div style="color:#94a3b8;padding:12px;">Ürün bulunamadı.</div>';
+        }
+
+        async function savePortionStock() {
+            const items = Object.entries(portionDraft).map(([urun, kalan]) => ({ urun, kalan }));
+            if (!items.length) return;
+
+            try {
+                const res = await fetch('/api/portion-stock', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ items })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    alert(data.error || 'Porsiyon stokları kaydedilemedi');
+                    return;
+                }
+                portionStock = data.portion_stock || {};
+                portionDraft = {};
+                renderPortionStock();
+            } catch (e) {
+                alert('Sunucuya erişilemedi');
+            }
+        }
+
+        function getAggregateKey(data) {
+            return `${normalizeProductKey(data.urun)}|${normalizeProductKey(data.not || '')}`;
+        }
+
+        function findAggregateCard(groupKey) {
+            return Array.from(document.querySelectorAll('.order-card[data-aggregate="1"]'))
+                .find(card => card.dataset.groupKey === groupKey);
+        }
+
+        function updateAggregateCard(card) {
+            const sourceItems = Array.from(card.querySelectorAll('.order-card-item'));
+            const total = sourceItems.reduce((sum, el) => sum + (parseInt(el.dataset.adet || '1', 10) || 1), 0);
+            const productName = card.dataset.urun || '';
+            const note = card.dataset.note || '';
+            const byMasa = {};
+            const waiters = new Set();
+
+            sourceItems.forEach(el => {
+                const masa = el.dataset.masa || 'Genel';
+                const adet = parseInt(el.dataset.adet || '1', 10) || 1;
+                byMasa[masa] = (byMasa[masa] || 0) + adet;
+                if (el.dataset.garson) waiters.add(el.dataset.garson);
+            });
+
+            card.dataset.waiters = JSON.stringify(Array.from(waiters));
+            card.dataset.totalAdet = String(total);
+            card.querySelector('.aggregate-total').textContent = `${total}x ${productName}${note ? ' (' + note + ')' : ''}`;
+            card.querySelector('.aggregate-breakdown').textContent = Object.entries(byMasa)
+                .map(([masa, adet]) => `${masa}: ${adet}`)
+                .join(' • ');
+        }
+
+        function addAggregateOrderToGrid(data, showNewEffect = true) {
+            const groupKey = getAggregateKey(data);
+            let card = findAggregateCard(groupKey);
+            const addHiddenItem = (targetCard) => {
+                const itemsContainer = targetCard.querySelector('.order-card-items');
+                const item = document.createElement('div');
+                item.className = 'order-card-item';
+                item.dataset.uid = data.uid;
+                item.dataset.adet = data.adet;
+                item.dataset.masa = data.masa;
+                item.dataset.garson = data.garson || '';
+                item.textContent = `${data.adet}x ${data.urun} - ${data.masa}`;
+                itemsContainer.appendChild(item);
+            };
+
+            if (card) {
+                addHiddenItem(card);
+                card.querySelector('.order-card-time').textContent = data.saat;
+                updateAggregateCard(card);
+                if (showNewEffect) {
+                    card.classList.add('new');
+                    setTimeout(() => card.classList.remove('new'), 5000);
+                }
+                return;
+            }
+
+            card = document.createElement('div');
+            card.className = showNewEffect ? 'order-card new' : 'order-card';
+            card.dataset.aggregate = '1';
+            card.dataset.groupKey = groupKey;
+            card.dataset.urun = data.urun;
+            card.dataset.note = data.not || '';
+            card.dataset.panel = currentPanelId;
+            const cardId = `order-agg-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+            card.id = cardId;
+
+            card.innerHTML = `
+                <div class="order-card-header">
+                    <span class="order-card-masa">${escapeHtml(currentPanel().name)}</span>
+                    <span class="order-card-time">${escapeHtml(data.saat)}</span>
+                </div>
+                <div class="aggregate-total"></div>
+                <div class="aggregate-breakdown"></div>
+                <div class="order-card-items aggregate-source-items"></div>
+                <div class="order-card-actions">
+                    <button class="btn btn-kitchen-done" onclick="completeOrder('${cardId}')">TÜMÜ HAZIR</button>
+                </div>
+            `;
+
+            addHiddenItem(card);
+            updateAggregateCard(card);
+            kitchenGrid.prepend(card);
+            if (showNewEffect) {
+                setTimeout(() => card.classList.remove('new'), 5000);
+            }
+        }
+
         function addOrderToGrid(data, showNewEffect = true) {
+            if (currentPanel().aggregate) {
+                addAggregateOrderToGrid(data, showNewEffect);
+                return;
+            }
+
             // Mevcut kartı ara (masa bazlı)
             let card = document.querySelector(`.order-card[data-masa="${data.masa}"]`);
 
@@ -141,14 +798,20 @@
 
                 const cardId = `order-${data.masa.replace(/\s+/g, '-')}`;
                 card.id = cardId;
+                const safeMasa = escapeHtml(data.masa);
+                const safeSaat = escapeHtml(data.saat);
+                const safeUrun = escapeHtml(data.urun);
+                const safeAdet = escapeHtml(data.adet);
+                const safeGarson = escapeHtml(data.garson || '?');
+                const safeNote = data.not ? ` (${escapeHtml(data.not)})` : '';
 
                 card.innerHTML = `
                     <div class="order-card-header">
-                        <span class="order-card-masa">${data.masa}</span>
-                        <span class="order-card-time">${data.saat}</span>
+                        <span class="order-card-masa">${safeMasa}</span>
+                        <span class="order-card-time">${safeSaat}</span>
                     </div>
                     <div class="order-card-items">
-                        <div class="order-card-item" data-uid="${data.uid}">${data.adet}x ${data.urun}${data.not ? ' (' + data.not + ')' : ''} (${data.garson || '?'})</div>
+                        <div class="order-card-item" data-uid="${escapeHtml(data.uid)}">${safeAdet}x ${safeUrun}${safeNote} (${safeGarson})</div>
                     </div>
                     <div class="order-card-actions">
                         <button class="btn btn-kitchen-done" onclick="completeOrder('${cardId}')">TAMAMLANDI</button>
@@ -165,13 +828,17 @@
         function completeOrder(id) {
             const card = document.getElementById(id);
             if (card) {
-                const masa = card.dataset.masa;
+                const isAggregate = card.dataset.aggregate === '1';
+                const masa = isAggregate ? null : card.dataset.masa;
                 const waiters = JSON.parse(card.dataset.waiters || '[]');
-                const itemsUids = Array.from(card.querySelectorAll('.order-card-item')).map(el => el.dataset.uid);
+                const itemsUids = Array.from(card.querySelectorAll('.order-card-item'))
+                    .map(el => el.dataset.uid)
+                    .filter(Boolean);
 
                 // Sunucuya bildir
                 socket.emit('kitchen_order_ready', {
                     masa: masa,
+                    panel: currentPanelId,
                     waiters: waiters,
                     items_uids: itemsUids
                 });
@@ -184,16 +851,17 @@
 
         function printOrder(data) {
             const printArea = document.getElementById('printArea');
+            const safeNote = data.not ? '<br><small>(' + escapeHtml(data.not) + ')</small>' : '';
             printArea.innerHTML = `
                 <div style="text-align: center; font-family: 'Courier New', monospace; width: 80mm; padding: 10px; color: black; background: white;">
-                    <h2 style="margin: 0;">MUTFAK FİŞİ</h2>
+                    <h2 style="margin: 0;">${escapeHtml(currentPanel().ticket_title || 'SİPARİŞ FİŞİ')}</h2>
                     <hr>
-                    <h1 style="margin: 10px 0;">${data.masa}</h1>
+                    <h1 style="margin: 10px 0;">${escapeHtml(data.masa)}</h1>
                     <div style="text-align: left; font-size: 20px; font-weight: bold;">
-                        ${data.adet} x ${data.urun}${data.not ? '<br><small>(' + data.not + ')</small>' : ''}
+                        ${escapeHtml(data.adet)} x ${escapeHtml(data.urun)}${safeNote}
                     </div>
                     <hr>
-                    <div style="font-size: 12px;">${data.saat}</div>
+                    <div style="font-size: 12px;">${escapeHtml(data.saat)}</div>
                 </div>
             `;
             window.print();

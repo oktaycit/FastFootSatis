@@ -15,6 +15,19 @@
             --bg-dark: #121212;
             --panel-bg: #1e1e1e;
             --text-light: #f5f5f5;
+            --app-height: 100vh;
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
+        }
+
+        @supports (height: 100dvh) {
+            :root {
+                --app-height: 100dvh;
+            }
+        }
+
+        html {
+            height: 100%;
+            background-color: var(--bg-dark);
         }
 
         body {
@@ -24,13 +37,16 @@
             color: var(--text-light);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             overflow: hidden;
-            height: 100vh;
+            height: var(--app-height);
+            min-height: -webkit-fill-available;
         }
 
         .app-container {
             display: flex;
             flex-direction: column;
-            height: 100vh;
+            height: var(--app-height);
+            min-height: 0;
+            overflow: hidden;
         }
 
         .login-screen {
@@ -95,6 +111,7 @@
             align-items: center;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
             z-index: 100;
+            flex-shrink: 0;
         }
 
         .top-bar h1 {
@@ -121,10 +138,19 @@
             border-radius: 20px;
         }
 
+        .selected-table-info.order-ready {
+            background: #f1c40f;
+            color: #111;
+            box-shadow: 0 0 0 3px rgba(241, 196, 15, 0.22);
+            animation: readyPulse 1.3s ease-in-out infinite;
+        }
+
         .viewport {
-            flex-grow: 1;
+            flex: 1 1 auto;
+            min-height: 0;
             overflow-y: auto;
             padding: 15px;
+            box-sizing: border-box;
             -webkit-overflow-scrolling: touch;
         }
 
@@ -166,19 +192,172 @@
             background: #2c3e50;
         }
 
+        .btn-item.order-ready {
+            background: #f1c40f;
+            border-color: #fff3a6;
+            color: #111;
+            box-shadow: 0 0 0 3px rgba(241, 196, 15, 0.2), 0 0 22px rgba(241, 196, 15, 0.32);
+            animation: readyPulse 1.3s ease-in-out infinite;
+        }
+
+        .table-ready-badge {
+            margin-top: 6px;
+            padding: 3px 7px;
+            border-radius: 999px;
+            background: #111;
+            color: #f1c40f;
+            font-size: 10px;
+            font-weight: 800;
+        }
+
+        @keyframes readyPulse {
+            0%, 100% {
+                filter: brightness(1);
+            }
+
+            50% {
+                filter: brightness(1.18);
+            }
+        }
+
         .btn-item .price {
             font-size: 12px;
             color: var(--success);
             margin-top: 5px;
         }
 
+        .btn-item .item-name {
+            font-size: 13px;
+            line-height: 1.2;
+            overflow-wrap: anywhere;
+        }
+
+        .btn-item .portion-price-list {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            color: var(--success);
+            font-size: 11px;
+            line-height: 1.2;
+            margin-top: 5px;
+        }
+
+        .btn-item.sold-out {
+            opacity: 0.55;
+            border-color: #5c2f2f;
+            background: #2a1717;
+            cursor: not-allowed;
+        }
+
+        .btn-item.low-stock {
+            border-color: #f39c12;
+        }
+
+        .portion-badge {
+            margin-top: 6px;
+            padding: 3px 7px;
+            border-radius: 999px;
+            background: #263445;
+            color: #d7ecff;
+            font-size: 10px;
+            font-weight: 800;
+        }
+
+        .portion-badge.low {
+            background: #4a3513;
+            color: #ffd58a;
+        }
+
+        .portion-badge.empty {
+            background: #5c1f1f;
+            color: #ffb4b4;
+        }
+
+        .portion-select-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 2200;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            background: rgba(0, 0, 0, 0.68);
+        }
+
+        .portion-select-card {
+            width: 100%;
+            max-width: 420px;
+            background: #171717;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 16px 44px rgba(0, 0, 0, 0.48);
+        }
+
+        .portion-select-title {
+            color: #f5f5f5;
+            font-size: 18px;
+            font-weight: 800;
+            line-height: 1.25;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+
+        .portion-select-options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .portion-select-btn {
+            min-height: 82px;
+            border: 1px solid #2f3542;
+            border-radius: 10px;
+            background: #222;
+            color: #fff;
+            padding: 12px 8px;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        .portion-select-btn:active {
+            transform: scale(0.98);
+            background: #2c3e50;
+        }
+
+        .portion-select-label {
+            display: block;
+            font-size: 16px;
+            line-height: 1.2;
+        }
+
+        .portion-select-price {
+            display: block;
+            color: var(--success);
+            font-size: 13px;
+            margin-top: 6px;
+        }
+
+        .portion-select-cancel {
+            width: 100%;
+            margin-top: 10px;
+            min-height: 42px;
+            border: none;
+            border-radius: 8px;
+            background: #333;
+            color: #ddd;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
         .category-tabs {
             display: flex;
             overflow-x: auto;
-            gap: 10px;
-            padding-bottom: 10px;
+            gap: 7px;
+            padding-bottom: 8px;
             margin-bottom: 15px;
             scrollbar-width: none;
+            -webkit-overflow-scrolling: touch;
         }
 
         .category-tabs::-webkit-scrollbar {
@@ -186,12 +365,18 @@
         }
 
         .tab {
-            padding: 8px 18px;
+            min-height: 38px;
+            padding: 8px 13px;
             background: #222;
-            border-radius: 20px;
+            border-radius: 18px;
             white-space: nowrap;
-            font-size: 14px;
+            font-size: 13px;
             border: 1px solid #333;
+            font-weight: 700;
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .tab.active {
@@ -202,24 +387,55 @@
         .basket-panel {
             background: #1a1a1a;
             border-top: 2px solid #333;
-            padding: 15px;
+            padding: 15px 15px calc(15px + var(--safe-bottom));
             display: flex;
             flex-direction: column;
             max-height: 40vh;
+            flex: 0 0 auto;
+            box-sizing: border-box;
         }
 
         .basket-list {
-            flex-grow: 1;
+            flex: 1 1 auto;
+            min-height: 0;
             overflow-y: auto;
             margin-bottom: 10px;
+            -webkit-overflow-scrolling: touch;
         }
 
         .basket-item {
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            align-items: flex-start;
+            gap: 8px;
             padding: 10px 0;
             border-bottom: 1px solid #222;
+        }
+
+        .basket-item-note {
+            display: inline-block;
+            margin-top: 4px;
+            color: #f1c40f;
+            font-size: 11px;
+            line-height: 1.35;
+        }
+
+        .basket-note {
+            width: 100%;
+            margin: 7px 0 0;
+            padding: 9px 10px;
+            background: #111;
+            border: 1px solid #2f3542;
+            color: #fff;
+            border-radius: 8px;
+            font-size: 13px;
+            box-sizing: border-box;
+        }
+
+        .basket-item-actions {
+            display: flex;
+            align-items: center;
+            min-height: 28px;
         }
 
         .basket-item .remove {
@@ -233,6 +449,8 @@
             display: flex;
             gap: 10px;
             align-items: center;
+            flex: 0 0 auto;
+            flex-wrap: wrap;
         }
 
         .total {
@@ -249,6 +467,27 @@
             border-radius: 8px;
             font-weight: bold;
             font-size: 16px;
+            min-height: 48px;
+            white-space: nowrap;
+        }
+
+        .btn-served {
+            background: #f1c40f;
+            color: #111;
+            border: none;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-weight: 900;
+            font-size: 14px;
+            min-height: 48px;
+            white-space: nowrap;
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-served:active {
+            transform: scale(0.98);
         }
 
         .screen {
@@ -361,6 +600,7 @@
                 grid-template-columns: 1fr;
             }
         }
+
     </style>
 </head>
 
@@ -410,6 +650,7 @@
             <div class="basket-list" id="basketList"></div>
             <div class="basket-footer">
                 <div class="total" id="basketTotal">0.00 TL</div>
+                <button class="btn-served" id="btnMarkServed" onclick="markReadyItemsServed()" style="display: none;">SERVİS EDİLDİ</button>
                 <button class="btn-send" onclick="sendOrder()">GÖNDER</button>
             </div>
         </div>
@@ -448,8 +689,26 @@
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     <script>
+        function syncAppHeight() {
+            const viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+            document.documentElement.style.setProperty('--app-height', `${Math.round(viewportHeight)}px`);
+        }
+
+        syncAppHeight();
+        window.addEventListener('resize', syncAppHeight);
+        window.addEventListener('orientationchange', () => setTimeout(syncAppHeight, 250));
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', syncAppHeight);
+            window.visualViewport.addEventListener('scroll', syncAppHeight);
+        }
+
         let socket = io();
         let menuData = {};
+        let waiterMenuData = {};
+        let portionStock = {};
+        let dailyMeals = { items: [] };
+        const DEFAULT_PORTION_STOCK = 40;
+        let waiterAdisyonlar = {};
         let sysInfo = {};
         let currentTable = null;
         let basket = []; // Henüz gönderilmemiş yerel sepet
@@ -457,6 +716,340 @@
         let currentCategory = null;
         let loggedWaiter = null;
         let loggedPin = null;
+
+        function isComplimentaryItem(item) {
+            return (item?.tip || '') === 'ikram';
+        }
+
+        function isReadyItem(item) {
+            return item && item.durum === 'hazir';
+        }
+
+        function isServedItem(item) {
+            return item && item.durum === 'servis_edildi';
+        }
+
+        function isKitchenCancelableItem(item) {
+            return !item?.durum || item.durum === 'mutfakta';
+        }
+
+        function getLineTotal(item) {
+            const adet = Number(item?.adet || 0);
+            const fiyat = Number(item?.fiyat || 0);
+            return Math.max(0, adet) * Math.max(0, fiyat);
+        }
+
+        const WAITER_LEGACY_MEAL_GROUPS = [
+            { name: 'Dana Etli Yemekler', matches: ['dana etli yemek'] },
+            { name: 'Kuzu Etli Yemekler', matches: ['kuzu etli yemek'] },
+            { name: 'Kıymalı Yemekler', matches: ['kıymalı yemek', 'kiymali yemek'] },
+            { name: 'Tavuk Etli Yemekler', matches: ['tavuklu yemek', 'tavuk etli yemek'] },
+            { name: 'Etsiz Yemekler', matches: ['etsiz yemek'] }
+        ];
+        const WAITER_CATEGORY_PRIORITY = [
+            'Izgara',
+            'Dana Etli Yemekler',
+            'Kuzu Etli Yemekler',
+            'Kıymalı Yemekler',
+            'Tavuk Etli Yemekler',
+            'Etsiz Yemekler',
+            'Başlangıç'
+        ];
+        const WAITER_CATEGORY_LABELS = {
+            'başlangıç': 'Başl.',
+            'dana etli yemekler': 'Dana',
+            'kuzu etli yemekler': 'Kuzu',
+            'tavuk etli yemekler': 'Tavuk',
+            'etsiz yemekler': 'Etsiz',
+            'kıymalı yemekler': 'Kıymalı',
+            'soğuk içecekler': 'Soğuk',
+            'sıcak içecekler': 'Sıcak',
+            'süt tatlıları': 'Sütlü',
+            'baklavalar': 'Baklava',
+            'dondurma': 'Dond.'
+        };
+
+        function normalizeMenuText(value) {
+            return String(value || '').trim().toLocaleLowerCase('tr-TR');
+        }
+
+        function getDailyMealCategoryNames() {
+            return Array.isArray(dailyMeals.categories) ? dailyMeals.categories : [];
+        }
+
+        function getDailyMealCategoryMatch(category) {
+            const target = normalizeMenuText(category);
+            if (!target) return null;
+            return getDailyMealCategoryNames().find(name => normalizeMenuText(name) === target) || null;
+        }
+
+        function getWaiterFixedMealGroup(item, category) {
+            const categoryMatch = getDailyMealCategoryMatch(category);
+            if (categoryMatch) return categoryMatch;
+
+            const text = normalizeMenuText(`${category} ${item?.[0] || ''}`);
+            const directMatch = getDailyMealCategoryNames().find(name => {
+                const key = normalizeMenuText(name);
+                return key && text.includes(key);
+            });
+            if (directMatch) return directMatch;
+
+            const legacyGroup = WAITER_LEGACY_MEAL_GROUPS.find(entry => {
+                return getDailyMealCategoryMatch(entry.name)
+                    && entry.matches.some(keyword => text.includes(keyword));
+            });
+            return legacyGroup ? getDailyMealCategoryMatch(legacyGroup.name) : null;
+        }
+
+        function appendFixedMealGroups(target, groupedItems) {
+            getDailyMealCategoryNames().forEach(name => {
+                const items = groupedItems[name] || [];
+                if (!items.length) return;
+                if (!target[name]) target[name] = [];
+                target[name].push(...items);
+            });
+        }
+
+        function appendMenuItems(target, category, items) {
+            if (!items.length) return;
+            if (!target[category]) target[category] = [];
+            target[category].push(...items);
+        }
+
+        function isStewAndOvenCategory(category) {
+            return normalizeMenuText(category) === 'tencere ve fırın';
+        }
+
+        function getWaiterDisplayCategory(category) {
+            return normalizeMenuText(category) === 'yemek' ? 'Izgara' : category;
+        }
+
+        function getWaiterCategoryLabel(category) {
+            return WAITER_CATEGORY_LABELS[normalizeMenuText(category)] || category;
+        }
+
+        function getWaiterCategoryPriority(category) {
+            const index = WAITER_CATEGORY_PRIORITY.findIndex(entry => normalizeMenuText(entry) === normalizeMenuText(category));
+            return index === -1 ? WAITER_CATEGORY_PRIORITY.length : index;
+        }
+
+        function sortWaiterCategories(categories) {
+            const sourceOrder = new Map(categories.map((category, index) => [category, index]));
+            return categories.slice().sort((first, second) => {
+                const firstPriority = getWaiterCategoryPriority(first);
+                const secondPriority = getWaiterCategoryPriority(second);
+                if (firstPriority !== secondPriority) return firstPriority - secondPriority;
+                return (sourceOrder.get(first) || 0) - (sourceOrder.get(second) || 0);
+            });
+        }
+
+        function getDailyMealsForCategory(category) {
+            const target = normalizeMenuText(category);
+            return (dailyMeals.items || []).filter(item => normalizeMenuText(item.kategori) === target);
+        }
+
+        function isDailyMealCategory(category) {
+            return !!getDailyMealCategoryMatch(category);
+        }
+
+        function getDailyGroupRemaining(category) {
+            const stock = getPortionStock(category);
+            if (stock && stock.tracked) return Number(stock.kalan || 0);
+            return getDailyMealsForCategory(category).reduce((sum, item) => {
+                const mealStock = getPortionStock(item.yemek);
+                return sum + Number(mealStock?.kalan ?? item.kalan ?? item.porsiyon ?? 0);
+            }, 0);
+        }
+
+        function buildWaiterMenuData(sourceMenu) {
+            const nextMenu = {};
+            const groupedItems = {};
+            const categoryEntries = [];
+            let fixedGroupsInserted = false;
+
+            getDailyMealCategoryNames().forEach(name => {
+                groupedItems[name] = [];
+            });
+
+            Object.entries(sourceMenu || {}).forEach(([category, items]) => {
+                const remainingItems = [];
+
+                (items || []).forEach(item => {
+                    const groupName = getWaiterFixedMealGroup(item, category);
+                    if (groupName) {
+                        groupedItems[groupName].push(item);
+                    } else {
+                        remainingItems.push(item);
+                    }
+                });
+
+                categoryEntries.push({ category, remainingItems });
+            });
+
+            categoryEntries.forEach(({ category, remainingItems }) => {
+                appendMenuItems(nextMenu, getWaiterDisplayCategory(category), remainingItems);
+                if (isStewAndOvenCategory(category)) {
+                    appendFixedMealGroups(nextMenu, groupedItems);
+                    fixedGroupsInserted = true;
+                }
+            });
+
+            if (!fixedGroupsInserted) {
+                appendFixedMealGroups(nextMenu, groupedItems);
+            }
+
+            return nextMenu;
+        }
+
+        function formatOrderNote(note) {
+            const text = String(note || '').trim();
+            if (!text) return '';
+            return text.startsWith('Yemek:') ? text : `Not: ${text}`;
+        }
+
+        function parsePortionVariantName(name) {
+            const match = String(name || '').trim().match(/^(tam|yarım|yarim)\s+porsiyon\s+(.+)$/i);
+            if (!match) return null;
+            const type = normalizeMenuText(match[1]).startsWith('yar') ? 'half' : 'full';
+            return {
+                type,
+                baseName: match[2].trim(),
+                label: type === 'full' ? 'Tam Porsiyon' : 'Yarım Porsiyon'
+            };
+        }
+
+        function getPortionVariantOrder(type) {
+            if (type === 'full') return 0;
+            if (type === 'half') return 1;
+            return 2;
+        }
+
+        function sortPortionVariants(variants) {
+            return variants.slice().sort((first, second) => {
+                return getPortionVariantOrder(first.type) - getPortionVariantOrder(second.type);
+            });
+        }
+
+        function buildWaiterMenuCards(items) {
+            const cards = [];
+            const groupedPortions = new Map();
+
+            (items || []).forEach(item => {
+                const parsed = parsePortionVariantName(item?.[0]);
+                if (!parsed) {
+                    cards.push({ type: 'item', item });
+                    return;
+                }
+
+                const key = normalizeMenuText(parsed.baseName);
+                let card = groupedPortions.get(key);
+                if (!card) {
+                    card = {
+                        type: 'portion-group',
+                        name: parsed.baseName,
+                        variants: []
+                    };
+                    groupedPortions.set(key, card);
+                    cards.push(card);
+                }
+                card.variants.push({ ...parsed, item });
+            });
+
+            cards.forEach(card => {
+                if (card.type === 'portion-group') {
+                    card.variants = sortPortionVariants(card.variants);
+                }
+            });
+
+            return cards;
+        }
+
+        function formatMenuPrice(value) {
+            const amount = Number(value);
+            if (!Number.isFinite(amount)) return String(value || '0');
+            return Number.isInteger(amount) ? String(amount) : amount.toFixed(2);
+        }
+
+        function getPortionPriceHtml(variants) {
+            return `<span class="portion-price-list">${sortPortionVariants(variants).map(variant => {
+                const shortLabel = variant.type === 'full' ? 'Tam' : 'Yarım';
+                return `<span>${shortLabel}: ${formatMenuPrice(variant.item[1])} TL</span>`;
+            }).join('')}</span>`;
+        }
+
+        function getDailyMealPortionGroup(items, category) {
+            const cards = buildWaiterMenuCards(items);
+            const categoryKey = normalizeMenuText(category);
+            return cards.find(card => {
+                return card.type === 'portion-group' && normalizeMenuText(card.name) === categoryKey;
+            }) || cards.find(card => card.type === 'portion-group') || null;
+        }
+
+        function ensurePortionSelectModal() {
+            let modal = document.getElementById('portionSelectModal');
+            if (modal) return modal;
+
+            modal = document.createElement('div');
+            modal.id = 'portionSelectModal';
+            modal.className = 'portion-select-modal';
+            modal.innerHTML = `
+                <div class="portion-select-card">
+                    <div class="portion-select-title" id="portionSelectTitle"></div>
+                    <div class="portion-select-options" id="portionSelectOptions"></div>
+                    <button class="portion-select-cancel" type="button" id="portionSelectCancel">Vazgeç</button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            return modal;
+        }
+
+        function closePortionSelectModal() {
+            const modal = document.getElementById('portionSelectModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function choosePortionVariant(name, variants) {
+            const ordered = sortPortionVariants(variants || []);
+            if (!ordered.length) return null;
+            if (ordered.length === 1) return ordered[0];
+
+            const modal = ensurePortionSelectModal();
+            const title = document.getElementById('portionSelectTitle');
+            const options = document.getElementById('portionSelectOptions');
+            const cancel = document.getElementById('portionSelectCancel');
+            title.textContent = `${name} için porsiyon seçin`;
+            options.innerHTML = '';
+
+            return new Promise(resolve => {
+                let resolved = false;
+                const finish = (variant) => {
+                    if (resolved) return;
+                    resolved = true;
+                    closePortionSelectModal();
+                    modal.onclick = null;
+                    cancel.onclick = null;
+                    resolve(variant || null);
+                };
+
+                ordered.forEach(variant => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'portion-select-btn';
+                    btn.innerHTML = `
+                        <span class="portion-select-label">${escapeHtml(variant.label)}</span>
+                        <span class="portion-select-price">${formatMenuPrice(variant.item[1])} TL</span>
+                    `;
+                    btn.onclick = () => finish(variant);
+                    options.appendChild(btn);
+                });
+
+                cancel.onclick = () => finish(null);
+                modal.onclick = (event) => {
+                    if (event.target === modal) finish(null);
+                };
+                modal.style.display = 'flex';
+            });
+        }
 
         // Sayfa yüklendiğinde garsonları çek
         async function fetchWaiters() {
@@ -498,10 +1091,46 @@
         }
 
         socket.on('initial_data', (data) => {
+            portionStock = data.portion_stock || {};
+            dailyMeals = data.daily_meals || { items: [] };
             menuData = data.menu;
+            waiterMenuData = buildWaiterMenuData(menuData);
+            waiterAdisyonlar = data.adisyonlar || {};
             sysInfo = data.system;
             renderTables();
             renderCategories();
+        });
+
+        socket.on('system_info', (data) => {
+            sysInfo = data || {};
+            renderTables();
+            updateActiveTableAlert();
+        });
+
+        socket.on('system_update', (data) => {
+            if (!data || !hasSystemLayoutPayload(data)) return;
+            sysInfo = { ...sysInfo, ...data };
+            renderTables();
+            updateActiveTableAlert();
+        });
+
+        socket.on('portion_stock_update', (data) => {
+            portionStock = data.portion_stock || {};
+            renderMenuItems();
+            updateBasketDisplay();
+        });
+
+        socket.on('daily_meals_update', (data) => {
+            dailyMeals = data.daily_meals || dailyMeals;
+            portionStock = data.portion_stock || portionStock;
+            waiterMenuData = buildWaiterMenuData(menuData);
+            renderCategories();
+            renderMenuItems();
+            updateBasketDisplay();
+        });
+
+        socket.on('error', (data) => {
+            alert((data && data.message) ? data.message : 'Bir hata oluştu');
         });
 
         socket.on('order_ready', (data) => {
@@ -520,6 +1149,10 @@
                 toast.style.animation = 'slideUp 0.5s ease';
                 setTimeout(() => toast.remove(), 500);
             }, 5000);
+
+            markTableItemsReady(data.masa, data.items_uids || []);
+            renderTables();
+            updateActiveTableAlert();
         });
 
         const styleAnimate = document.createElement('style');
@@ -530,19 +1163,86 @@
         document.head.appendChild(styleAnimate);
 
         socket.on('masa_update', (data) => {
+            waiterAdisyonlar[data.masa] = data.items || [];
             if (currentTable === data.masa) {
                 serverItems = data.items || [];
                 updateBasketDisplay();
             }
             renderTables();
+            updateActiveTableAlert();
         });
 
         socket.on('masa_selected', (data) => {
+            waiterAdisyonlar[data.masa] = data.items || [];
             if (currentTable === data.masa) {
                 serverItems = data.items || [];
                 updateBasketDisplay();
             }
+            renderTables();
+            updateActiveTableAlert();
         });
+
+        socket.on('payment_completed', (data) => {
+            if (!data || !data.masa || data.is_partial) return;
+            waiterAdisyonlar[data.masa] = [];
+            if (currentTable === data.masa) {
+                serverItems = [];
+                updateBasketDisplay();
+            }
+            renderTables();
+            updateActiveTableAlert();
+        });
+
+        function getTableItems(tableName) {
+            return waiterAdisyonlar[tableName] || [];
+        }
+
+        function hasReadyItems(tableName) {
+            return getTableItems(tableName).some(isReadyItem);
+        }
+
+        function getReadyItems(tableName) {
+            return getTableItems(tableName).filter(isReadyItem);
+        }
+
+        function markTableItemsReady(tableName, itemUids) {
+            const items = getTableItems(tableName);
+            const uidSet = new Set(itemUids || []);
+            if (!tableName || !items.length || uidSet.size === 0) return;
+
+            waiterAdisyonlar[tableName] = items.map(item => {
+                if (uidSet.has(item.uid)) {
+                    return { ...item, durum: 'hazir' };
+                }
+                return item;
+            });
+
+            if (currentTable === tableName) {
+                serverItems = waiterAdisyonlar[tableName];
+                updateBasketDisplay();
+            }
+        }
+
+        function updateActiveTableAlert() {
+            const activeTableName = document.getElementById('activeTableName');
+            if (!activeTableName) return;
+            activeTableName.classList.toggle('order-ready', !!currentTable && hasReadyItems(currentTable));
+        }
+
+        function hasSystemLayoutPayload(data) {
+            return Object.prototype.hasOwnProperty.call(data, 'masa_sayisi')
+                || Object.prototype.hasOwnProperty.call(data, 'paket_sayisi')
+                || Object.prototype.hasOwnProperty.call(data, 'salons');
+        }
+
+        function createTableButton(tableName, label) {
+            const div = document.createElement('div');
+            const isReady = hasReadyItems(tableName);
+            div.className = 'btn-item' + (isReady ? ' order-ready' : '');
+            div.innerHTML = `<span>${escapeHtml(label)}</span>${isReady ? '<span class="table-ready-badge">HAZIR</span>' : ''}`;
+            div.onclick = () => selectMainTable(tableName);
+            return div;
+        }
 
         function renderTables() {
             const tableCont = document.getElementById('tablesContainer');
@@ -550,10 +1250,13 @@
             if (!tableCont || !paketCont) return;
             tableCont.innerHTML = '';
             paketCont.innerHTML = '';
+            const salons = Array.isArray(sysInfo.salons) ? sysInfo.salons : [];
+            const masaCount = Number(sysInfo.masa_sayisi || 0);
+            const paketCount = Number(sysInfo.paket_sayisi || 0);
 
             // Render Salons
-            if (sysInfo.salons && sysInfo.salons.length > 0) {
-                sysInfo.salons.forEach(salon => {
+            if (salons.length > 0) {
+                salons.forEach(salon => {
                     const salonTitle = document.createElement('div');
                     salonTitle.style.gridColumn = '1 / -1';
                     salonTitle.style.padding = '5px 0';
@@ -563,32 +1266,23 @@
                     salonTitle.textContent = salon.name;
                     tableCont.appendChild(salonTitle);
 
-                    salon.tables.forEach(table => {
-                        const div = document.createElement('div');
-                        div.className = 'btn-item';
-                        div.textContent = table;
-                        div.onclick = () => selectMainTable(table);
+                    (salon.tables || []).forEach(table => {
+                        const div = createTableButton(table, table);
                         tableCont.appendChild(div);
                     });
                 });
             } else {
-                for (let i = 1; i <= sysInfo.masa_sayisi; i++) {
+                for (let i = 1; i <= masaCount; i++) {
                     const name = `Masa ${i}`;
-                    const div = document.createElement('div');
-                    div.className = 'btn-item';
-                    div.textContent = i;
-                    div.onclick = () => selectMainTable(name);
+                    const div = createTableButton(name, i);
                     tableCont.appendChild(div);
                 }
             }
 
             // Render Pakets
-            for (let i = 1; i <= sysInfo.paket_sayisi; i++) {
+            for (let i = 1; i <= paketCount; i++) {
                 const name = `Paket ${i}`;
-                const div = document.createElement('div');
-                div.className = 'btn-item';
-                div.textContent = 'P' + i;
-                div.onclick = () => selectMainTable(name);
+                const div = createTableButton(name, 'P' + i);
                 paketCont.appendChild(div);
             }
         }
@@ -597,20 +1291,34 @@
             const cont = document.getElementById('categoryContainer');
             if (!cont) return;
             cont.innerHTML = '';
-            Object.keys(menuData).forEach((cat, index) => {
+            const categories = sortWaiterCategories(
+                Object.keys(waiterMenuData).filter(cat => (waiterMenuData[cat] || []).some(isMenuItemVisible))
+            );
+            if (!categories.length) {
+                currentCategory = null;
+                renderMenuItems();
+                return;
+            }
+            categories.forEach((cat, index) => {
                 const tab = document.createElement('div');
                 tab.className = 'tab' + (index === 0 ? ' active' : '');
-                tab.textContent = cat;
+                tab.textContent = getWaiterCategoryLabel(cat);
+                tab.dataset.category = cat;
+                tab.title = cat;
                 tab.onclick = () => selectCategory(cat);
                 cont.appendChild(tab);
-                if (index === 0) selectCategory(cat);
             });
+            if (!currentCategory || !categories.includes(currentCategory)) {
+                selectCategory(categories[0]);
+            } else {
+                selectCategory(currentCategory);
+            }
         }
 
         function selectCategory(cat) {
             currentCategory = cat;
             document.querySelectorAll('.tab').forEach(t => {
-                t.classList.toggle('active', t.textContent === cat);
+                t.classList.toggle('active', t.dataset.category === cat);
             });
             renderMenuItems();
         }
@@ -619,21 +1327,87 @@
             const cont = document.getElementById('menuItemsContainer');
             if (!cont) return;
             cont.innerHTML = '';
-            const items = menuData[currentCategory] || [];
-            items.forEach(item => {
+            const items = (waiterMenuData[currentCategory] || []).filter(isMenuItemVisible);
+            if (!items.length) {
+                cont.innerHTML = '<div style="padding:20px;color:#aaa;">Menüde gösterilecek ürün yok.</div>';
+                return;
+            }
+            if (isDailyMealCategory(currentCategory)) {
+                const meals = getDailyMealsForCategory(currentCategory);
+                const portionGroup = getDailyMealPortionGroup(items, currentCategory);
+                if (meals.length && portionGroup) {
+                    renderDailyMealItems(cont, meals, portionGroup, currentCategory);
+                    return;
+                }
+            }
+            const cards = buildWaiterMenuCards(items);
+            cards.forEach(card => {
+                const item = card.type === 'portion-group' ? card.variants[0].item : card.item;
+                const displayName = card.type === 'portion-group' ? card.name : item[0];
+                const stock = isDailyMealCategory(currentCategory) ? getPortionStock(currentCategory) : getPortionStock(displayName);
+                const tracked = !!(stock && stock.tracked);
+                const remaining = isDailyMealCategory(currentCategory) ? getDailyGroupRemaining(currentCategory) : (tracked ? Number(stock.kalan || 0) : null);
+                const soldOut = tracked && remaining <= 0;
                 const div = document.createElement('div');
-                div.className = 'btn-item';
-                div.innerHTML = `<span>${item[0]}</span><span class="price">${item[1]} TL</span>`;
-                div.onclick = () => addToBasket(item[0], item[1]);
+                div.className = 'btn-item' + (soldOut ? ' sold-out' : (tracked && remaining <= 5 ? ' low-stock' : ''));
+                const mealNames = getDailyMealsForCategory(currentCategory)
+                    .map(meal => {
+                        const mealStock = getPortionStock(meal.yemek);
+                        const mealRemaining = Number(mealStock?.kalan ?? meal.kalan ?? meal.porsiyon ?? 0);
+                        return `${meal.yemek}: ${formatPortionAmount(mealRemaining)}`;
+                    })
+                    .join(' • ');
+                const portionHtml = tracked
+                    ? `<span class="portion-badge ${soldOut ? 'empty' : (remaining <= 5 ? 'low' : '')}">${soldOut ? 'TÜKENDİ' : 'Kalan: ' + formatPortionAmount(remaining)}</span>`
+                    : '';
+                const priceHtml = card.type === 'portion-group'
+                    ? getPortionPriceHtml(card.variants)
+                    : `<span class="price">${formatMenuPrice(item[1])} TL</span>`;
+                div.innerHTML = `<span class="item-name">${escapeHtml(displayName)}${mealNames ? `<small style="display:block;color:#9ca3af;font-size:11px;margin-top:4px;">${escapeHtml(mealNames)}</small>` : ''}</span>${priceHtml}${portionHtml}`;
+                div.onclick = async () => {
+                    if (soldOut) {
+                        alert(`${displayName} tükendi`);
+                        return;
+                    }
+                    if (card.type === 'portion-group') {
+                        await addPortionGroupToBasket(card.name, card.variants, currentCategory);
+                    } else {
+                        addToBasket(item[0], item[1], currentCategory);
+                    }
+                };
+                cont.appendChild(div);
+            });
+        }
+
+        function renderDailyMealItems(cont, meals, portionGroup, category) {
+            meals.forEach(meal => {
+                const mealName = String(meal.yemek || '').trim();
+                if (!mealName) return;
+                const stock = getPortionStock(mealName);
+                const tracked = !!(stock && stock.tracked);
+                const remaining = Number(stock?.kalan ?? meal.kalan ?? meal.porsiyon ?? 0);
+                const soldOut = tracked && remaining <= 0;
+                const div = document.createElement('div');
+                div.className = 'btn-item' + (soldOut ? ' sold-out' : (remaining <= 5 ? ' low-stock' : ''));
+                const portionHtml = `<span class="portion-badge ${soldOut ? 'empty' : (remaining <= 5 ? 'low' : '')}">${soldOut ? 'TÜKENDİ' : 'Kalan: ' + formatPortionAmount(remaining)}</span>`;
+                div.innerHTML = `<span class="item-name">${escapeHtml(mealName)}</span>${getPortionPriceHtml(portionGroup.variants)}${portionHtml}`;
+                div.onclick = async () => {
+                    if (soldOut) {
+                        alert(`${mealName} tükendi`);
+                        return;
+                    }
+                    await addDailyMealToBasket(meal, portionGroup.variants, category);
+                };
                 cont.appendChild(div);
             });
         }
 
         function selectMainTable(name) {
             currentTable = name;
-            serverItems = []; // Temizle
+            serverItems = getTableItems(name);
             basket = []; // Sepeti de temizle
             document.getElementById('activeTableName').textContent = name;
+            updateActiveTableAlert();
             showScreen('order-screen');
             document.getElementById('basketPanel').style.display = 'flex';
             updateBasketDisplay();
@@ -649,15 +1423,169 @@
             }
         }
 
-        function addToBasket(name, price) {
-            basket.push({ name, price });
+        function chooseDailyMeal(category) {
+            const meals = getDailyMealsForCategory(category);
+            if (!meals.length) {
+                const typedMeal = prompt(`${category} için yemek çeşidi yazın:`, '');
+                if (typedMeal === null) return false;
+                const mealName = String(typedMeal || '').trim();
+                return mealName ? { yemek: mealName, manual: true } : null;
+            }
+            const choices = meals.map((meal, index) => {
+                const mealStock = getPortionStock(meal.yemek);
+                const remaining = Number(mealStock?.kalan ?? meal.kalan ?? meal.porsiyon ?? 0);
+                return `${index + 1}) ${meal.yemek} (${formatPortionAmount(remaining)} porsiyon)`;
+            }).join('\n');
+            const raw = prompt(`${category} çeşidi seçin:\n${choices}`, '1');
+            if (raw === null) return false;
+            const index = parseInt(raw, 10);
+            if (!Number.isNaN(index) && index >= 1 && index <= meals.length) return meals[index - 1];
+            const typed = String(raw || '').trim().toLocaleLowerCase('tr-TR');
+            return meals.find(meal => String(meal.yemek || '').trim().toLocaleLowerCase('tr-TR') === typed) || null;
+        }
+
+        async function addPortionGroupToBasket(name, variants, category = '') {
+            let note = '';
+            let stockNameOverride = '';
+
+            if (isDailyMealCategory(category)) {
+                const selectedMeal = chooseDailyMeal(category);
+                if (selectedMeal === false) return;
+                if (!selectedMeal) {
+                    alert('Geçerli bir günlük yemek çeşidi seçin.');
+                    return;
+                }
+                note = `Yemek: ${selectedMeal.yemek}`;
+                stockNameOverride = selectedMeal.manual ? '' : selectedMeal.yemek;
+            }
+
+            const selectedVariant = await choosePortionVariant(name, variants);
+            if (!selectedVariant) return;
+
+            addToBasket(selectedVariant.item[0], selectedVariant.item[1], category, {
+                note,
+                stockNameOverride,
+                skipDailyMealChoice: isDailyMealCategory(category)
+            });
+        }
+
+        async function addDailyMealToBasket(meal, variants, category = '') {
+            const mealName = String(meal?.yemek || '').trim();
+            if (!mealName) return;
+            const selectedVariant = await choosePortionVariant(mealName, variants);
+            if (!selectedVariant) return;
+
+            addToBasket(selectedVariant.item[0], selectedVariant.item[1], category, {
+                note: `Yemek: ${mealName}`,
+                stockNameOverride: mealName,
+                skipDailyMealChoice: true
+            });
+        }
+
+        function addToBasket(name, price, category = '', options = {}) {
+            let note = options.note || '';
+            let stockNameOverride = options.stockNameOverride || '';
+            if (!options.skipDailyMealChoice && isDailyMealCategory(category)) {
+                const selectedMeal = chooseDailyMeal(category);
+                if (selectedMeal === false) return;
+                if (!selectedMeal) {
+                    alert('Geçerli bir günlük yemek çeşidi seçin.');
+                    return;
+                }
+                note = `Yemek: ${selectedMeal.yemek}`;
+                stockNameOverride = selectedMeal.manual ? '' : selectedMeal.yemek;
+            }
+
+            const stock = stockNameOverride ? getPortionStock(stockNameOverride) : getPortionStock(name);
+            if (stock && stock.tracked) {
+                const remaining = Number(stock.kalan || 0);
+                const stockName = stockNameOverride || getPortionStockName(name);
+                const alreadyInBasket = basket.reduce((sum, item) => {
+                    const itemStockName = item.stockName || getPortionStockName(item.name);
+                    return itemStockName === stockName ? sum + getPortionUnits(item.name) : sum;
+                }, 0);
+                const requestedUnits = getPortionUnits(name);
+                if (remaining <= 0) {
+                    alert(`${stock.urun || stockName} tükendi`);
+                    return;
+                }
+                if (alreadyInBasket + requestedUnits > remaining + 0.001) {
+                    alert(`${stock.urun || stockName} için sadece ${formatPortionAmount(remaining)} porsiyon kaldı`);
+                    return;
+                }
+            }
+            basket.push({ name, price, note, stockName: stockNameOverride });
             if (window.navigator.vibrate) window.navigator.vibrate(50);
             updateBasketDisplay();
+        }
+
+        function updateBasketNote(index, value) {
+            if (!basket[index]) return;
+            basket[index].note = value.slice(0, 160);
         }
 
         function removeFromBasket(index) {
             basket.splice(index, 1);
             updateBasketDisplay();
+        }
+
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[char]));
+        }
+
+        function isMenuItemVisible(item) {
+            if (!Array.isArray(item) || item.length <= 7) return true;
+            const value = item[7];
+            if (typeof value === 'boolean') return value;
+            return !['0', 'false', 'hayir', 'hayır', 'no', 'off'].includes(String(value).trim().toLowerCase());
+        }
+
+        function getPortionStock(name) {
+            const stockName = getPortionStockName(name);
+            return portionStock[stockName] || portionStock[String(name || '').trim()] || null;
+        }
+
+        function getPortionStockName(name) {
+            return String(name || '').trim().replace(/^(tam|yarım|yarim)\s+porsiyon\s+/i, '').trim();
+        }
+
+        function getPortionUnits(name, adet = 1) {
+            const normalized = String(name || '').trim().toLocaleLowerCase('tr-TR');
+            const multiplier = /^(yarım|yarim)\s+porsiyon\s+/.test(normalized) ? 0.5 : 1;
+            return Number(adet || 1) * multiplier;
+        }
+
+        function formatPortionAmount(value) {
+            const amount = Number(value || 0);
+            return Number.isInteger(amount) ? String(amount) : String(amount).replace('.', ',');
+        }
+
+        function canSendBasket() {
+            const counts = {};
+            basket.forEach(item => {
+                const stockName = item.stockName || getPortionStockName(item.name);
+                counts[stockName] = (counts[stockName] || 0) + getPortionUnits(item.name);
+            });
+            for (const [name, adet] of Object.entries(counts)) {
+                const stock = getPortionStock(name);
+                if (!stock || !stock.tracked) continue;
+                const remaining = Number(stock.kalan || 0);
+                if (remaining <= 0) {
+                    alert(`${stock.urun || name} tükendi`);
+                    return false;
+                }
+                if (adet > remaining + 0.001) {
+                    alert(`${stock.urun || name} için sadece ${formatPortionAmount(remaining)} porsiyon kaldı`);
+                    return false;
+                }
+            }
+            return true;
         }
 
         function updateBasketDisplay() {
@@ -667,29 +1595,41 @@
             if (!list) return;
             list.innerHTML = '';
             let total = 0;
+            const readyCount = serverItems.filter(isReadyItem).length;
+            const servedButton = document.getElementById('btnMarkServed');
+            if (servedButton) {
+                servedButton.style.display = readyCount ? 'inline-flex' : 'none';
+                servedButton.textContent = readyCount > 1 ? `SERVİS EDİLDİ (${readyCount})` : 'SERVİS EDİLDİ';
+            }
 
             // 1. Aktif Siparişler (Mutfakta/Hazır)
             serverItems.forEach((item) => {
                 const div = document.createElement('div');
                 div.className = 'basket-item';
+                const isIkram = isComplimentaryItem(item);
                 let statusBadge = '';
-                if (item.durum === 'hazir') {
+                if (isReadyItem(item)) {
                     statusBadge = '<span style="color: #2ecc71; font-size: 10px; margin-right: 5px; font-weight: bold;">[HAZIR]</span>';
+                } else if (isServedItem(item)) {
+                    statusBadge = '<span style="color: #95a5a6; font-size: 10px; margin-right: 5px; font-weight: bold;">[SERVİS EDİLDİ]</span>';
                 } else {
                     statusBadge = '<span style="color: #f39c12; font-size: 10px; margin-right: 5px; font-weight: bold;">[MUTFAKTA]</span>';
                 }
+                const itemNote = item.not || '';
+                const noteLabel = formatOrderNote(itemNote);
                 div.innerHTML = `
                     <div style="flex-grow: 1;">
                         ${statusBadge}
-                        <span class="basket-item-name">${item.urun}</span>
-                        <br/><span style="font-size: 10px; color: #999;">${item.fiyat} TL</span>
+                        <span class="basket-item-name">${item.urun}${isIkram ? ' (İKRAM)' : ''}</span>
+                        <br/><span style="font-size: 10px; color: #999;">${isIkram ? 'İkram' : item.fiyat + ' TL'}</span>
+                        ${noteLabel ? `<br/><span class="basket-item-note">${escapeHtml(noteLabel)}</span>` : ''}
                     </div>
                     <div>
-                        ${item.durum !== 'hazir' ? `<button class="btn-cancel" onclick="cancelItem('${item.uid}')">İPTAL</button>` : ''}
+                        ${isKitchenCancelableItem(item) ? `<button class="btn-cancel" onclick="cancelItem('${item.uid}')">İPTAL</button>` : ''}
                     </div>
                 `;
                 list.appendChild(div);
-                total += item.adet * item.fiyat;
+                if (!isIkram) total += getLineTotal(item);
             });
 
             // 2. Yeni Siparişler (Sepettekiler)
@@ -700,8 +1640,16 @@
                 div.innerHTML = `
                     <div style="flex-grow: 1;">
                         <span style="color: #3498db; font-size: 10px; font-weight: bold;">[YENİ]</span>
-                        <span class="basket-item-name">${item.name}</span>
+                        <span class="basket-item-name">${escapeHtml(item.name)}</span>
                         <br/><span style="font-size: 10px; color: #999;">${item.price} TL</span>
+                        <input
+                            class="basket-note"
+                            type="text"
+                            maxlength="160"
+                            placeholder="Not: pilav bulgur olacak"
+                            value="${escapeHtml(item.note || '')}"
+                            oninput="updateBasketNote(${index}, this.value)"
+                        >
                     </div>
                     <div class="basket-item-actions">
                         <span class="remove" onclick="removeFromBasket(${index})">×</span>
@@ -721,14 +1669,27 @@
             }
         }
 
+        function markReadyItemsServed() {
+            if (!currentTable) return;
+            const readyItems = getReadyItems(currentTable);
+            if (!readyItems.length) return;
+            socket.emit('mark_order_served', {
+                masa: currentTable,
+                garson: loggedWaiter,
+                items_uids: readyItems.map(item => item.uid).filter(Boolean)
+            });
+        }
+
         function sendOrder() {
             if (!currentTable || basket.length === 0) return;
+            if (!canSendBasket()) return;
             basket.forEach(item => {
                 socket.emit('add_item', {
                     masa: currentTable, // Masayı açıkça gönder
                     urun: item.name,
                     fiyat: item.price,
-                    garson: loggedWaiter
+                    garson: loggedWaiter,
+                    not: item.note || ''
                 });
             });
             basket = [];
@@ -872,6 +1833,7 @@
                 out.textContent = 'Hata: Sunucuya erişilemedi.';
             }
         }
+
     </script>
 </body>
 

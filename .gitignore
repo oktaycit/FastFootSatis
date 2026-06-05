@@ -34,3 +34,13 @@ PhoneAgent_Docs/
 
 # Environment variables (sensitive)
 .env
+
+# Runtime/local state
+config.txt
+output/
+menu_meta.json
+portion_stock.json
+portion_stock_reset.json
+gunluk_yemekler.txt
+gunluk_yemekler/
+web/uploads/

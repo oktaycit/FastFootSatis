@@ -91,6 +91,7 @@
                 <div class="total-display" id="btnTotalPayment" title="Ödeme Al">
                     <span class="total-label">TOPLAM:</span>
                     <span class="total-amount" id="totalAmount">0.00 TL</span>
+                    <span class="complimentary-amount" id="complimentaryAmount"></span>
                 </div>
 
                 <!-- Print Button -->
@@ -109,7 +110,20 @@
                         style="background: linear-gradient(135deg, #f1c40f, #f39c12); color: white;">
                         ⚖️ SEÇİLENLERİ ÖDE (<span id="selectedCount">0</span>)
                     </button>
+                    <button class="btn" id="btnCompSelected"
+                        style="background: #0f766e; color: white; margin-top: 6px;">
+                        🎁 SEÇİLENLERİ İKRAM YAP
+                    </button>
+                    <button class="btn" id="btnUncompSelected"
+                        style="background: #475569; color: white; margin-top: 6px;">
+                        ↩️ SEÇİLENLERİ HESABA AL
+                    </button>
                 </div>
+
+                <button class="btn" id="btnCloseCompBill"
+                    style="display: none; background: #0f766e; color: white; margin-bottom: 8px;">
+                    🎁 İKRAM KAPAT
+                </button>
 
 
                 <!-- Main Actions -->
@@ -136,10 +150,30 @@
 
                 <div class="extra-modules"
                     style="margin-top: 5px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px;">
+                    <a href="/izgara" style="text-decoration:none;" target="_blank">
+                        <button class="btn"
+                            style="background: #b45309; color: white; font-size: 11px; padding: 10px 5px;">🔥
+                            IZGARA</button>
+                    </a>
                     <a href="/mutfak" style="text-decoration:none;" target="_blank">
                         <button class="btn"
                             style="background: #2c3e50; color: white; font-size: 11px; padding: 10px 5px;">👨‍🍳
                             MUTFAK</button>
+                    </a>
+                    <a href="/icecek" style="text-decoration:none;" target="_blank">
+                        <button class="btn"
+                            style="background: #0f766e; color: white; font-size: 11px; padding: 10px 5px;">🥤
+                            İÇECEK</button>
+                    </a>
+                    <a href="/tatli" style="text-decoration:none;" target="_blank">
+                        <button class="btn"
+                            style="background: #9d174d; color: white; font-size: 11px; padding: 10px 5px;">🍰
+                            TATLI</button>
+                    </a>
+                    <a href="/porsiyon" style="text-decoration:none;" target="_blank">
+                        <button class="btn"
+                            style="background: #475569; color: white; font-size: 11px; padding: 10px 5px;">📦
+                            PORSİYON</button>
                     </a>
                     <a href="/waiter" style="text-decoration:none;" target="_blank">
                         <button class="btn"
@@ -204,7 +238,7 @@
             <div class="modal-body">
                 <div class="modal-total-display">
                     <div class="modal-total-item">
-                        <span class="label">GENEL TOPLAM:</span>
+                        <span class="label">ÖDENECEK:</span>
                         <span class="value" id="modalTotalAmount">0.00 TL</span>
                     </div>
                     <div class="modal-total-item highlight">

@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Porsiyon Takibi - FastFootSatış</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        body {
+            overflow: auto;
+            background: #0f172a;
+            color: #f8fafc;
+        }
+
+        .portion-page {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 18px 18px 48px;
+        }
+
+        .portion-header {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 16px;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .portion-title-block {
+            min-width: 0;
+        }
+
+        .portion-title-block h1 {
+            margin: 0;
+            font-size: 28px;
+            color: #f8fafc;
+        }
+
+        .portion-meta {
+            color: #94a3b8;
+            font-size: 13px;
+            margin-top: 5px;
+        }
+
+        .portion-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .action-btn {
+            border: 0;
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: #fff;
+            font-weight: 900;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            min-height: 40px;
+        }
+
+        .action-btn.primary {
+            background: #16a34a;
+        }
+
+        .action-btn.secondary {
+            background: #334155;
+            border: 1px solid #475569;
+        }
+
+        .portion-layout {
+            display: grid;
+            grid-template-columns: minmax(320px, 0.82fr) minmax(0, 1.18fr);
+            gap: 14px;
+            align-items: start;
+        }
+
+        .daily-panel,
+        .stock-panel {
+            background: #111827;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .panel-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px 16px;
+            border-bottom: 1px solid #334155;
+            background: #172033;
+        }
+
+        .panel-title {
+            font-size: 17px;
+            font-weight: 900;
+            color: #f8fafc;
+        }
+
+        .panel-body {
+            padding: 14px;
+        }
+
+        .panel-head-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .daily-text {
+            width: 100%;
+            min-height: 180px;
+            resize: vertical;
+            box-sizing: border-box;
+            background: #020617;
+            color: #e2e8f0;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 12px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 13px;
+            line-height: 1.45;
+        }
+
+        .daily-grid-shell,
+        .stock-grid {
+            border: 1px solid #334155;
+            border-radius: 8px;
+            background: #020617;
+            overflow: auto;
+        }
+
+        .daily-grid-shell {
+            max-height: calc(100vh - 268px);
+            min-height: 360px;
+        }
+
+        .daily-grid-row,
+        .stock-row {
+            display: grid;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid #1f2937;
+        }
+
+        .daily-grid-row {
+            grid-template-columns: minmax(96px, 0.85fr) minmax(128px, 1.25fr) 74px 38px;
+            min-width: 380px;
+            padding: 8px 10px;
+        }
+
+        .daily-grid-row:last-child,
+        .stock-row:last-child {
+            border-bottom: 0;
+        }
+
+        .grid-head {
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            background: #172033;
+            color: #94a3b8;
+            font-size: 11px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0;
+        }
+
+        .grid-input,
+        .grid-select,
+        .portion-input {
+            width: 100%;
+            min-height: 38px;
+            background: #0b1220;
+            color: #fff;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 8px 10px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+
+        .grid-select {
+            text-overflow: ellipsis;
+        }
+
+        .grid-input:focus,
+        .grid-select:focus,
+        .portion-input:focus,
+        .search-input:focus {
+            outline: 2px solid #38bdf8;
+            outline-offset: 1px;
+        }
+
+        .row-icon-btn {
+            width: 38px;
+            height: 38px;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            background: #111827;
+            color: #cbd5e1;
+            font-size: 19px;
+            font-weight: 900;
+            cursor: pointer;
+        }
+
+        .row-icon-btn:hover {
+            background: #263244;
+            color: #fff;
+        }
+
+        .raw-editor {
+            margin-top: 10px;
+        }
+
+        .raw-editor summary {
+            cursor: pointer;
+            color: #cbd5e1;
+            font-size: 12px;
+            font-weight: 900;
+            margin-bottom: 8px;
+        }
+
+        .status-line {
+            min-height: 19px;
+            color: #94a3b8;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .summary-box {
+            background: #0b1220;
+            border: 1px solid #263244;
+            border-radius: 8px;
+            padding: 10px;
+        }
+
+        .summary-label {
+            color: #94a3b8;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .summary-value {
+            margin-top: 3px;
+            color: #f8fafc;
+            font-size: 22px;
+            font-weight: 900;
+        }
+
+        .stock-toolbar {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .search-input {
+            width: 100%;
+            background: #0b1220;
+            color: #fff;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 10px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+
+        .filter-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            margin-bottom: 12px;
+        }
+
+        .filter-btn {
+            border: 1px solid #334155;
+            background: #0b1220;
+            color: #cbd5e1;
+            border-radius: 8px;
+            padding: 8px 10px;
+            font-size: 12px;
+            font-weight: 900;
+            cursor: pointer;
+        }
+
+        .filter-btn.active {
+            background: #e2e8f0;
+            color: #0f172a;
+            border-color: #e2e8f0;
+        }
+
+        .stock-grid {
+            max-height: calc(100vh - 318px);
+            min-height: 360px;
+        }
+
+        .stock-row {
+            grid-template-columns: minmax(130px, 0.85fr) minmax(220px, 1.45fr) 78px 106px 94px 82px;
+            min-width: 760px;
+            padding: 8px 10px;
+            background: #111827;
+        }
+
+        .stock-row.low {
+            background: #211c12;
+        }
+
+        .stock-row.empty {
+            background: #2a1720;
+        }
+
+        .stock-meal {
+            min-width: 0;
+        }
+
+        .stock-meal strong {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: #fff;
+            font-size: 15px;
+        }
+
+        .stock-meal span,
+        .muted-cell {
+            display: block;
+            color: #94a3b8;
+            font-size: 12px;
+        }
+
+        .amount-cell {
+            color: #e2e8f0;
+            font-weight: 900;
+            text-align: right;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 30px;
+            border-radius: 8px;
+            padding: 0 8px;
+            background: #064e3b;
+            color: #bbf7d0;
+            font-size: 12px;
+            font-weight: 900;
+        }
+
+        .stock-row.low .status-pill {
+            background: #78350f;
+            color: #fde68a;
+        }
+
+        .stock-row.empty .status-pill {
+            background: #7f1d1d;
+            color: #fecaca;
+        }
+
+        .zero-btn {
+            border: 0;
+            border-radius: 8px;
+            background: #dc2626;
+            color: #fff;
+            font-weight: 900;
+            cursor: pointer;
+            min-height: 38px;
+        }
+
+        .empty-state {
+            color: #94a3b8;
+            background: #0b1220;
+            border: 1px dashed #334155;
+            border-radius: 8px;
+            padding: 22px;
+            text-align: center;
+        }
+
+        @media (max-width: 940px) {
+            .portion-header,
+            .portion-layout,
+            .stock-toolbar {
+                grid-template-columns: 1fr;
+            }
+
+            .portion-actions {
+                justify-content: stretch;
+            }
+
+            .action-btn {
+                flex: 1;
+            }
+
+            .summary-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .daily-text {
+                min-height: 260px;
+            }
+
+            .daily-grid-shell {
+                max-height: none;
+                min-height: 260px;
+            }
+
+            .daily-grid-row {
+                min-width: 0;
+                grid-template-columns: minmax(0, 1fr) 82px 38px;
+                grid-template-areas:
+                    "meal amount delete"
+                    "category amount delete";
+                gap: 6px 8px;
+            }
+
+            .daily-grid-row.grid-head {
+                display: none;
+            }
+
+            .daily-grid-row .daily-category {
+                grid-area: category;
+            }
+
+            .daily-grid-row .daily-meal {
+                grid-area: meal;
+            }
+
+            .daily-grid-row .daily-planned {
+                grid-area: amount;
+            }
+
+            .daily-grid-row .daily-delete {
+                grid-area: delete;
+                height: 100%;
+            }
+
+            .stock-grid {
+                max-height: none;
+                min-height: 260px;
+            }
+
+            .stock-row {
+                min-width: 0;
+                grid-template-columns: minmax(0, 1fr) 94px 78px;
+                grid-template-areas:
+                    "meal input action"
+                    "meal status action";
+                gap: 6px 8px;
+            }
+
+            .stock-row.grid-head {
+                display: none;
+            }
+
+            .stock-row .category-cell,
+            .stock-row .planned-cell {
+                display: none;
+            }
+
+            .stock-row .stock-meal {
+                grid-area: meal;
+            }
+
+            .stock-row .portion-input {
+                grid-area: input;
+            }
+
+            .stock-row .status-cell {
+                grid-area: status;
+            }
+
+            .stock-row .zero-btn {
+                grid-area: action;
+                height: 100%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="portion-page">
+        <header class="portion-header">
+            <div class="portion-title-block">
+                <h1>📦 Porsiyon Takibi</h1>
+                <div class="portion-meta" id="dailyMealsMeta">Yükleniyor...</div>
+            </div>
+            <div class="portion-actions">
+                <a class="action-btn secondary" href="/mutfak">👨‍🍳 Mutfak</a>
+                <button class="action-btn primary" id="saveStockBtn" type="button">💾 Porsiyonları Kaydet</button>
+            </div>
+        </header>
+
+        <div class="portion-layout">
+            <section class="daily-panel">
+                <div class="panel-head">
+                    <div class="panel-title">Günlük Üretim Listesi</div>
+                    <div class="panel-head-actions">
+                        <button class="action-btn secondary" id="addDailyRowBtn" type="button">Satır Ekle</button>
+                        <button class="action-btn primary" id="saveDailyBtn" type="button">Kaydet</button>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <div class="daily-grid-shell" id="dailyMealsGrid">
+                        <div class="daily-grid-row grid-head">
+                            <div>Kategori</div>
+                            <div>Yemek</div>
+                            <div>Porsiyon</div>
+                            <div></div>
+                        </div>
+                        <div id="dailyMealsRows"></div>
+                    </div>
+                    <details class="raw-editor">
+                        <summary>Metin görünümü</summary>
+                        <textarea
+                            class="daily-text"
+                            id="dailyMealsText"
+                            spellcheck="false"
+                            placeholder="Kategori;Yemek;Porsiyon&#10;Dana Etli Yemekler;Macar;12"
+                        ></textarea>
+                    </details>
+                    <div class="status-line" id="dailyMealsStatus"></div>
+                </div>
+            </section>
+
+            <section class="stock-panel">
+                <div class="panel-head">
+                    <div class="panel-title">Bugünkü Yemek Porsiyonları</div>
+                    <div class="status-line" id="stockStatus" style="margin:0;"></div>
+                </div>
+                <div class="panel-body">
+                    <div class="summary-grid" id="summaryGrid"></div>
+                    <div class="stock-toolbar">
+                        <input class="search-input" id="portionSearch" placeholder="Yemek veya kategori ara" autocomplete="off">
+                        <button class="action-btn secondary" id="refreshBtn" type="button">Yenile</button>
+                    </div>
+                    <div class="filter-row" id="categoryFilters"></div>
+                    <div class="stock-grid" id="portionStockGrid"></div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script>
+        const socket = io();
+        let dailyMeals = { items: [], text: '', date: '', categories: [] };
+        let portionStock = {};
+        let portionDraft = {};
+        let activeCategory = 'all';
+
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[char]));
+        }
+
+        function normalizeText(value) {
+            return String(value ?? '').trim().toLocaleLowerCase('tr-TR');
+        }
+
+        function formatPortionAmount(value) {
+            const amount = Number(value || 0);
+            if (Number.isInteger(amount)) return String(amount);
+            return amount.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
+        }
+
+        function getDailyCategoryList() {
+            if (Array.isArray(dailyMeals.categories) && dailyMeals.categories.length) {
+                return dailyMeals.categories;
+            }
+            return getCategories();
+        }
+
+        function renderCategoryOptions(selected) {
+            const current = String(selected || '').trim();
+            const categories = getDailyCategoryList().slice();
+            if (current && !categories.includes(current)) categories.unshift(current);
+            return categories.map(category => `
+                <option value="${escapeHtml(category)}" ${category === current ? 'selected' : ''}>
+                    ${escapeHtml(category)}
+                </option>
+            `).join('');
+        }
+
+        function createBlankDailyMeal() {
+            return {
+                kategori: getDailyCategoryList()[0] || '',
+                yemek: '',
+                porsiyon: ''
+            };
+        }
+
+        function renderDailyMealRow(item, index) {
+            const category = String(item.kategori || '').trim();
+            const meal = String(item.yemek || '').trim();
+            const amount = item.porsiyon ?? '';
+            return `
+                <div class="daily-grid-row" data-index="${index}">
+                    <select class="grid-select daily-category" aria-label="Kategori">
+                        ${renderCategoryOptions(category)}
+                    </select>
+                    <input class="grid-input daily-meal" type="text" value="${escapeHtml(meal)}" aria-label="Yemek" placeholder="Yemek" autocomplete="off">
+                    <input class="grid-input daily-planned" type="number" min="0" step="0.5" value="${escapeHtml(amount)}" aria-label="Porsiyon" placeholder="Adet">
+                    <button class="row-icon-btn daily-delete" type="button" aria-label="Satırı sil">×</button>
+                </div>
+            `;
+        }
+
+        function renderDailyMealsGrid(focusLast = false) {
+            const rowsHost = document.getElementById('dailyMealsRows');
+            const rows = Array.isArray(dailyMeals.items) && dailyMeals.items.length
+                ? dailyMeals.items
+                : [createBlankDailyMeal()];
+            rowsHost.innerHTML = rows.map((item, index) => renderDailyMealRow(item, index)).join('');
+            updateDailyMealsTextPreview();
+            if (focusLast) {
+                const inputs = rowsHost.querySelectorAll('.daily-meal');
+                const lastInput = inputs[inputs.length - 1];
+                if (lastInput) lastInput.focus();
+            }
+        }
+
+        function getDailyRowsFromGrid(validate = false) {
+            const rows = Array.from(document.querySelectorAll('#dailyMealsRows .daily-grid-row'));
+            const validCategories = getDailyCategoryList();
+            const items = [];
+            for (const row of rows) {
+                const category = String(row.querySelector('.daily-category')?.value || '').trim();
+                const meal = String(row.querySelector('.daily-meal')?.value || '').trim();
+                const amountRaw = String(row.querySelector('.daily-planned')?.value || '').trim();
+                if (!meal && !amountRaw) continue;
+                if (!category || !meal || !amountRaw) {
+                    return { items, error: 'Eksik satır var' };
+                }
+                if (validCategories.length && !validCategories.includes(category)) {
+                    return { items, error: `${category} kategorisi geçerli değil` };
+                }
+                const normalizedAmount = amountRaw.replace(',', '.');
+                const amount = Number(normalizedAmount);
+                if (!Number.isFinite(amount) || amount < 0) {
+                    return { items, error: `${meal} için porsiyon sayısı geçersiz` };
+                }
+                items.push({
+                    kategori: category,
+                    yemek: meal,
+                    porsiyon: normalizedAmount
+                });
+            }
+            if (validate) return { items, error: '' };
+            return { items, error: '' };
+        }
+
+        function getDailyRowsSnapshot() {
+            return Array.from(document.querySelectorAll('#dailyMealsRows .daily-grid-row')).map(row => ({
+                kategori: String(row.querySelector('.daily-category')?.value || '').trim(),
+                yemek: String(row.querySelector('.daily-meal')?.value || '').trim(),
+                porsiyon: String(row.querySelector('.daily-planned')?.value || '').trim()
+            }));
+        }
+
+        function buildDailyMealsText(items) {
+            const now = new Date();
+            const localDate = [
+                now.getFullYear(),
+                String(now.getMonth() + 1).padStart(2, '0'),
+                String(now.getDate()).padStart(2, '0')
+            ].join('-');
+            const dateKey = dailyMeals.date || localDate;
+            const lines = [
+                `# Tarih: ${dateKey}`,
+                '# Format: Kategori;Yemek;Porsiyon'
+            ];
+            items.forEach(item => {
+                const amount = String(item.porsiyon ?? '').replace('.', ',');
+                lines.push(`${item.kategori};${item.yemek};${amount}`);
+            });
+            return `${lines.join('\n')}\n`;
+        }
+
+        function updateDailyMealsTextPreview() {
+            const textArea = document.getElementById('dailyMealsText');
+            if (!textArea || document.activeElement === textArea) return;
+            const { items } = getDailyRowsFromGrid(false);
+            textArea.value = buildDailyMealsText(items);
+        }
+
+        function parseDailyMealsTextForGrid(text) {
+            const items = [];
+            const errors = [];
+            const validCategories = getDailyCategoryList();
+            String(text || '').split('\n').forEach((rawLine, index) => {
+                const line = rawLine.trim();
+                if (!line || line.startsWith('#')) return;
+                const parts = line.split(';').map(part => part.trim());
+                const lineNo = index + 1;
+                if (parts.length !== 3) {
+                    errors.push(`${lineNo}. satır formatı geçersiz`);
+                    return;
+                }
+                const [category, meal, amountRaw] = parts;
+                if (validCategories.length && !validCategories.includes(category)) {
+                    errors.push(`${lineNo}. satır kategori geçersiz`);
+                    return;
+                }
+                if (!meal) {
+                    errors.push(`${lineNo}. satır yemek adı boş`);
+                    return;
+                }
+                const amount = Number(String(amountRaw).replace(',', '.'));
+                if (!Number.isFinite(amount) || amount < 0) {
+                    errors.push(`${lineNo}. satır porsiyon sayısı geçersiz`);
+                    return;
+                }
+                items.push({
+                    kategori: category,
+                    yemek: meal,
+                    porsiyon: amount
+                });
+            });
+            return { items, errors };
+        }
+
+        function applyRawDailyMealsToGrid() {
+            const textArea = document.getElementById('dailyMealsText');
+            if (!textArea) return;
+            const { items, errors } = parseDailyMealsTextForGrid(textArea.value);
+            if (errors.length) {
+                setStatus('dailyMealsStatus', errors[0], false);
+                return;
+            }
+            dailyMeals.items = items;
+            dailyMeals.text = buildDailyMealsText(items);
+            renderDailyMealsGrid();
+            setStatus('dailyMealsStatus', '');
+        }
+
+        function setStatus(elementId, message, ok = true) {
+            const element = document.getElementById(elementId);
+            if (!element) return;
+            element.textContent = message || '';
+            element.style.color = ok ? '#86efac' : '#fca5a5';
+        }
+
+        function getMealStock(name) {
+            return portionStock[String(name || '').trim()] || null;
+        }
+
+        function getMealValue(item) {
+            const name = String(item.yemek || '').trim();
+            if (Object.prototype.hasOwnProperty.call(portionDraft, name)) {
+                return portionDraft[name].kalan;
+            }
+            const stock = getMealStock(name);
+            if (stock && stock.tracked) return stock.kalan;
+            if (item.kalan !== undefined && item.kalan !== null) return item.kalan;
+            return item.porsiyon || 0;
+        }
+
+        function setDailyMealsPayload(payload) {
+            dailyMeals = payload || { items: [], text: '', date: '', categories: [] };
+            const textArea = document.getElementById('dailyMealsText');
+            if (textArea && document.activeElement !== textArea) {
+                textArea.value = dailyMeals.text || '';
+            }
+
+            const count = Array.isArray(dailyMeals.items) ? dailyMeals.items.length : 0;
+            document.getElementById('dailyMealsMeta').textContent =
+                `${dailyMeals.date || 'Bugün'} • ${count} çeşit`;
+            renderDailyMealsGrid();
+            renderCategoryFilters();
+            renderPortionStock();
+        }
+
+        async function loadDailyMeals() {
+            setStatus('dailyMealsStatus', 'Yükleniyor...');
+            try {
+                const res = await fetch('/api/daily-meals');
+                const data = await res.json();
+                if (!data.success) {
+                    setStatus('dailyMealsStatus', data.error || 'Günlük liste yüklenemedi', false);
+                    return;
+                }
+                portionStock = data.portion_stock || {};
+                setDailyMealsPayload(data.daily_meals);
+                setStatus('dailyMealsStatus', 'Günlük liste hazır');
+                setStatus('stockStatus', '');
+            } catch (e) {
+                setStatus('dailyMealsStatus', 'Sunucuya erişilemedi', false);
+            }
+        }
+
+        async function saveDailyMeals() {
+            const result = getDailyRowsFromGrid(true);
+            if (result.error) {
+                setStatus('dailyMealsStatus', result.error, false);
+                return;
+            }
+            const text = buildDailyMealsText(result.items);
+            document.getElementById('dailyMealsText').value = text;
+            setStatus('dailyMealsStatus', 'Kaydediliyor...');
+            try {
+                const res = await fetch('/api/daily-meals', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    setStatus('dailyMealsStatus', data.error || 'Günlük liste kaydedilemedi', false);
+                    return;
+                }
+                portionStock = data.portion_stock || {};
+                portionDraft = {};
+                setDailyMealsPayload(data.daily_meals);
+                setStatus('dailyMealsStatus', 'Günlük liste kaydedildi');
+            } catch (e) {
+                setStatus('dailyMealsStatus', 'Sunucuya erişilemedi', false);
+            }
+        }
+
+        function getCategories() {
+            const categories = [];
+            (dailyMeals.items || []).forEach(item => {
+                const category = String(item.kategori || '').trim();
+                if (category && !categories.includes(category)) categories.push(category);
+            });
+            return categories;
+        }
+
+        function getFilteredMealRows() {
+            const query = normalizeText(document.getElementById('portionSearch').value);
+            const allItems = Array.isArray(dailyMeals.items) ? dailyMeals.items : [];
+            return allItems.filter(item => {
+                const category = String(item.kategori || '').trim();
+                const name = String(item.yemek || '').trim();
+                if (!name) return false;
+                if (activeCategory !== 'all' && category !== activeCategory) return false;
+                if (!query) return true;
+                return normalizeText(name).includes(query) || normalizeText(category).includes(query);
+            });
+        }
+
+        function renderCategoryFilters() {
+            const filters = document.getElementById('categoryFilters');
+            const categories = getCategories();
+            if (activeCategory !== 'all' && !categories.includes(activeCategory)) {
+                activeCategory = 'all';
+            }
+            const buttons = [
+                `<button class="filter-btn ${activeCategory === 'all' ? 'active' : ''}" type="button" data-category="all">Tümü</button>`
+            ];
+            categories.forEach(category => {
+                buttons.push(`
+                    <button class="filter-btn ${activeCategory === category ? 'active' : ''}" type="button" data-category="${escapeHtml(category)}">
+                        ${escapeHtml(category)}
+                    </button>
+                `);
+            });
+            filters.innerHTML = buttons.join('');
+        }
+
+        function renderSummary(rows) {
+            const plannedTotal = rows.reduce((sum, item) => sum + Number(item.porsiyon || 0), 0);
+            const remainingTotal = rows.reduce((sum, item) => sum + Number(getMealValue(item) || 0), 0);
+            const emptyCount = rows.filter(item => Number(getMealValue(item) || 0) <= 0).length;
+            const lowCount = rows.filter(item => {
+                const value = Number(getMealValue(item) || 0);
+                return value > 0 && value <= 5;
+            }).length;
+
+            document.getElementById('summaryGrid').innerHTML = `
+                <div class="summary-box">
+                    <div class="summary-label">Çeşit</div>
+                    <div class="summary-value">${rows.length}</div>
+                </div>
+                <div class="summary-box">
+                    <div class="summary-label">Planlanan</div>
+                    <div class="summary-value">${formatPortionAmount(plannedTotal)}</div>
+                </div>
+                <div class="summary-box">
+                    <div class="summary-label">Kalan</div>
+                    <div class="summary-value">${formatPortionAmount(remainingTotal)}</div>
+                </div>
+                <div class="summary-box">
+                    <div class="summary-label">Az / Tükendi</div>
+                    <div class="summary-value">${lowCount} / ${emptyCount}</div>
+                </div>
+            `;
+        }
+
+        function renderPortionStock() {
+            const grid = document.getElementById('portionStockGrid');
+            const allItems = Array.isArray(dailyMeals.items) ? dailyMeals.items : [];
+            const rows = getFilteredMealRows();
+
+            renderSummary(rows);
+
+            if (!rows.length) {
+                grid.innerHTML = '<div class="empty-state">Bugünkü üretim listesinde yemek bulunamadı.</div>';
+                return;
+            }
+
+            const header = `
+                <div class="stock-row grid-head">
+                    <div>Kategori</div>
+                    <div>Yemek</div>
+                    <div style="text-align:right;">Plan</div>
+                    <div>Kalan</div>
+                    <div>Durum</div>
+                    <div></div>
+                </div>
+            `;
+
+            grid.innerHTML = header + rows.map(item => {
+                const sourceIndex = allItems.indexOf(item);
+                const name = String(item.yemek || '').trim();
+                const category = String(item.kategori || '').trim();
+                const planned = Number(item.porsiyon || 0);
+                const remaining = Number(getMealValue(item) || 0);
+                const stateClass = remaining <= 0 ? 'empty' : (remaining <= 5 ? 'low' : '');
+                const stateText = remaining <= 0 ? 'Tükendi' : (remaining <= 5 ? 'Az' : 'Var');
+                return `
+                    <div class="stock-row ${stateClass}" data-index="${sourceIndex}">
+                        <div class="category-cell muted-cell" title="${escapeHtml(category)}">${escapeHtml(category)}</div>
+                        <div class="stock-meal">
+                            <strong title="${escapeHtml(name)}">${escapeHtml(name)}</strong>
+                            <span>${escapeHtml(category)} • Planlanan: ${formatPortionAmount(planned)}</span>
+                        </div>
+                        <div class="amount-cell planned-cell">${formatPortionAmount(planned)}</div>
+                        <input class="portion-input" type="number" min="0" step="0.5" value="${escapeHtml(getMealValue(item))}" aria-label="${escapeHtml(name)} kalan porsiyon">
+                        <div class="status-cell">
+                            <span class="status-pill">${stateText}</span>
+                        </div>
+                        <button class="zero-btn" type="button">0</button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateStockRowState(row, value) {
+            const amount = Number(value || 0);
+            const stateClass = amount <= 0 ? 'empty' : (amount <= 5 ? 'low' : '');
+            const stateText = amount <= 0 ? 'Tükendi' : (amount <= 5 ? 'Az' : 'Var');
+            row.classList.remove('low', 'empty');
+            if (stateClass) row.classList.add(stateClass);
+            const pill = row.querySelector('.status-pill');
+            if (pill) pill.textContent = stateText;
+        }
+
+        function updateDraftFromRow(row, value) {
+            const index = Number(row.dataset.index);
+            const item = (dailyMeals.items || [])[index];
+            if (!item) return;
+            const name = String(item.yemek || '').trim();
+            if (!name) return;
+            portionDraft[name] = {
+                urun: name,
+                kategori: String(item.kategori || '').trim(),
+                kalan: String(value ?? '').trim()
+            };
+        }
+
+        async function savePortionStock() {
+            const items = Object.values(portionDraft).filter(item => item.urun);
+            if (!items.length) {
+                setStatus('stockStatus', 'Değişiklik yok');
+                return;
+            }
+
+            const invalidItem = items.find(item => {
+                const raw = String(item.kalan ?? '').trim();
+                const amount = Number(raw.replace(',', '.'));
+                return raw === '' || !Number.isFinite(amount) || amount < 0;
+            });
+            if (invalidItem) {
+                setStatus('stockStatus', `${invalidItem.urun} için porsiyon sayısı geçersiz`, false);
+                return;
+            }
+
+            setStatus('stockStatus', 'Kaydediliyor...');
+            try {
+                const res = await fetch('/api/portion-stock', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ items })
+                });
+                const data = await res.json();
+                if (!data.success) {
+                    setStatus('stockStatus', data.error || 'Porsiyonlar kaydedilemedi', false);
+                    return;
+                }
+                portionStock = data.portion_stock || {};
+                portionDraft = {};
+                renderPortionStock();
+                setStatus('stockStatus', 'Kaydedildi');
+            } catch (e) {
+                setStatus('stockStatus', 'Sunucuya erişilemedi', false);
+            }
+        }
+
+        document.getElementById('saveDailyBtn').addEventListener('click', saveDailyMeals);
+        document.getElementById('addDailyRowBtn').addEventListener('click', () => {
+            dailyMeals.items = getDailyRowsSnapshot().concat(createBlankDailyMeal());
+            renderDailyMealsGrid(true);
+        });
+        document.getElementById('saveStockBtn').addEventListener('click', savePortionStock);
+        document.getElementById('refreshBtn').addEventListener('click', loadDailyMeals);
+        document.getElementById('portionSearch').addEventListener('input', renderPortionStock);
+        document.getElementById('dailyMealsText').addEventListener('blur', applyRawDailyMealsToGrid);
+
+        document.getElementById('dailyMealsRows').addEventListener('input', updateDailyMealsTextPreview);
+        document.getElementById('dailyMealsRows').addEventListener('change', updateDailyMealsTextPreview);
+
+        document.getElementById('dailyMealsRows').addEventListener('click', (event) => {
+            if (!event.target.classList.contains('daily-delete')) return;
+            const row = event.target.closest('.daily-grid-row');
+            if (row) row.remove();
+            const rows = getDailyRowsSnapshot();
+            dailyMeals.items = rows.length ? rows : [createBlankDailyMeal()];
+            renderDailyMealsGrid();
+        });
+
+        document.getElementById('categoryFilters').addEventListener('click', (event) => {
+            const button = event.target.closest('[data-category]');
+            if (!button) return;
+            activeCategory = button.dataset.category || 'all';
+            renderCategoryFilters();
+            renderPortionStock();
+        });
+
+        document.getElementById('portionStockGrid').addEventListener('input', (event) => {
+            if (!event.target.classList.contains('portion-input')) return;
+            const row = event.target.closest('.stock-row');
+            if (!row) return;
+            updateDraftFromRow(row, event.target.value);
+            updateStockRowState(row, event.target.value);
+            renderSummary(getFilteredMealRows());
+        });
+
+        document.getElementById('portionStockGrid').addEventListener('click', (event) => {
+            if (!event.target.classList.contains('zero-btn')) return;
+            const row = event.target.closest('.stock-row');
+            const input = row ? row.querySelector('.portion-input') : null;
+            if (!row || !input) return;
+            input.value = '0';
+            updateDraftFromRow(row, '0');
+            updateStockRowState(row, '0');
+            renderSummary(getFilteredMealRows());
+        });
+
+        socket.on('portion_stock_update', (data) => {
+            portionStock = data.portion_stock || {};
+            renderPortionStock();
+        });
+
+        socket.on('daily_meals_update', (data) => {
+            portionStock = data.portion_stock || portionStock;
+            setDailyMealsPayload(data.daily_meals);
+        });
+
+        loadDailyMeals();
+    </script>
+</body>
+
+</html>

@@ -2,21 +2,52 @@ import socket
 import json
 import logging
 import time
+import uuid
+
+try:
+    import requests
+except ImportError:
+    class _MissingRequests:
+        class RequestException(Exception):
+            pass
+
+        @staticmethod
+        def post(*args, **kwargs):
+            raise _MissingRequests.RequestException(
+                "requests modülü yüklü değil; POS/ÖKC bridge için requirements.txt kurulmalı"
+            )
+
+    requests = _MissingRequests
 
 logger = logging.getLogger(__name__)
 
 class POSManager:
+    TOKEN_BRIDGE_TYPES = {"token-bridge", "beko-token", "beko-yn-okc"}
+    PAYMENT_TYPE_CODES = {
+        "nakit": 1,
+        "kredi kartı": 3,
+        "kredi karti": 3,
+        "kart": 3,
+        "yemek kartı": 7,
+        "yemek karti": 7,
+        "açık hesap": 17,
+        "acik hesap": 17,
+    }
+
     def __init__(self, enabled=False, ip="", port=0, pos_type="demo"):
         self.enabled = enabled
         self.ip = ip
         self.port = port
-        self.pos_type = pos_type # "demo", "beko-json", "hugin", "generic"
+        self.pos_type = pos_type # "demo", "beko-json", "hugin", "generic", "token-bridge"
         
-    def sale(self, amount, table_name=""):
+    def sale(self, amount, table_name="", items=None, payments=None, order_id=None):
         """
         Send a sale request to the POS device.
         :param amount: Float amount in TL
         :param table_name: String table identifier
+        :param items: Optional adisyon items for fiscal OKC basket payloads
+        :param payments: Optional payment list for fiscal OKC basket payloads
+        :param order_id: Optional stable basket id
         :return: (bool success, str message)
         """
         if not self.enabled:
@@ -28,12 +59,18 @@ class POSManager:
             return True, "İşlem Başarılı (DEMO)"
             
         try:
-            # Create the payload based on device type
+            if self.pos_type in self.TOKEN_BRIDGE_TYPES:
+                payload = self._create_token_bridge_payload(
+                    table_name=table_name,
+                    items=items or [],
+                    payments=payments or [{"type": "Kredi Kartı", "amount": amount}],
+                    order_id=order_id,
+                )
+                response = self._send_token_bridge_request(payload)
+                return self._parse_token_bridge_response(response)
+
             payload = self._create_payload(amount, table_name)
-            
-            # Send request via TCP
             response = self._send_request(payload)
-            
             return self._parse_response(response)
             
         except ConnectionRefusedError:
@@ -42,6 +79,9 @@ class POSManager:
         except socket.timeout:
             logger.error(f"POS Zaman Aşımı: {self.ip}:{self.port} yanıt vermedi.")
             return False, "POS cihazından yanıt alınamadı (Zaman aşımı)"
+        except requests.RequestException as e:
+            logger.error(f"ÖKC Bridge Bağlantı Hatası: {str(e)}")
+            return False, f"ÖKC bridge bağlantı hatası: {str(e)}"
         except Exception as e:
             logger.error(f"POS Beklenmedik Hata: {str(e)}")
             return False, f"POS Hatası: {str(e)}"
@@ -64,6 +104,103 @@ class POSManager:
             "table": table_name
         }).encode('utf-8')
 
+    def _create_token_bridge_payload(self, table_name, items, payments, order_id=None):
+        """Build the Token IntegrationHub basket JSON sent to the Windows bridge."""
+        token_items = [self._create_token_item(item) for item in items]
+        token_items = [item for item in token_items if item is not None]
+        token_payments = [self._create_token_payment(payment) for payment in payments]
+        token_payments = [payment for payment in token_payments if payment is not None]
+
+        if not token_items:
+            raise ValueError("ÖKC sepeti için ürün satırı bulunamadı")
+        if not token_payments:
+            raise ValueError("ÖKC sepeti için ödeme satırı bulunamadı")
+
+        items_total = sum(item["price"] * item["quantity"] for item in token_items)
+        payments_total = sum(payment["amount"] * 1000 for payment in token_payments)
+        if abs(items_total - payments_total) > 10:
+            raise ValueError(
+                "ÖKC sepet toplamı ile ödeme toplamı eşleşmiyor "
+                f"({items_total / 100000:.2f} TL / {payments_total / 100000:.2f} TL)"
+            )
+
+        return {
+            "basketID": order_id or str(uuid.uuid4()),
+            "createInvoice": False,
+            "documentType": 0,
+            "isVoid": False,
+            "items": token_items,
+            "paymentItems": token_payments,
+            "customerInfo": None,
+            "adjust": None,
+            "infoReceiptInfo": None,
+            "isWayBill": False,
+            "note": table_name[:64] if table_name else None,
+        }
+
+    def _create_token_item(self, item):
+        name = str(item.get("urun") or item.get("name") or "").strip()
+        if not name:
+            return None
+
+        price = self._to_minor_units(item.get("fiyat", item.get("price", 0)))
+        quantity = self._to_quantity_units(item.get("adet", item.get("quantity", 1)))
+        if price < 0 or quantity <= 0:
+            return None
+
+        return {
+            "barcode": str(item.get("barcode") or item.get("barkod") or "")[:32],
+            "name": name[:64],
+            "pluNo": int(item.get("pluNo") or item.get("plu_no") or 0),
+            "price": price,
+            "sectionNo": int(item.get("sectionNo") or item.get("section_no") or 1),
+            "taxPercent": int(item.get("taxPercent") or item.get("tax_percent") or 1000),
+            "type": int(item.get("type") or 0),
+            "unit": item.get("unit") or "Adet",
+            "vatID": int(item.get("vatID") or item.get("vat_id") or 0),
+            "limit": int(item.get("limit") or 0),
+            "quantity": quantity,
+            "paymentType": int(item.get("paymentType") or 0),
+            "total": price * quantity,
+        }
+
+    def _create_token_payment(self, payment):
+        amount = self._to_minor_units(payment.get("amount", 0))
+        if amount <= 0:
+            return None
+
+        payment_name = str(payment.get("type") or "Kredi Kartı").strip()
+        token_type = payment.get("token_type")
+        if token_type is None:
+            token_type = self.PAYMENT_TYPE_CODES.get(payment_name.lower(), 3)
+
+        return {
+            "description": payment_name,
+            "amount": amount,
+            "type": int(token_type),
+            "batchNo": 0,
+            "currencyId": 0,
+            "operatorId": int(payment.get("operatorId") or payment.get("operator_id") or 0),
+            "status": 0,
+            "txnNo": 0,
+        }
+
+    def _to_minor_units(self, amount):
+        return int(round(float(amount) * 100))
+
+    def _to_quantity_units(self, quantity):
+        return int(round(float(quantity) * 1000))
+
+    def _send_token_bridge_request(self, payload):
+        """Send a Token basket payload to the Windows terminal OKC bridge."""
+        url = f"http://{self.ip}:{self.port}/api/sale"
+        response = requests.post(url, json=payload, timeout=130)
+        response.raise_for_status()
+        try:
+            return response.json()
+        except ValueError:
+            return {"success": False, "message": response.text[:200]}
+
     def _send_request(self, payload):
         """Low level TCP socket communication"""
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -74,6 +211,18 @@ class POSManager:
             # Simple buffer read - in real world you might need to handle EOF or length prefix
             data = s.recv(1024)
             return data.decode('utf-8')
+
+    def _parse_token_bridge_response(self, response):
+        """Parse response from the Windows OKC bridge."""
+        if response.get("success") is True or response.get("status") in (0, "success"):
+            receipt_no = response.get("receiptNo") or response.get("receipt_no")
+            z_no = response.get("zNo") or response.get("z_no")
+            if receipt_no or z_no:
+                return True, f"ÖKC fişi tamamlandı (Fiş: {receipt_no or '-'}, Z: {z_no or '-'})"
+            return True, response.get("message") or "ÖKC fişi tamamlandı"
+
+        message = response.get("message") or response.get("error") or "ÖKC bridge işlemi reddetti"
+        return False, f"ÖKC Red: {message}"
 
     def _parse_response(self, response_str):
         """Parse the response from POS device"""

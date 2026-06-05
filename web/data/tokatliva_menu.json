@@ -1,0 +1,490 @@
+{
+  "source": "https://www.tokatliva.com",
+  "source_name": "Tokat Liva Restaurant",
+  "fetched_at": "2026-05-22T12:11:26+03:00",
+  "categories": [
+    {
+      "name": "Başlangıç",
+      "path_id": 60,
+      "source_url": "https://www.tokatliva.com/index.php?route=product/category&path=60",
+      "items": [
+        {
+          "name": "Tam Porsiyon Günün Çorbası",
+          "price": 145.0,
+          "price_text": "145,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/bas/cor1-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/başlangıç/tam-porsiyon-günün-çorbası"
+        },
+        {
+          "name": "Yarım Porsiyon Günün Çorbası",
+          "price": 95.0,
+          "price_text": "95,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/bas/cor2-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/başlangıç/yarım-porsiyon-günün-çorbası"
+        },
+        {
+          "name": "Tam Porsiyon Patates Kızartması",
+          "price": 145.0,
+          "price_text": "145,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/bas/patates2-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/başlangıç/tam-porsiyon-patates-kızartması"
+        },
+        {
+          "name": "Yarım Porsiyon Patates Kızartması",
+          "price": 110.0,
+          "price_text": "110,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/bas/patates2-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/başlangıç/yarım-porsiyon-patates-kızartması"
+        },
+        {
+          "name": "Tam Porsiyon Yoğurt",
+          "price": 145.0,
+          "price_text": "145,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/bas/yog2-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/başlangıç/tam-porsiyon-yoğurt"
+        },
+        {
+          "name": "Yarım Porsiyon Yoğurt",
+          "price": 95.0,
+          "price_text": "95,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/bas/yog1-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/başlangıç/yarım-porsiyon-yoğurt"
+        }
+      ]
+    },
+    {
+      "name": "Yemek",
+      "path_id": 59,
+      "source_url": "https://www.tokatliva.com/index.php?route=product/category&path=59",
+      "items": [
+        {
+          "name": "Tam Porsiyon Köfte",
+          "price": 515.0,
+          "price_text": "515,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/KÖFTE-1080x1350h.jpg",
+          "source_url": "https://www.tokatliva.com/yemek/tam-porsiyon-köfte"
+        },
+        {
+          "name": "Yarım Porsiyon Köfte",
+          "price": 315.0,
+          "price_text": "315,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/YARIM%20KÖFTE%20IZGARA-1080x1350w.jpg",
+          "source_url": "https://www.tokatliva.com/yemek/yarım-porsiyon-köfte"
+        },
+        {
+          "name": "Adana Kebap",
+          "price": 515.0,
+          "price_text": "515,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/ADANA-1080x1350h.jpg",
+          "source_url": "https://www.tokatliva.com/yemek/adana-kebap"
+        },
+        {
+          "name": "Dana Biftek (200 gr.)",
+          "price": 745.0,
+          "price_text": "745,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/DANA%20BİFTEK-1080x1350h.jpg",
+          "source_url": "https://www.tokatliva.com/yemek/dana-biftek"
+        },
+        {
+          "name": "Kırmızı Karışık (1,5 Porsiyon)",
+          "price": 825.0,
+          "price_text": "825,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/KIRMIZI%20KARIŞIK%20IZGARA-1080x1350h.jpg",
+          "source_url": "https://www.tokatliva.com/yemek/kırmızı-karışık-15-porsiyon"
+        },
+        {
+          "name": "Beyti Sarma",
+          "price": 585.0,
+          "price_text": "585,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/3f48e250-3f31-4685-8c38-6767df21a083-1080x1350h.jpg",
+          "source_url": "https://www.tokatliva.com/yemek/beyti-sarma"
+        },
+        {
+          "name": "Tavuk Şiş",
+          "price": 390.0,
+          "price_text": "390,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/TAVUK%20ŞİŞ-1080x1350h.jpg",
+          "source_url": "https://www.tokatliva.com/yemek/tavuk-şiş"
+        },
+        {
+          "name": "Tavuk Kanat İncik",
+          "price": 400.0,
+          "price_text": "400,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/KANAT%20İNCİK-1080x1350w.jpg",
+          "source_url": "https://www.tokatliva.com/yemek/tavuk-kanat-incik"
+        },
+        {
+          "name": "Tavuk But Izgara",
+          "price": 415.0,
+          "price_text": "415,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/TAVUK%20BUT%20IZGARA-1080x1350h.jpg",
+          "source_url": "https://www.tokatliva.com/yemek/tavuk-but-izgara"
+        },
+        {
+          "name": "Beyaz Karışık (1,5 Porsiyon)",
+          "price": 565.0,
+          "price_text": "565,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/BEYAZ%20KARIŞIK%20IZGARA-1080x1350h.jpg",
+          "source_url": "https://www.tokatliva.com/yemek/beyaz-karışık-15-porsiyon"
+        },
+        {
+          "name": "Liva Tepsi (2 Kişilik)",
+          "price": 1490.0,
+          "price_text": "1.490,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/LİVA%20TEPSİ-1080x1350h.jpg",
+          "source_url": "https://www.tokatliva.com/yemek/liva-tepsi-2-kişilik"
+        },
+        {
+          "name": "Kiremitte Köfte",
+          "price": 565.0,
+          "price_text": "565,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/kiremitte-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/yemek/kiremitte-köfte"
+        }
+      ]
+    },
+    {
+      "name": "Tencere ve Fırın",
+      "path_id": 64,
+      "source_url": "https://www.tokatliva.com/index.php?route=product/category&path=64",
+      "items": [
+        {
+          "name": "Tam Porsiyon Kuru Fasulye",
+          "price": 275.0,
+          "price_text": "275,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/tencere/y1-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/tencere-ve-fırın/tam-porsiyon-kuru-fasulye-1"
+        },
+        {
+          "name": "Yarım Porsiyon Kuru Fasulye",
+          "price": 185.0,
+          "price_text": "185,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/ekim2023/y2-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/tencere-ve-fırın/yarım-porsiyon-kuru-fasulye"
+        },
+        {
+          "name": "Tam Porsiyon Kuzu Etli Yemekler",
+          "price": 545.0,
+          "price_text": "545,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/ekim2023/y4-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/tencere-ve-fırın/tam-porsiyon-kuzu-etli-yemekler"
+        },
+        {
+          "name": "Yarım Porsiyon Kuzu Etli Yemekler",
+          "price": 350.0,
+          "price_text": "350,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/ekim2023/y4-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/tencere-ve-fırın/yarım-porsiyon-kuzu-etli-yemekler"
+        },
+        {
+          "name": "Tam Porsiyon Tavuklu Yemekler",
+          "price": 350.0,
+          "price_text": "350,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/ekim2023/t1-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/tencere-ve-fırın/tam-porsiyon-tavuklu-yemekler-1"
+        },
+        {
+          "name": "Yarım Porsiyon Tavuklu Yemekler",
+          "price": 240.0,
+          "price_text": "240,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/ekim2023/t2-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/tencere-ve-fırın/yarım-porsiyon-tavuklu-yemekler"
+        },
+        {
+          "name": "Tam Porsiyon Kıymalı Yemekler",
+          "price": 455.0,
+          "price_text": "455,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/ekim2023/k1-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/tencere-ve-fırın/tam-porsiyon-kıymalı-yemekler"
+        },
+        {
+          "name": "Yarım Porsiyon Kıymalı Yemeker",
+          "price": 300.0,
+          "price_text": "300,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/ekim2023/k2-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/tencere-ve-fırın/yarım-porsiyon-kıymalı-yemeker"
+        },
+        {
+          "name": "Tam Porsiyon Dana Etli Yemekler",
+          "price": 515.0,
+          "price_text": "515,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/ekim2023/d1-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/tencere-ve-fırın/tam-porsiyon-dana-etli-yemekler"
+        },
+        {
+          "name": "Yarım Porsiyon Dana Etli Yemeker",
+          "price": 340.0,
+          "price_text": "340,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/ekim2023/d2-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/tencere-ve-fırın/yarım-porsiyon-dana-etli-yemeker"
+        },
+        {
+          "name": "Tam Porsiyon Etsiz Yemekler",
+          "price": 275.0,
+          "price_text": "275,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/ekim2023/e1-1080x1350h.jpg",
+          "source_url": "https://www.tokatliva.com/tencere-ve-fırın/tam-porsiyon-etsiz-yemekler-1"
+        },
+        {
+          "name": "Yarım Porsiyon Etsiz Yemekler",
+          "price": 185.0,
+          "price_text": "185,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/ekim2023/e2-1080x1350h.jpg",
+          "source_url": "https://www.tokatliva.com/tencere-ve-fırın/yarım-porsiyon-etsiz-yemekler"
+        }
+      ]
+    },
+    {
+      "name": "Soğuk İçecekler",
+      "path_id": 61,
+      "source_url": "https://www.tokatliva.com/index.php?route=product/category&path=61",
+      "items": [
+        {
+          "name": "Ayran",
+          "price": 60.0,
+          "price_text": "60,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/sicecek/s1-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/soğuk-içecekler/ayran"
+        },
+        {
+          "name": "Şalgam",
+          "price": 65.0,
+          "price_text": "65,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/sicecek/s2-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/soğuk-içecekler/şalgam"
+        },
+        {
+          "name": "Sıkma Limonlu Soda",
+          "price": 65.0,
+          "price_text": "65,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/sicecek/s4-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/soğuk-içecekler/sıkma-limonlu-soda"
+        },
+        {
+          "name": "Gazoz",
+          "price": 70.0,
+          "price_text": "70,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/ekim2023/nigde_gazoz_2-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/soğuk-içecekler/gazoz"
+        },
+        {
+          "name": "Sıkma Meyve Suyu",
+          "price": 145.0,
+          "price_text": "145,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/sicecek/s3-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/soğuk-içecekler/sıkma-meyve-suyu"
+        },
+        {
+          "name": "Kutu Meşrubat",
+          "price": 95.0,
+          "price_text": "95,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/sicecek/s5-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/soğuk-içecekler/kutu-meşrubat"
+        },
+        {
+          "name": "Şişe Meşrubat",
+          "price": 75.0,
+          "price_text": "75,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/sicecek/s6-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/soğuk-içecekler/şişe-meşrubat"
+        },
+        {
+          "name": "0.5 Lt. Su",
+          "price": 25.0,
+          "price_text": "25,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/sicecek/s7-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/soğuk-içecekler/0.5-lt.-su"
+        }
+      ]
+    },
+    {
+      "name": "Sıcak İçecekler",
+      "path_id": 62,
+      "source_url": "https://www.tokatliva.com/index.php?route=product/category&path=62",
+      "items": [
+        {
+          "name": "Türk Kahvesi",
+          "price": 110.0,
+          "price_text": "110,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/sicaklar/kahve-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/sıcak-içecekler/türk-kahvesi"
+        },
+        {
+          "name": "Espresso Çeşitleri (Latte, Kapuçino)",
+          "price": 150.0,
+          "price_text": "150,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/kahve-1080x1350w.jpg",
+          "source_url": "https://www.tokatliva.com/sıcak-içecekler/espresso-çeşitleri-latte-kapuçino"
+        },
+        {
+          "name": "Bardak Çay",
+          "price": 30.0,
+          "price_text": "30,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/sicaklar/cay-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/sıcak-içecekler/bardak-çay"
+        },
+        {
+          "name": "Küçük Demlik",
+          "price": 330.0,
+          "price_text": "330,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/sicaklar/d1-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/sıcak-içecekler/küçük-demlik"
+        },
+        {
+          "name": "Orta Demlik",
+          "price": 390.0,
+          "price_text": "390,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/sicaklar/d2-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/sıcak-içecekler/orta-demlik"
+        },
+        {
+          "name": "Büyük Demlik",
+          "price": 420.0,
+          "price_text": "420,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/sicaklar/d3-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/sıcak-içecekler/büyük-demlik"
+        }
+      ]
+    },
+    {
+      "name": "Baklavalar",
+      "path_id": 63,
+      "source_url": "https://www.tokatliva.com/index.php?route=product/category&path=63",
+      "items": [
+        {
+          "name": "Cevizli Baklava (Porsiyon)",
+          "price": 210.0,
+          "price_text": "210,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/tat/baklava-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/baklavalar/cevizli-baklava-porsiyon"
+        },
+        {
+          "name": "Cevizli Baklava ( Kilogram)",
+          "price": 980.0,
+          "price_text": "980,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/tat/baklava_kutu-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/baklavalar/cevizli-baklava-kilogram"
+        },
+        {
+          "name": "Fıstıklı Baklava (Porsiyon)",
+          "price": 235.0,
+          "price_text": "235,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/FISTIKLI%20BAKLAVA-1080x1350h.jpg",
+          "source_url": "https://www.tokatliva.com/baklavalar/fıstıklı-baklava-porsiyon"
+        },
+        {
+          "name": "Fıstıklı Baklava ( Kilogram)",
+          "price": 1280.0,
+          "price_text": "1.280,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/tat/baklava_kutu-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/baklavalar/cevizli-baklava-kilogram-1"
+        },
+        {
+          "name": "Soğuk Baklava (Porsiyon)",
+          "price": 225.0,
+          "price_text": "225,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/WhatsApp%20Image%202026-02-24%20at%2012.04.58-1080x1350h.jpeg",
+          "source_url": "https://www.tokatliva.com/baklavalar/soğuk-baklava-porsiyon"
+        },
+        {
+          "name": "Soğuk Baklava (Kilogram)",
+          "price": 1150.0,
+          "price_text": "1.150,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/tat/baklava_kutu-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/baklavalar/soğuk-baklava-kilogram"
+        },
+        {
+          "name": "Liva Sarma (Porsiyon)",
+          "price": 235.0,
+          "price_text": "235,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/LİVA%20SARMA-1080x1350h.jpg",
+          "source_url": "https://www.tokatliva.com/baklavalar/liva-sarma-porsiyon"
+        },
+        {
+          "name": "Liva Sarma (Kilogram)",
+          "price": 1500.0,
+          "price_text": "1.500,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/tat/baklava_kutu-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/baklavalar/liva-sarma-kilogram"
+        }
+      ]
+    },
+    {
+      "name": "Süt Tatlıları",
+      "path_id": 67,
+      "source_url": "https://www.tokatliva.com/index.php?route=product/category&path=67",
+      "items": [
+        {
+          "name": "Kazandibi",
+          "price": 175.0,
+          "price_text": "175,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/tat/kazandibi-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/süt-tatlıları/kazandibi"
+        },
+        {
+          "name": "Sütlaç",
+          "price": 175.0,
+          "price_text": "175,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/AA1/tat/sutac-1080x1350.jpg",
+          "source_url": "https://www.tokatliva.com/süt-tatlıları/sütlaç"
+        },
+        {
+          "name": "Supangle",
+          "price": 175.0,
+          "price_text": "175,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/SUPANGLE-1080x1350h.jpg",
+          "source_url": "https://www.tokatliva.com/süt-tatlıları/supangle"
+        }
+      ]
+    },
+    {
+      "name": "Dondurma",
+      "path_id": 68,
+      "source_url": "https://www.tokatliva.com/index.php?route=product/category&path=68",
+      "items": [
+        {
+          "name": "Sade 1 Dilim",
+          "price": 80.0,
+          "price_text": "80,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/SADE%20DONDURMA-1080x1350h.jpg",
+          "source_url": "https://www.tokatliva.com/dondurma/1-dilim-kesme-sade-kakaolu-fıstıklı"
+        },
+        {
+          "name": "Sade Kilogram",
+          "price": 1000.0,
+          "price_text": "1.000,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/PAKET%20DONDURMA-1080x1350h.jpg",
+          "source_url": "https://www.tokatliva.com/dondurma/1-dilim-meyveli-çilek-limon-karışık"
+        },
+        {
+          "name": "Kakaolu 1 Dilim",
+          "price": 80.0,
+          "price_text": "80,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/KAKAOLU%20DONDURMA-1080x1350h.jpg",
+          "source_url": "https://www.tokatliva.com/dondurma/kakaolu-1-dilim"
+        },
+        {
+          "name": "Kakaolu Kilogram",
+          "price": 1000.0,
+          "price_text": "1.000,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/PAKET%20DONDURMA-1080x1350h.jpg",
+          "source_url": "https://www.tokatliva.com/dondurma/kakaolu-kilogram"
+        },
+        {
+          "name": "Fıstıklı 1 Dilim",
+          "price": 80.0,
+          "price_text": "80,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/FISTIKLI%20DONDURMA-1080x1350h.jpg",
+          "source_url": "https://www.tokatliva.com/dondurma/fıstıklı-1-dilim"
+        },
+        {
+          "name": "Fıstıklı Kilogram",
+          "price": 1000.0,
+          "price_text": "1.000,00TL",
+          "image_url": "https://www.tokatliva.com/image/cache/catalog/PAKET%20DONDURMA-1080x1350h.jpg",
+          "source_url": "https://www.tokatliva.com/dondurma/fıstıklı-kilogram"
+        }
+      ]
+    }
+  ]
+}

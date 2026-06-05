@@ -22,6 +22,35 @@ class Database:
             cls._instance = super(Database, cls).__new__(cls)
             cls._instance._initialize_pool()
         return cls._instance
+
+    @staticmethod
+    def _normalize_timestamp(value):
+        """PostgreSQL'e gidecek tarih değerini güvenli datetime'a çevir."""
+        if value is None:
+            return datetime.now()
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return datetime.now()
+            for fmt in (
+                "%d-%m-%Y %H:%M:%S",
+                "%d-%m-%Y %H:%M",
+                "%d.%m.%Y %H:%M:%S",
+                "%d.%m.%Y %H:%M",
+                "%Y-%m-%d %H:%M:%S",
+                "%Y-%m-%dT%H:%M:%S",
+            ):
+                try:
+                    return datetime.strptime(value, fmt)
+                except ValueError:
+                    pass
+            try:
+                return datetime.fromisoformat(value)
+            except ValueError:
+                return value
+        return value
     
     def _initialize_pool(self):
         """Connection pool oluştur"""
@@ -74,9 +103,11 @@ class Database:
                     tip TEXT DEFAULT 'normal',
                     tarih_saat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     masa TEXT,
-                    terminal_id TEXT
+                    terminal_id TEXT,
+                    vardiya_id INTEGER
                 )
             """)
+            cursor.execute("ALTER TABLE satislar ADD COLUMN IF NOT EXISTS vardiya_id INTEGER")
             
             # CARİ HESAPLAR TABLOSU
             cursor.execute("""
@@ -129,7 +160,9 @@ class Database:
                     oran_ys DECIMAL(5, 2) DEFAULT 0,
                     oran_ty DECIMAL(5, 2) DEFAULT 0,
                     oran_gt DECIMAL(5, 2) DEFAULT 0,
-                    oran_mg DECIMAL(5, 2) DEFAULT 0
+                    oran_mg DECIMAL(5, 2) DEFAULT 0,
+                    image_url TEXT,
+                    menu_visible BOOLEAN DEFAULT TRUE
                 )
             """)
             
@@ -139,6 +172,7 @@ class Database:
             cursor.execute("ALTER TABLE menu ADD COLUMN IF NOT EXISTS oran_gt DECIMAL(5, 2) DEFAULT 0")
             cursor.execute("ALTER TABLE menu ADD COLUMN IF NOT EXISTS oran_mg DECIMAL(5, 2) DEFAULT 0")
             cursor.execute("ALTER TABLE menu ADD COLUMN IF NOT EXISTS image_url TEXT")
+            cursor.execute("ALTER TABLE menu ADD COLUMN IF NOT EXISTS menu_visible BOOLEAN DEFAULT TRUE")
             
             # KASALAR TABLOSU
             cursor.execute("""
@@ -155,43 +189,106 @@ class Database:
                     kasa_id INTEGER NOT NULL,
                     kasiyer TEXT NOT NULL,
                     acilis_zamani TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    kasa_id INTEGER,
                     kasiyer_adi TEXT,
                     acilma_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     kapanma_tarihi TIMESTAMP,
                     acilis_bakiyesi DECIMAL(10, 2) DEFAULT 0,
                     kapanis_bakiyesi DECIMAL(10, 2),
+                    kapanis_zamani TIMESTAMP,
+                    kapanis_nakit DECIMAL(10, 2) DEFAULT 0,
+                    kapanis_kart DECIMAL(10, 2) DEFAULT 0,
                     durum TEXT DEFAULT 'acik'
                 )
             """)
+            cursor.execute("ALTER TABLE vardiyalar ADD COLUMN IF NOT EXISTS kasiyer TEXT")
+            cursor.execute("ALTER TABLE vardiyalar ADD COLUMN IF NOT EXISTS acilis_zamani TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+            cursor.execute("ALTER TABLE vardiyalar ADD COLUMN IF NOT EXISTS kasiyer_adi TEXT")
+            cursor.execute("ALTER TABLE vardiyalar ADD COLUMN IF NOT EXISTS acilma_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+            cursor.execute("ALTER TABLE vardiyalar ADD COLUMN IF NOT EXISTS kapanma_tarihi TIMESTAMP")
+            cursor.execute("ALTER TABLE vardiyalar ADD COLUMN IF NOT EXISTS acilis_bakiyesi DECIMAL(10, 2) DEFAULT 0")
+            cursor.execute("ALTER TABLE vardiyalar ADD COLUMN IF NOT EXISTS kapanis_bakiyesi DECIMAL(10, 2)")
+            cursor.execute("ALTER TABLE vardiyalar ADD COLUMN IF NOT EXISTS kapanis_zamani TIMESTAMP")
+            cursor.execute("ALTER TABLE vardiyalar ADD COLUMN IF NOT EXISTS kapanis_nakit DECIMAL(10, 2) DEFAULT 0")
+            cursor.execute("ALTER TABLE vardiyalar ADD COLUMN IF NOT EXISTS kapanis_kart DECIMAL(10, 2) DEFAULT 0")
+            cursor.execute("ALTER TABLE vardiyalar ADD COLUMN IF NOT EXISTS durum TEXT DEFAULT 'acik'")
 
             # KURYELER VE TESLİMATLAR
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS kurye_firmalari (
+                    id SERIAL PRIMARY KEY,
+                    ad TEXT NOT NULL UNIQUE,
+                    api_key TEXT,
+                    ayarlar JSONB DEFAULT '{}'::jsonb,
+                    aktif BOOLEAN DEFAULT TRUE,
+                    olusturma_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS kuryeler (
                     id SERIAL PRIMARY KEY,
                     ad TEXT NOT NULL,
                     telefon TEXT,
+                    plaka TEXT,
+                    firma_id INTEGER,
+                    aktif BOOLEAN DEFAULT TRUE,
                     durum TEXT DEFAULT 'musait'
                 )
             """)
+            cursor.execute("ALTER TABLE kuryeler ADD COLUMN IF NOT EXISTS plaka TEXT")
+            cursor.execute("ALTER TABLE kuryeler ADD COLUMN IF NOT EXISTS firma_id INTEGER")
+            cursor.execute("ALTER TABLE kuryeler ADD COLUMN IF NOT EXISTS aktif BOOLEAN DEFAULT TRUE")
+            cursor.execute("ALTER TABLE kuryeler ADD COLUMN IF NOT EXISTS durum TEXT DEFAULT 'musait'")
 
             # PUBLIC QR NONCES (Replay attack protection)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS public_qr_nonces (
                     nonce TEXT PRIMARY KEY,
-                    expires_at TIMESTAMP NOT NULL
+                    table_name TEXT,
+                    shift_id INTEGER,
+                    expires_at TIMESTAMP NOT NULL,
+                    used_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            cursor.execute("ALTER TABLE public_qr_nonces ADD COLUMN IF NOT EXISTS table_name TEXT")
+            cursor.execute("ALTER TABLE public_qr_nonces ADD COLUMN IF NOT EXISTS shift_id INTEGER")
+            cursor.execute("ALTER TABLE public_qr_nonces ADD COLUMN IF NOT EXISTS used_at TIMESTAMP")
+            cursor.execute("ALTER TABLE public_qr_nonces ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
 
             # PUBLIC TABLE SESSIONS
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS public_table_sessions (
-                    session_token TEXT PRIMARY KEY,
+                    id TEXT PRIMARY KEY,
+                    session_token TEXT UNIQUE,
                     table_name TEXT NOT NULL,
                     shift_id INTEGER,
+                    verify_method TEXT,
+                    device_fingerprint TEXT,
+                    ip TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     expires_at TIMESTAMP NOT NULL,
                     status TEXT DEFAULT 'active'
+                )
+            """)
+            cursor.execute("ALTER TABLE public_table_sessions ADD COLUMN IF NOT EXISTS id TEXT")
+            cursor.execute("ALTER TABLE public_table_sessions ADD COLUMN IF NOT EXISTS session_token TEXT")
+            cursor.execute("ALTER TABLE public_table_sessions ADD COLUMN IF NOT EXISTS verify_method TEXT")
+            cursor.execute("ALTER TABLE public_table_sessions ADD COLUMN IF NOT EXISTS device_fingerprint TEXT")
+            cursor.execute("ALTER TABLE public_table_sessions ADD COLUMN IF NOT EXISTS ip TEXT")
+            cursor.execute("""
+                UPDATE public_table_sessions
+                SET id = session_token
+                WHERE id IS NULL AND session_token IS NOT NULL
+            """)
+
+            # NFC TABLE TAGS
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS table_nfc_tags (
+                    table_name TEXT PRIMARY KEY,
+                    tag_uid_hash TEXT NOT NULL,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
 
@@ -201,22 +298,30 @@ class Database:
                     id SERIAL PRIMARY KEY,
                     personel_adi TEXT NOT NULL,
                     rol TEXT DEFAULT 'garson',
+                    tarih DATE DEFAULT CURRENT_DATE,
                     giris_saati TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     cikis_saati TIMESTAMP,
+                    toplam_dakika INTEGER DEFAULT 0,
                     notlar TEXT
                 )
             """)
+            cursor.execute("ALTER TABLE puantaj ADD COLUMN IF NOT EXISTS tarih DATE DEFAULT CURRENT_DATE")
+            cursor.execute("ALTER TABLE puantaj ADD COLUMN IF NOT EXISTS toplam_dakika INTEGER DEFAULT 0")
 
             # İNDEKSLER
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_cari_hareketler_cari ON cari_hareketler(cari_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_menu_kategori ON menu(kategori)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_vardiyalar_durum ON vardiyalar(durum)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_public_qr_nonces_exp ON public_qr_nonces(expires_at)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_public_qr_nonces_used ON public_qr_nonces(used_at)")
+            cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_public_sessions_id_unique ON public_table_sessions(id) WHERE id IS NOT NULL")
+            cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_public_sessions_token_unique ON public_table_sessions(session_token) WHERE session_token IS NOT NULL")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_public_sessions_table ON public_table_sessions(table_name)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_public_sessions_shift ON public_table_sessions(shift_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_public_sessions_status_exp ON public_table_sessions(status, expires_at)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_puantaj_tarih ON puantaj(tarih)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_puantaj_personel ON puantaj(personel_adi)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_kuryeler_firma ON kuryeler(firma_id)")
 
             # ONLINE SİPARİŞLER TABLOSU
             cursor.execute("""
@@ -277,7 +382,7 @@ class Database:
                     sale.get('fiyat'),
                     sale.get('odeme', 'Nakit'),
                     sale.get('tip', 'normal'),
-                    sale.get('Tarih_Saat', datetime.now()),
+                    self._normalize_timestamp(sale.get('Tarih_Saat')),
                     sale.get('masa'),
                     sale.get('terminal_id'),
                     sale.get('vardiya_id')
@@ -306,7 +411,8 @@ class Database:
                 SELECT 
                     odeme,
                     tip,
-                    SUM(fiyat * adet) as toplam,
+                    SUM(CASE WHEN COALESCE(tip, 'normal') = 'ikram' THEN 0 ELSE fiyat * adet END) as toplam,
+                    SUM(CASE WHEN COALESCE(tip, 'normal') = 'ikram' THEN fiyat * adet ELSE 0 END) as ikram_toplam,
                     COUNT(*) as adet
                 FROM satislar
                 WHERE DATE(tarih_saat) = %s
@@ -501,11 +607,25 @@ class Database:
                         oran_gt = float(parts[5]) if len(parts) > 5 else 0
                         oran_mg = float(parts[6]) if len(parts) > 6 else 0
                         image_url = parts[7].strip() if len(parts) > 7 else ""
+                        visible_raw = parts[8].strip().lower() if len(parts) > 8 else "1"
+                        menu_visible = visible_raw not in ("0", "false", "hayir", "hayır", "no", "off")
 
                         cursor.execute("""
-                            INSERT INTO menu (kategori, urun_adi, fiyat, sira, oran_ys, oran_ty, oran_gt, oran_mg, image_url)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        """, (kategori.strip(), urun_adi.strip(), float(fiyat.strip()), sira, oran_ys, oran_ty, oran_gt, oran_mg, image_url))
+                            INSERT INTO menu
+                                (kategori, urun_adi, fiyat, sira, oran_ys, oran_ty, oran_gt, oran_mg, image_url, menu_visible)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """, (
+                            kategori.strip(),
+                            urun_adi.strip(),
+                            float(fiyat.strip()),
+                            sira,
+                            oran_ys,
+                            oran_ty,
+                            oran_gt,
+                            oran_mg,
+                            image_url,
+                            menu_visible
+                        ))
                         sira += 1
             
             print(f"✓ {sira} ürün menu.txt'den yüklendi")
@@ -513,7 +633,11 @@ class Database:
     def get_menu_by_category(self):
         """Kategoriye göre menüyü getir (dictionary)"""
         with self.get_cursor() as cursor:
-            cursor.execute("SELECT kategori, urun_adi, fiyat, oran_ys, oran_ty, oran_gt, oran_mg, image_url FROM menu ORDER BY sira")
+            cursor.execute("""
+                SELECT kategori, urun_adi, fiyat, oran_ys, oran_ty, oran_gt, oran_mg, image_url, menu_visible
+                FROM menu
+                ORDER BY sira
+            """)
             rows = cursor.fetchall()
             
             menu_dict = {}
@@ -528,7 +652,8 @@ class Database:
                     float(row.get('oran_ty', 0)),
                     float(row.get('oran_gt', 0)),
                     float(row.get('oran_mg', 0)),
-                    (row.get('image_url') or "")
+                    (row.get('image_url') or ""),
+                    bool(row.get('menu_visible', True))
                 ])
             
             return menu_dict
@@ -536,13 +661,18 @@ class Database:
     def save_menu_to_file(self, menu_file="menu.txt"):
         """Menüyü menu.txt dosyasına kaydet"""
         with self.get_cursor() as cursor:
-            cursor.execute("SELECT kategori, urun_adi, fiyat, oran_ys, oran_ty, oran_gt, oran_mg, image_url FROM menu ORDER BY sira")
+            cursor.execute("""
+                SELECT kategori, urun_adi, fiyat, oran_ys, oran_ty, oran_gt, oran_mg, image_url, menu_visible
+                FROM menu
+                ORDER BY sira
+            """)
             rows = cursor.fetchall()
             
             with open(menu_file, "w", encoding="utf-8") as f:
                 for row in rows:
                     image_url = (row.get('image_url') or '').replace(';', '')
-                    line = f"{row['kategori']};{row['urun_adi']};{row['fiyat']};{row['oran_ys']};{row['oran_ty']};{row['oran_gt']};{row['oran_mg']};{image_url}\n"
+                    menu_visible = "1" if row.get('menu_visible', True) else "0"
+                    line = f"{row['kategori']};{row['urun_adi']};{row['fiyat']};{row['oran_ys']};{row['oran_ty']};{row['oran_gt']};{row['oran_mg']};{image_url};{menu_visible}\n"
                     f.write(line)
 
     # ==================== KASA VE VARDIYA İŞLEMLERİ ====================
@@ -606,6 +736,7 @@ class Database:
                     SUM(fiyat * adet) as toplam
                 FROM satislar
                 WHERE vardiya_id = %s
+                  AND COALESCE(tip, 'normal') <> 'ikram'
                 GROUP BY odeme
             """, (shift_id,))
             return cursor.fetchall()
@@ -661,13 +792,16 @@ class Database:
         with self.get_cursor() as cursor:
             cursor.execute("""
                 INSERT INTO public_table_sessions
-                    (id, table_name, shift_id, verify_method, device_fingerprint, ip, status, expires_at)
-                VALUES (%s, %s, %s, %s, %s, %s, 'active', %s)
-            """, (session_id, table_name, shift_id, verify_method, device_fingerprint, ip, expires_at))
+                    (id, session_token, table_name, shift_id, verify_method, device_fingerprint, ip, status, expires_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, 'active', %s)
+            """, (session_id, session_id, table_name, shift_id, verify_method, device_fingerprint, ip, expires_at))
 
     def get_public_session(self, session_id):
         with self.get_cursor() as cursor:
-            cursor.execute("SELECT * FROM public_table_sessions WHERE id = %s", (session_id,))
+            cursor.execute("""
+                SELECT * FROM public_table_sessions
+                WHERE id = %s OR session_token = %s
+            """, (session_id, session_id))
             return cursor.fetchone()
 
     def update_public_session_expiry(self, session_id, expires_at):
@@ -675,8 +809,8 @@ class Database:
             cursor.execute("""
                 UPDATE public_table_sessions
                 SET expires_at = %s
-                WHERE id = %s AND status = 'active'
-            """, (expires_at, session_id))
+                WHERE (id = %s OR session_token = %s) AND status = 'active'
+            """, (expires_at, session_id, session_id))
 
     def revoke_public_sessions_for_table(self, table_name):
         with self.get_cursor() as cursor:

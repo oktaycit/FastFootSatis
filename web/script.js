@@ -7,6 +7,7 @@
 let socket = null;
 let systemInfo = {};
 let menuData = {};
+let portionStock = {};
 let adisyonlar = {};
 let currentMasa = null;
 let currentItems = [];
@@ -14,6 +15,78 @@ let currentTotal = 0;
 let selectedItemIndices = [];
 let isSelectivePayment = false;
 let activeShift = null;
+const PAYMENT_METHODS = ['Nakit', 'Kredi Kartı', 'Açık Hesap'];
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[char]));
+}
+
+function isMenuItemVisible(item) {
+    if (!Array.isArray(item) || item.length <= 7) return true;
+    const value = item[7];
+    if (typeof value === 'boolean') return value;
+    return !['0', 'false', 'hayir', 'hayır', 'no', 'off'].includes(String(value).trim().toLowerCase());
+}
+
+function isComplimentaryItem(item) {
+    return (item?.tip || '') === 'ikram';
+}
+
+function isReadyItem(item) {
+    return item && item.durum === 'hazir';
+}
+
+function isServedItem(item) {
+    return item && item.durum === 'servis_edildi';
+}
+
+function isKitchenCancelableItem(item) {
+    return !item?.durum || item.durum === 'mutfakta';
+}
+
+function getLineTotal(item) {
+    const adet = Number(item?.adet || 0);
+    const fiyat = Number(item?.fiyat || 0);
+    return Math.max(0, adet) * Math.max(0, fiyat);
+}
+
+function getPayableTotal(items = currentItems) {
+    return (items || []).reduce((sum, item) => (
+        isComplimentaryItem(item) ? sum : sum + getLineTotal(item)
+    ), 0);
+}
+
+function getComplimentaryTotal(items = currentItems) {
+    return (items || []).reduce((sum, item) => (
+        isComplimentaryItem(item) ? sum + getLineTotal(item) : sum
+    ), 0);
+}
+
+function refreshCurrentTotal() {
+    currentTotal = getPayableTotal(currentItems);
+}
+
+function normalizePaymentMethod(value) {
+    const normalized = String(value || '').trim().toLocaleLowerCase('tr-TR');
+    if (PAYMENT_METHODS.includes(value)) return value;
+    if (normalized === 'kart' || normalized === 'kredi karti' || normalized === 'kredi kartı') {
+        return 'Kredi Kartı';
+    }
+    if (normalized === 'cari' || normalized === 'acik hesap' || normalized === 'açık hesap') {
+        return 'Açık Hesap';
+    }
+    return 'Nakit';
+}
+
+function getDefaultPaymentMethod() {
+    return normalizePaymentMethod(systemInfo.default_payment_method || 'Nakit');
+}
 
 // DOM Elements
 const elements = {
@@ -29,6 +102,7 @@ const elements = {
     currentMasaLabel: null,
     orderList: null,
     totalAmount: null,
+    complimentaryAmount: null,
     footerIp: null,
     footerTerminal: null,
 
@@ -56,6 +130,9 @@ const elements = {
     btnCancelPayment: null,
     btnFinalizePayment: null,
     btnPaySelected: null,
+    btnCompSelected: null,
+    btnUncompSelected: null,
+    btnCloseCompBill: null,
     splitButtonsArea: null,
     selectedCount: null,
     // Caller ID Popup
@@ -135,6 +212,7 @@ function connectToServer() {
     // Data events
     socket.on('initial_data', onInitialData);
     socket.on('system_info', onSystemInfo);
+    socket.on('system_update', onSystemUpdate);
     socket.on('adisyonlar_update', onAdisyonlarUpdate);
     socket.on('masa_selected', onMasaSelected);
     socket.on('masa_update', onMasaUpdate);
@@ -144,6 +222,7 @@ function connectToServer() {
     socket.on('error', onError);
     socket.on('new_online_order', onNewOnlineOrder);
     socket.on('vardiya_update', onVardiyaUpdate);
+    socket.on('portion_stock_update', onPortionStockUpdate);
 
     // New: Order ready notification
     socket.on('order_ready', (data) => {
@@ -178,20 +257,32 @@ function showOrderReadyNotification(data) {
     }
 }
 
-function onConnect() {
-    console.log('✅ Connected to server');
-    updateConnectionStatus(true);
-
-    // Kasa ID'sini bildir
+function getSelectedKasaId() {
     let kasaId = localStorage.getItem('kasa_id');
     if (!kasaId) {
-        // Varsayılan kasa ID'si ata (Mac/Demo için önemli)
         kasaId = "1";
         localStorage.setItem('kasa_id', kasaId);
         localStorage.setItem('kasa_ad', 'Kasa 1');
         console.log('📟 Default Kasa set: 1');
     }
-    socket.emit('set_kasa', { kasa_id: parseInt(kasaId) });
+    return parseInt(kasaId, 10);
+}
+
+function syncSelectedKasa() {
+    if (!socket || !socket.connected) return;
+
+    const kasaId = getSelectedKasaId();
+    if (Number.isFinite(kasaId) && kasaId > 0) {
+        socket.emit('set_kasa', { kasa_id: kasaId });
+    }
+}
+
+function onConnect() {
+    console.log('✅ Connected to server');
+    updateConnectionStatus(true);
+
+    // Kasa ID'sini bildir
+    syncSelectedKasa();
 }
 
 function onDisconnect() {
@@ -212,8 +303,26 @@ function onError(error) {
 
 function onSystemInfo(data) {
     console.log('📊 System info update:', data);
-    systemInfo = data;
+    systemInfo = data || {};
     updateSystemInfo();
+    renderTables();
+}
+
+function onSystemUpdate(data) {
+    console.log('📊 System update:', data);
+    if (!data || !hasSystemLayoutPayload(data)) return;
+
+    systemInfo = { ...systemInfo, ...data };
+    updateSystemInfo();
+    renderTables();
+}
+
+function hasSystemLayoutPayload(data) {
+    return Object.prototype.hasOwnProperty.call(data, 'masa_sayisi')
+        || Object.prototype.hasOwnProperty.call(data, 'paket_sayisi')
+        || Object.prototype.hasOwnProperty.call(data, 'salons')
+        || Object.prototype.hasOwnProperty.call(data, 'company_name')
+        || Object.prototype.hasOwnProperty.call(data, 'terminal_id');
 }
 
 function onInitialData(data) {
@@ -222,8 +331,9 @@ function onInitialData(data) {
     // Store data
     systemInfo = data.system || {};
     menuData = data.menu || {};
+    portionStock = data.portion_stock || {};
     adisyonlar = data.adisyonlar || {};
-    activeShift = data.active_shift || null;
+    activeShift = data.active_shift || activeShift || null;
 
     // Check for terminal role override in URL or localStorage
     const urlParams = new URLSearchParams(window.location.search);
@@ -241,6 +351,7 @@ function onInitialData(data) {
     renderMenu();
     renderTables();
     updateVardiyaUI(); // İlk yüklemede vardiya durumunu yansıt
+    syncSelectedKasa(); // Sunucudan kasa secimine gore guncel vardiyayi tekrar iste
 
     // Apply role restrictions
     if (isTerminal) {
@@ -289,7 +400,7 @@ function onMasaSelected(data) {
     console.log('✅ Masa selected:', data);
     currentMasa = data.masa;
     currentItems = data.items || [];
-    currentTotal = data.total || 0;
+    currentTotal = Number(data.total ?? getPayableTotal(currentItems)) || 0;
 
     updateOrderDisplay();
     updateCourierArea();
@@ -304,7 +415,7 @@ function onMasaUpdate(data) {
     // If this is our current masa, update display
     if (data.masa === currentMasa) {
         currentItems = data.items || [];
-        currentTotal = data.total || 0;
+        currentTotal = Number(data.total ?? getPayableTotal(currentItems)) || 0;
         updateOrderDisplay();
     }
 
@@ -315,8 +426,10 @@ function onMasaUpdate(data) {
 function onPaymentCompleted(data) {
     console.log('💰 Payment completed:', data);
 
-    // Clear adisyon
-    adisyonlar[data.masa] = [];
+    // Clear adisyon only when the whole account is closed.
+    if (!data.is_partial) {
+        adisyonlar[data.masa] = [];
+    }
 
     // If this is our current masa, clear display ONLY IF NOT partial
     if (data.masa === currentMasa && !data.is_partial) {
@@ -349,7 +462,7 @@ function onAdisyonlarUpdate(data) {
     // If we have a selected masa, update its display
     if (currentMasa) {
         currentItems = adisyonlar[currentMasa] || [];
-        currentTotal = currentItems.reduce((sum, item) => sum + (item.adet * item.fiyat), 0);
+        refreshCurrentTotal();
         updateOrderDisplay();
     }
 }
@@ -402,6 +515,36 @@ function onVardiyaUpdate(data) {
     console.log('⏳ Vardiya update:', data);
     activeShift = data;
     updateVardiyaUI();
+}
+
+function onPortionStockUpdate(data) {
+    portionStock = data.portion_stock || {};
+    renderMenu();
+}
+
+function getPortionStock(urun) {
+    const stockName = getPortionStockName(urun);
+    return portionStock[stockName] || portionStock[String(urun || '').trim()] || null;
+}
+
+function getPortionStockName(urun) {
+    return String(urun || '').trim().replace(/^(tam|yarım|yarim)\s+porsiyon\s+/i, '').trim();
+}
+
+function formatPortionAmount(value) {
+    const amount = Number(value || 0);
+    return Number.isInteger(amount) ? String(amount) : String(amount).replace('.', ',');
+}
+
+function canAddPortionItem(urun) {
+    const stock = getPortionStock(urun);
+    if (!stock || !stock.tracked) return true;
+    const remaining = Number(stock.kalan || 0);
+    if (remaining <= 0) {
+        showNotification(`${stock.urun || getPortionStockName(urun)} tükendi`, 'warning');
+        return false;
+    }
+    return true;
 }
 
 function updateVardiyaUI() {
@@ -480,6 +623,9 @@ function renderMenu() {
     elements.menuContainer.innerHTML = '';
 
     Object.keys(menuData).forEach((category, index) => {
+        const visibleItems = (menuData[category] || []).filter(isMenuItemVisible);
+        if (!visibleItems.length) return;
+
         const categoryDiv = document.createElement('div');
         categoryDiv.className = 'menu-category';
 
@@ -492,18 +638,28 @@ function renderMenu() {
         const itemsDiv = document.createElement('div');
         itemsDiv.className = 'menu-items';
 
-        menuData[category].forEach(item => {
+        visibleItems.forEach(item => {
             const [name, price] = item;
+            const stock = getPortionStock(name);
+            const tracked = !!(stock && stock.tracked);
+            const remaining = tracked ? Number(stock.kalan || 0) : null;
+            const soldOut = tracked && remaining <= 0;
             const itemBtn = document.createElement('button');
-            itemBtn.className = 'menu-item';
+            itemBtn.className = 'menu-item' + (soldOut ? ' sold-out' : (tracked && remaining <= 5 ? ' low-stock' : ''));
             itemBtn.style.background = `linear-gradient(135deg, ${getCategoryColor(index)}, ${darkenColor(getCategoryColor(index))})`;
 
             itemBtn.innerHTML = `
-                <span class="item-name">${name}</span>
+                <span class="item-name">${escapeHtml(name)}${tracked ? `<span class="item-stock">${soldOut ? 'Tükendi' : 'Kalan: ' + formatPortionAmount(remaining)}</span>` : ''}</span>
                 <span class="item-price">${price.toFixed(2)} TL</span>
             `;
 
-            itemBtn.onclick = () => addItemToOrder(name, price);
+            itemBtn.onclick = () => {
+                if (soldOut) {
+                    showNotification(`${stock.urun || getPortionStockName(name)} tükendi`, 'warning');
+                    return;
+                }
+                addItemToOrder(name, price);
+            };
             itemsDiv.appendChild(itemBtn);
         });
 
@@ -513,56 +669,70 @@ function renderMenu() {
 }
 
 function renderTables() {
+    if (!elements.paketSection || !elements.paketGrid || !elements.masaSection) return;
+
+    const paketCount = Number(systemInfo.paket_sayisi || 0);
+    const masaCount = Number(systemInfo.masa_sayisi || 0);
+    const salons = Array.isArray(systemInfo.salons) ? systemInfo.salons : [];
+
     // Paket section
-    if (systemInfo.paket_sayisi > 0) {
+    if (paketCount > 0) {
         elements.paketSection.style.display = 'block';
         elements.paketGrid.innerHTML = '';
 
-        for (let i = 1; i <= systemInfo.paket_sayisi; i++) {
+        for (let i = 1; i <= paketCount; i++) {
             const masa = `Paket ${i}`;
             const btn = createTableButton(masa, true);
             elements.paketGrid.appendChild(btn);
         }
+    } else {
+        elements.paketSection.style.display = 'none';
+        elements.paketGrid.innerHTML = '';
     }
 
     // Salon section (Grouped or Flat)
-    if (systemInfo.salons && systemInfo.salons.length > 0) {
+    elements.masaSection.innerHTML = '';
+
+    if (salons.length > 0) {
         elements.masaSection.style.display = 'block';
-        elements.masaGrid.innerHTML = '';
 
-        // Remove individual table section if using salons
-        elements.masaSection.innerHTML = '';
-
-        systemInfo.salons.forEach(salon => {
-            const salonDiv = document.createElement('div');
-            salonDiv.className = 'tables-section';
-            salonDiv.style.padding = '10px 0';
-
+        salons.forEach(salon => {
             const title = document.createElement('h3');
             title.className = 'section-title';
             title.textContent = `🪑 ${salon.name}`;
-            salonDiv.appendChild(title);
+            elements.masaSection.appendChild(title);
 
             const grid = document.createElement('div');
             grid.className = 'tables-grid';
 
-            salon.tables.forEach(table => {
+            (salon.tables || []).forEach(table => {
                 const btn = createTableButton(table, false);
                 grid.appendChild(btn);
             });
 
-            salonDiv.appendChild(grid);
-            elements.masaSection.appendChild(salonDiv);
+            elements.masaSection.appendChild(grid);
         });
-    } else if (systemInfo.masa_sayisi > 0) {
+    } else if (masaCount > 0) {
         elements.masaSection.style.display = 'block';
-        elements.masaGrid.innerHTML = '';
 
-        for (let i = 1; i <= systemInfo.masa_sayisi; i++) {
+        const title = document.createElement('h3');
+        title.className = 'section-title';
+        title.textContent = '🪑 Salon';
+        elements.masaSection.appendChild(title);
+
+        const grid = document.createElement('div');
+        grid.className = 'tables-grid';
+        grid.id = 'masaGrid';
+        elements.masaGrid = grid;
+        elements.masaSection.appendChild(grid);
+
+        for (let i = 1; i <= masaCount; i++) {
             const masa = `Masa ${i}`;
             const btn = createTableButton(masa, false);
-            elements.masaGrid.appendChild(btn);
+            grid.appendChild(btn);
         }
+    } else {
+        elements.masaSection.style.display = 'none';
     }
 }
 
@@ -576,11 +746,12 @@ function createTableButton(masa, isPaket) {
     }
 
     const items = adisyonlar[masa] || [];
-    const total = items.reduce((sum, item) => sum + (item.adet * item.fiyat), 0);
+    const total = getPayableTotal(items);
+    const ikramTotal = getComplimentaryTotal(items);
 
-    if (total > 0) {
+    if (items.length > 0) {
         btn.classList.add('occupied');
-        btn.innerHTML = `<div>${masa}</div><div>${total.toFixed(2)} TL</div>`;
+        btn.innerHTML = `<div>${masa}</div><div>${total.toFixed(2)} TL</div>${ikramTotal > 0 ? `<small>İkram ${ikramTotal.toFixed(2)}</small>` : ''}`;
     } else {
         btn.textContent = masa;
     }
@@ -597,11 +768,12 @@ function updateTableButton(masa) {
     if (!btn) return;
 
     const items = adisyonlar[masa] || [];
-    const total = items.reduce((sum, item) => sum + (item.adet * item.fiyat), 0);
+    const total = getPayableTotal(items);
+    const ikramTotal = getComplimentaryTotal(items);
 
-    if (total > 0) {
+    if (items.length > 0) {
         btn.classList.add('occupied');
-        btn.innerHTML = `<div>${masa}</div><div>${total.toFixed(2)} TL</div>`;
+        btn.innerHTML = `<div>${masa}</div><div>${total.toFixed(2)} TL</div>${ikramTotal > 0 ? `<small>İkram ${ikramTotal.toFixed(2)}</small>` : ''}`;
     } else {
         btn.classList.remove('occupied');
         btn.textContent = masa;
@@ -638,6 +810,8 @@ function selectMasa(masa) {
 function updateOrderDisplay() {
     if (!elements.orderList) return;
 
+    refreshCurrentTotal();
+
     if (currentItems.length === 0) {
         elements.orderList.innerHTML = '<div class="empty-state"><p>Sipariş yok</p></div>';
     } else {
@@ -647,21 +821,32 @@ function updateOrderDisplay() {
             const orderItem = document.createElement('div');
             orderItem.className = 'order-item';
 
-            const itemTotal = item.adet * item.fiyat;
-            const isIkram = item.tip === 'ikram';
-            const isHazir = item.durum === 'hazir';
+            const listTotal = getLineTotal(item);
+            const isIkram = isComplimentaryItem(item);
+            const itemTotal = isIkram ? 0 : listTotal;
+            const isHazir = isReadyItem(item);
+            const isServed = isServedItem(item);
+            const statusBadge = isHazir
+                ? '<span style="color: #2ecc71; font-weight: bold; font-size: 10px;">[HAZIR] </span>'
+                : (isServed ? '<span style="color: #7f8c8d; font-weight: bold; font-size: 10px;">[SERVİS EDİLDİ] </span>' : '');
+            const itemNote = item.not || '';
+
+            if (isIkram) {
+                orderItem.classList.add('ikram');
+            }
 
             orderItem.innerHTML = `
                 <div class="order-item-info" style="flex-grow: 1;">
                     <div class="order-item-name">
-                        ${isHazir ? '<span style="color: #2ecc71; font-weight: bold; font-size: 10px;">[HAZIR] </span>' : ''}
+                        ${statusBadge}
                         ${item.adet}x ${item.urun}${isIkram ? ' (İKRAM)' : ''}
                     </div>
                     <div style="font-size: 10px; color: #777;">${item.garson || 'Bilinmiyor'} - ${item.saat || ''}</div>
+                    ${itemNote ? `<div style="font-size: 11px; color: #b7791f; margin-top: 3px;">Not: ${escapeHtml(itemNote)}</div>` : ''}
                 </div>
                 <div style="display: flex; align-items: center; gap: 10px;">
-                    <div class="order-item-price">${itemTotal.toFixed(2)} TL</div>
-                    ${!isHazir && item.uid ? `
+                    <div class="order-item-price">${isIkram ? `İKRAM<br><small>${listTotal.toFixed(2)} TL</small>` : `${itemTotal.toFixed(2)} TL`}</div>
+                    ${isKitchenCancelableItem(item) && item.uid ? `
                         <button class="btn-cancel-small" onclick="cancelItem('${item.uid}', event)" 
                                 style="background: #e74c3c; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 10px; cursor: pointer;">
                             İPTAL
@@ -688,6 +873,11 @@ function updateOrderDisplay() {
     if (elements.totalAmount) {
         elements.totalAmount.textContent = `${currentTotal.toFixed(2)} TL`;
     }
+    if (elements.complimentaryAmount) {
+        const ikramTotal = getComplimentaryTotal();
+        elements.complimentaryAmount.textContent = ikramTotal > 0 ? `İkram: ${ikramTotal.toFixed(2)} TL` : '';
+    }
+    updateComplimentaryCloseButton();
 }
 
 /**
@@ -696,6 +886,9 @@ function updateOrderDisplay() {
 function addItemToOrder(urun, fiyat) {
     if (!currentMasa) {
         showNotification('Lütfen önce masa seçiniz!', 'warning');
+        return;
+    }
+    if (!canAddPortionItem(urun)) {
         return;
     }
 
@@ -818,14 +1011,91 @@ function toggleItemSelection(index) {
 }
 
 function updateSplitButtons() {
+    updateComplimentaryCloseButton();
     if (!elements.splitButtonsArea) return;
 
     if (selectedItemIndices.length > 0) {
+        const selectedItems = currentItems.filter((_, i) => selectedItemIndices.includes(i));
+        const selectedPayable = getPayableTotal(selectedItems);
+        const hasNormal = selectedItems.some(item => !isComplimentaryItem(item));
+        const hasIkram = selectedItems.some(isComplimentaryItem);
+
         elements.splitButtonsArea.style.display = 'block';
         elements.selectedCount.textContent = selectedItemIndices.length;
+        if (elements.btnPaySelected) {
+            elements.btnPaySelected.style.display = selectedPayable > 0 ? 'block' : 'none';
+        }
+        if (elements.btnCompSelected) {
+            elements.btnCompSelected.style.display = hasNormal ? 'block' : 'none';
+        }
+        if (elements.btnUncompSelected) {
+            elements.btnUncompSelected.style.display = hasIkram ? 'block' : 'none';
+        }
     } else {
         elements.splitButtonsArea.style.display = 'none';
     }
+}
+
+function updateComplimentaryCloseButton() {
+    if (!elements.btnCloseCompBill) return;
+
+    const canCloseAsComp = currentItems.length > 0 && currentTotal <= 0.01 && getComplimentaryTotal() > 0;
+    elements.btnCloseCompBill.style.display = canCloseAsComp ? 'block' : 'none';
+}
+
+function setSelectedComplimentary(ikram) {
+    if (!currentMasa) {
+        showNotification('Lütfen önce masa seçiniz!', 'warning');
+        return;
+    }
+    if (selectedItemIndices.length === 0) {
+        showNotification('Lütfen ürün seçiniz!', 'warning');
+        return;
+    }
+
+    const currentRole = localStorage.getItem('terminal_role') || 'kasa';
+    if (currentRole === 'terminal') {
+        showNotification('Bu terminal yetkili değildir!', 'error');
+        return;
+    }
+
+    socket.emit('set_item_comp', {
+        masa: currentMasa,
+        item_indices: selectedItemIndices,
+        ikram,
+        role: currentRole
+    });
+
+    selectedItemIndices = [];
+    updateOrderDisplay();
+    updateSplitButtons();
+}
+
+function closeComplimentaryBill() {
+    if (!currentMasa) {
+        showNotification('Lütfen önce masa seçiniz!', 'warning');
+        return;
+    }
+    if (!checkVardiya()) return;
+    if (currentItems.length === 0) {
+        showNotification('Sipariş listesi boş!', 'warning');
+        return;
+    }
+    if (currentTotal > 0.01) {
+        showNotification('Ücretli ürünler var. Önce tahsil edin veya ikram olarak işaretleyin.', 'warning');
+        return;
+    }
+
+    const ikramTotal = getComplimentaryTotal();
+    if (!confirm(`Bu hesap ${ikramTotal.toFixed(2)} TL ikram olarak kapatılacak. Onaylıyor musunuz?`)) {
+        return;
+    }
+
+    const currentRole = localStorage.getItem('terminal_role') || 'kasa';
+    socket.emit('close_complimentary_bill', {
+        masa: currentMasa,
+        role: currentRole
+    });
 }
 
 /**
@@ -856,9 +1126,7 @@ function processPayment(type) {
  */
 function getCurrentPaymentTotal() {
     if (isSelectivePayment) {
-        return currentItems
-            .filter((_, i) => selectedItemIndices.includes(i))
-            .reduce((sum, item) => sum + (item.adet * item.fiyat), 0);
+        return getPayableTotal(currentItems.filter((_, i) => selectedItemIndices.includes(i)));
     }
     return currentTotal;
 }
@@ -879,22 +1147,29 @@ function openPaymentModal(prefillType = null, isSelective = false) {
     }
 
     isSelectivePayment = isSelective;
-    const itemsTotal = itemsToPay.reduce((sum, item) => sum + (item.adet * item.fiyat), 0);
+    const itemsTotal = getPayableTotal(itemsToPay);
+
+    if (itemsTotal <= 0) {
+        showNotification('Seçimde tahsil edilecek ürün yok. İkram hesabı kapatmak için İkram Kapat kullanın.', 'warning');
+        return;
+    }
+
+    const selectedPaymentMethod = normalizePaymentMethod(prefillType || getDefaultPaymentMethod());
 
     // Reset inputs
     elements.paymentNakit.value = '';
     elements.paymentKart.value = '';
     elements.paymentCari.value = '';
 
-    // Pre-fill if type provided
-    if (prefillType === 'Nakit') elements.paymentNakit.value = itemsTotal.toFixed(2);
-    if (prefillType === 'Kredi Kartı') elements.paymentKart.value = itemsTotal.toFixed(2);
-    if (prefillType === 'Açık Hesap') elements.paymentCari.value = itemsTotal.toFixed(2);
+    // Pre-fill using the selected/default payment method
+    if (selectedPaymentMethod === 'Nakit') elements.paymentNakit.value = itemsTotal.toFixed(2);
+    if (selectedPaymentMethod === 'Kredi Kartı') elements.paymentKart.value = itemsTotal.toFixed(2);
+    if (selectedPaymentMethod === 'Açık Hesap') elements.paymentCari.value = itemsTotal.toFixed(2);
 
     elements.customerSearch.value = '';
     elements.selectedCustomer.value = '';
     elements.selectedCustomerDisplay.textContent = 'Henüz müşteri seçilmedi';
-    elements.customerSelectionDiv.style.display = prefillType === 'Açık Hesap' ? 'block' : 'none';
+    elements.customerSelectionDiv.style.display = selectedPaymentMethod === 'Açık Hesap' ? 'block' : 'none';
 
     // Show modal
     elements.paymentModal.style.display = 'block';
@@ -1071,8 +1346,10 @@ function finalizeSplitPayment() {
         return;
     }
 
-    if (Math.abs(total - currentTotal) > 0.01 && !isSelectivePayment) {
-        if (!confirm(`Girilen toplam (${total.toFixed(2)}) sipariş tutarından (${currentTotal.toFixed(2)}) farklı. Devam etmek istiyor musunuz?`)) {
+    const paymentTotal = getCurrentPaymentTotal();
+
+    if (Math.abs(total - paymentTotal) > 0.01 && !isSelectivePayment) {
+        if (!confirm(`Girilen toplam (${total.toFixed(2)}) sipariş tutarından (${paymentTotal.toFixed(2)}) farklı. Devam etmek istiyor musunuz?`)) {
             return;
         }
     }
@@ -1098,9 +1375,15 @@ function finalizeSplitPayment() {
         payload.item_indices = selectedItemIndices;
     }
 
-    if (systemInfo.pos_enabled && kart > 0) {
+    const posType = systemInfo.pos_type || '';
+    const okcBridgeTypes = ['token-bridge', 'beko-token', 'beko-yn-okc'];
+    const shouldWaitForPos = systemInfo.pos_enabled && (
+        kart > 0 || okcBridgeTypes.includes(posType)
+    );
+
+    if (shouldWaitForPos) {
         elements.btnFinalizePayment.disabled = true;
-        elements.btnFinalizePayment.innerHTML = '⏳ POS Bekleniyor...';
+        elements.btnFinalizePayment.innerHTML = '⏳ ÖKC Bekleniyor...';
         socket.emit('finalize_payment', payload);
         // Modal will be closed by onPaymentCompleted upon success
     } else {
@@ -1139,9 +1422,14 @@ function setupEventListeners() {
                 showNotification('Sipariş listesi boş!', 'warning');
                 return;
             }
+            if (currentTotal <= 0.01) {
+                showNotification('Ödenecek tutar yok. Hesabı İkram Kapat ile kapatabilirsiniz.', 'info');
+                return;
+            }
             const isSelective = selectedItemIndices.length > 0;
-            console.log(`💶 btnTotalPayment clicked -> opening modal with Nakit prefill (Selective: ${isSelective})`);
-            openPaymentModal('Nakit', isSelective);
+            const defaultPaymentMethod = getDefaultPaymentMethod();
+            console.log(`💶 btnTotalPayment clicked -> opening modal with ${defaultPaymentMethod} prefill (Selective: ${isSelective})`);
+            openPaymentModal(defaultPaymentMethod, isSelective);
         };
     }
 
@@ -1231,7 +1519,19 @@ function setupEventListeners() {
     }
 
     if (elements.btnPaySelected) {
-        elements.btnPaySelected.onclick = () => openPaymentModal(null, true);
+        elements.btnPaySelected.onclick = () => openPaymentModal(getDefaultPaymentMethod(), true);
+    }
+
+    if (elements.btnCompSelected) {
+        elements.btnCompSelected.onclick = () => setSelectedComplimentary(true);
+    }
+
+    if (elements.btnUncompSelected) {
+        elements.btnUncompSelected.onclick = () => setSelectedComplimentary(false);
+    }
+
+    if (elements.btnCloseCompBill) {
+        elements.btnCloseCompBill.onclick = () => closeComplimentaryBill();
     }
 
 

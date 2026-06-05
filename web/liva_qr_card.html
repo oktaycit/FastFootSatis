@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liva Karekod Kartı</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23d7422f'/%3E%3Ctext x='32' y='43' font-size='36' text-anchor='middle' fill='white' font-family='Arial' font-weight='900'%3EL%3C/text%3E%3C/svg%3E">
+    <style>
+        :root {
+            --brand: #d7422f;
+            --brand-dark: #9f281f;
+            --paper: #fff6ef;
+            --ink: #23252a;
+            --muted: #6e747e;
+            --line: #ead7cd;
+            --radius: 8px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            color: var(--ink);
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+            background: #f2f2f2;
+            display: grid;
+            place-items: center;
+            padding: 24px;
+        }
+
+        .toolbar {
+            position: fixed;
+            top: 14px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            padding: 8px;
+            background: #fff;
+            border: 1px solid #dde1e7;
+            border-radius: var(--radius);
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+        }
+
+        input,
+        button {
+            min-height: 38px;
+            border-radius: var(--radius);
+            font: inherit;
+            font-weight: 800;
+        }
+
+        input {
+            width: 120px;
+            border: 1px solid #d9dde5;
+            padding: 8px 10px;
+            text-transform: uppercase;
+        }
+
+        button {
+            border: 0;
+            padding: 8px 12px;
+            color: #fff;
+            background: var(--brand);
+            cursor: pointer;
+        }
+
+        .card {
+            width: min(760px, 100%);
+            aspect-ratio: 1.72 / 1;
+            display: grid;
+            grid-template-columns: 1fr 0.72fr;
+            gap: 26px;
+            align-items: center;
+            padding: 40px;
+            background:
+                repeating-linear-gradient(-16deg, rgba(215, 66, 47, 0.075) 0 2px, transparent 2px 52px),
+                var(--paper);
+            border: 1px solid var(--line);
+            border-radius: 28px;
+            box-shadow: 0 24px 48px rgba(45, 34, 28, 0.16);
+            overflow: hidden;
+        }
+
+        .qr-zone {
+            display: grid;
+            justify-items: center;
+            gap: 14px;
+        }
+
+        .qr-box {
+            width: min(285px, 72vw);
+            aspect-ratio: 1;
+            display: grid;
+            place-items: center;
+            background: #fff;
+            border: 8px solid #fff;
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+        }
+
+        .qr-box canvas {
+            width: 100% !important;
+            height: 100% !important;
+            display: block;
+        }
+
+        .qr-box img {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .qr-copy {
+            max-width: 330px;
+            text-align: center;
+            color: #151515;
+            font-size: 14px;
+            line-height: 1.25;
+            font-weight: 950;
+            text-transform: uppercase;
+        }
+
+        .brand-zone {
+            display: grid;
+            gap: 18px;
+            justify-items: stretch;
+            align-content: center;
+        }
+
+        .logo {
+            color: var(--brand);
+            font-size: 54px;
+            line-height: 0.88;
+            font-weight: 950;
+            letter-spacing: 0;
+        }
+
+        .logo span {
+            display: block;
+            color: var(--brand-dark);
+            font-size: 16px;
+            letter-spacing: 3px;
+            margin-top: 8px;
+        }
+
+        .table-badge {
+            min-height: 220px;
+            display: grid;
+            place-items: center;
+            color: #fff;
+            background: var(--brand);
+            border-radius: 30px;
+            font-size: 148px;
+            font-weight: 950;
+            line-height: 1;
+            box-shadow: inset 0 -16px 0 rgba(0, 0, 0, 0.06);
+        }
+
+        .url {
+            overflow-wrap: anywhere;
+            color: var(--muted);
+            font-size: 11px;
+            line-height: 1.35;
+            text-align: center;
+        }
+
+        @media (max-width: 720px) {
+            body {
+                padding: 84px 12px 18px;
+            }
+
+            .toolbar {
+                width: calc(100% - 20px);
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+
+            .card {
+                grid-template-columns: 1fr;
+                aspect-ratio: auto;
+                padding: 24px;
+            }
+
+            .brand-zone {
+                order: -1;
+                grid-template-columns: 1fr 130px;
+                align-items: center;
+            }
+
+            .table-badge {
+                min-height: 120px;
+                border-radius: 20px;
+                font-size: 82px;
+            }
+        }
+
+        @media print {
+            @page {
+                size: landscape;
+                margin: 10mm;
+            }
+
+            body {
+                min-height: auto;
+                background: #fff;
+                padding: 0;
+            }
+
+            .toolbar {
+                display: none;
+            }
+
+            .card {
+                width: 100%;
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="toolbar">
+        <input id="tableInput" value="C" aria-label="Masa">
+        <button id="btnApply">Güncelle</button>
+        <button id="btnPrint">Yazdır</button>
+    </div>
+
+    <section class="card">
+        <div class="qr-zone">
+            <div class="qr-box" id="qrBox"></div>
+            <div class="qr-copy">Menü için telefon kamerasıyla karekodu okutunuz</div>
+            <div class="url" id="qrUrl"></div>
+        </div>
+        <div class="brand-zone">
+            <div class="logo">LİVA<span>RESTORAN</span></div>
+            <div class="table-badge" id="tableBadge">C</div>
+        </div>
+    </section>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const tableInput = document.getElementById('tableInput');
+        const tableBadge = document.getElementById('tableBadge');
+        const qrBox = document.getElementById('qrBox');
+        const qrUrl = document.getElementById('qrUrl');
+
+        function normalizeTable(value) {
+            return String(value || 'C').trim().toUpperCase().slice(0, 8) || 'C';
+        }
+
+        function buildMenuUrl(tableName) {
+            const url = new URL('/menu/public', window.location.origin);
+            url.searchParams.set('table_hint', tableName);
+            url.searchParams.set('mode', 'view');
+            return url.toString();
+        }
+
+        function renderQr() {
+            const tableName = normalizeTable(tableInput.value);
+            tableInput.value = tableName;
+            tableBadge.textContent = tableName;
+            const menuUrl = buildMenuUrl(tableName);
+            qrUrl.textContent = menuUrl;
+            qrBox.innerHTML = '';
+            const image = document.createElement('img');
+            const qrEndpoint = new URL('/api/public/menu-qr.svg', window.location.origin);
+            qrEndpoint.searchParams.set('table', tableName);
+            image.src = qrEndpoint.toString();
+            image.alt = `${tableName} masa QR`;
+            qrBox.appendChild(image);
+        }
+
+        tableInput.value = normalizeTable(params.get('table') || params.get('table_hint') || 'C');
+        document.getElementById('btnApply').addEventListener('click', renderQr);
+        document.getElementById('btnPrint').addEventListener('click', () => window.print());
+        tableInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') renderQr();
+        });
+        renderQr();
+    </script>
+</body>
+
+</html>

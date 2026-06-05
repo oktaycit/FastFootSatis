@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tokat Liva Restaurant Menü</title>
+    <link rel="icon"
+        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23e30000'/%3E%3Ctext x='32' y='43' font-size='36' text-anchor='middle' fill='white' font-family='Arial' font-weight='900'%3EL%3C/text%3E%3C/svg%3E">
+    <link rel="stylesheet" href="/tokatliva_menu.css">
+</head>
+
+<body>
+    <header class="topbar">
+        <div class="brand">
+            <img src="https://www.tokatliva.com/image/cache/catalog/liva_kirmizi_logo_3d-600x315h.png"
+                alt="Tokat Liva Restaurant" class="brand-logo">
+            <div>
+                <h1>Tokat Liva Restaurant</h1>
+                <p>Menü</p>
+            </div>
+        </div>
+        <div class="summary">
+            <span id="categorySummary">0 kategori</span>
+            <span id="itemSummary">0 ürün</span>
+        </div>
+    </header>
+
+    <main class="page-shell">
+        <section class="toolbar" aria-label="Menü araçları">
+            <div class="search-wrap">
+                <input id="searchInput" type="search" placeholder="Ürün ara" autocomplete="off">
+            </div>
+            <select id="sortSelect" aria-label="Sıralama">
+                <option value="source">Varsayılan sıra</option>
+                <option value="price_asc">Fiyat artan</option>
+                <option value="price_desc">Fiyat azalan</option>
+                <option value="name_asc">İsim A-Z</option>
+            </select>
+        </section>
+
+        <nav class="tabs" id="categoryTabs" aria-label="Kategoriler"></nav>
+
+        <section class="section-title">
+            <div>
+                <span class="eyebrow" id="sourceLabel">tokatliva.com</span>
+                <h2 id="activeTitle">Menü</h2>
+            </div>
+            <span id="activeCount">0 ürün</span>
+        </section>
+
+        <section class="menu-grid" id="menuGrid" aria-live="polite"></section>
+    </main>
+
+    <script src="/tokatliva_menu.js"></script>
+</body>
+
+</html>
