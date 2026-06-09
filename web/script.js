@@ -16,6 +16,7 @@ let currentTotal = 0;
 let selectedItemIndices = [];
 let isSelectivePayment = false;
 let activeShift = null;
+let cashierOrderEntryOpen = false;
 const PAYMENT_METHODS = ['Nakit', 'Kredi Kartı', 'Açık Hesap'];
 
 function escapeHtml(value) {
@@ -117,7 +118,7 @@ function getTerminalRole() {
 }
 
 function canEnterOrders() {
-    return getTerminalRole() !== 'kasa';
+    return getTerminalRole() !== 'kasa' || cashierOrderEntryOpen;
 }
 
 // DOM Elements
@@ -141,6 +142,7 @@ const elements = {
     // Buttons
     btnPrint: null,
     btnTotalPayment: null,
+    btnToggleOrderEntry: null,
     btnCari: null,
     btnReports: null,
     btnSettings: null,
@@ -395,8 +397,9 @@ function onInitialData(data) {
 }
 
 function applyRoleProfile(role = getTerminalRole()) {
-    document.body.classList.remove('cashier-terminal', 'order-terminal');
+    document.body.classList.remove('cashier-terminal', 'order-terminal', 'cashier-order-entry');
     if (role === 'terminal') {
+        cashierOrderEntryOpen = false;
         applyTerminalRestrictions();
         return;
     }
@@ -416,7 +419,45 @@ function applyCashierProfile() {
     if (elements.terminalId) {
         elements.terminalId.style.color = '';
     }
+    updateCashierOrderEntryUI();
     updateQuickSaleUI();
+}
+
+function updateCashierOrderEntryUI() {
+    const isCashier = getTerminalRole() === 'kasa';
+    const active = isCashier && cashierOrderEntryOpen;
+    document.body.classList.toggle('cashier-order-entry', active);
+
+    if (elements.btnToggleOrderEntry) {
+        elements.btnToggleOrderEntry.style.display = isCashier ? '' : 'none';
+        elements.btnToggleOrderEntry.classList.toggle('is-active', active);
+        elements.btnToggleOrderEntry.setAttribute('aria-pressed', active ? 'true' : 'false');
+        elements.btnToggleOrderEntry.innerHTML = active
+            ? '<span class="action-icon">✕</span><span>Menüyü Kapat</span>'
+            : '<span class="action-icon">🍽️</span><span>Sipariş Gir</span>';
+    }
+
+    const banner = document.getElementById('terminalModeBanner');
+    if (banner && isCashier) {
+        banner.querySelector('strong').textContent = active ? 'KASİYER SİPARİŞ GİRİŞİ' : 'KASA HESAP TERMİNALİ';
+        banner.querySelector('span').textContent = active
+            ? 'Menüden ürün eklemek için masa veya paket seçili olmalı'
+            : 'Sipariş girişi gerektiğinde Sipariş Gir butonunu kullanın';
+    }
+}
+
+function setCashierOrderEntry(open) {
+    cashierOrderEntryOpen = getTerminalRole() === 'kasa' && !!open;
+    renderMenu();
+    updateCashierOrderEntryUI();
+
+    if (cashierOrderEntryOpen && !currentMasa) {
+        showNotification('Sipariş eklemek için önce masa veya paket seçiniz.', 'info');
+    }
+}
+
+function toggleCashierOrderEntry() {
+    setCashierOrderEntry(!cashierOrderEntryOpen);
 }
 
 /**
@@ -431,7 +472,7 @@ function applyTerminalRestrictions() {
     if (paymentButtons) paymentButtons.style.display = 'none';
 
     // Hide management buttons
-    const managementToHide = ['btnCari', 'btnSettings', 'btnTerminals'];
+    const managementToHide = ['btnCari', 'btnSettings', 'btnTerminals', 'btnToggleOrderEntry'];
     managementToHide.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -443,7 +484,7 @@ function applyTerminalRestrictions() {
     document.querySelectorAll('.main-actions, .management-buttons, .extra-modules').forEach(el => {
         el.style.display = 'none';
     });
-    ['btnTransfer', 'btnPrint', 'btnTotalPayment'].forEach(id => {
+    ['btnTransfer', 'btnPrint', 'btnTotalPayment', 'btnToggleOrderEntry'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
     });
@@ -956,7 +997,10 @@ function renderMenu() {
                     showNotification(`${stock.urun || getPortionStockName(name)} tükendi`, 'warning');
                     return;
                 }
-                addItemToOrder(name, price, { category });
+                addItemToOrder(name, price, {
+                    category,
+                    garson: getTerminalRole() === 'kasa' ? 'Kasa' : undefined
+                });
             };
             itemsDiv.appendChild(itemBtn);
         });
@@ -1770,6 +1814,10 @@ function setupEventListeners() {
             }
             socket.emit('print_receipt', { masa: currentMasa });
         };
+    }
+
+    if (elements.btnToggleOrderEntry) {
+        elements.btnToggleOrderEntry.onclick = () => toggleCashierOrderEntry();
     }
 
     if (elements.btnCari) {
