@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 PostgreSQL Veri Tabanı Yönetim Modülü
-FastFootSatış Projesi
+Restoran Projesi
 """
 
 import psycopg2
@@ -97,17 +97,26 @@ class Database:
                 CREATE TABLE IF NOT EXISTS satislar (
                     id SERIAL PRIMARY KEY,
                     urun TEXT NOT NULL,
-                    adet INTEGER NOT NULL,
+                    adet DECIMAL(10, 3) NOT NULL,
                     fiyat DECIMAL(10, 2) NOT NULL,
                     odeme TEXT NOT NULL,
                     tip TEXT DEFAULT 'normal',
                     tarih_saat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     masa TEXT,
                     terminal_id TEXT,
-                    vardiya_id INTEGER
+                    vardiya_id INTEGER,
+                    invoice_pending BOOLEAN DEFAULT FALSE,
+                    invoice_note TEXT
                 )
             """)
             cursor.execute("ALTER TABLE satislar ADD COLUMN IF NOT EXISTS vardiya_id INTEGER")
+            cursor.execute("ALTER TABLE satislar ADD COLUMN IF NOT EXISTS invoice_pending BOOLEAN DEFAULT FALSE")
+            cursor.execute("ALTER TABLE satislar ADD COLUMN IF NOT EXISTS invoice_note TEXT")
+            cursor.execute("""
+                ALTER TABLE satislar
+                ALTER COLUMN adet TYPE DECIMAL(10, 3)
+                USING adet::DECIMAL(10, 3)
+            """)
             
             # CARİ HESAPLAR TABLOSU
             cursor.execute("""
@@ -359,14 +368,14 @@ class Database:
     
     # ==================== SATIŞ İŞLEMLERİ ====================
     
-    def save_sale(self, urun, adet, fiyat, odeme, tip='normal', masa=None, terminal_id=None, vardiya_id=None):
+    def save_sale(self, urun, adet, fiyat, odeme, tip='normal', masa=None, terminal_id=None, vardiya_id=None, invoice_pending=False, invoice_note=None):
         """Satış kaydı ekle"""
         with self.get_cursor() as cursor:
             cursor.execute("""
-                INSERT INTO satislar (urun, adet, fiyat, odeme, tip, masa, terminal_id, vardiya_id)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO satislar (urun, adet, fiyat, odeme, tip, masa, terminal_id, vardiya_id, invoice_pending, invoice_note)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
-            """, (urun, adet, fiyat, odeme, tip, masa, terminal_id, vardiya_id))
+            """, (urun, adet, fiyat, odeme, tip, masa, terminal_id, vardiya_id, bool(invoice_pending), invoice_note))
             return cursor.fetchone()['id']
     
     def save_sales_batch(self, sales_list):
@@ -374,8 +383,8 @@ class Database:
         with self.get_cursor() as cursor:
             for sale in sales_list:
                 cursor.execute("""
-                    INSERT INTO satislar (urun, adet, fiyat, odeme, tip, tarih_saat, masa, terminal_id, vardiya_id)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO satislar (urun, adet, fiyat, odeme, tip, tarih_saat, masa, terminal_id, vardiya_id, invoice_pending, invoice_note)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     sale.get('urun'),
                     sale.get('adet', 1),
@@ -385,7 +394,9 @@ class Database:
                     self._normalize_timestamp(sale.get('Tarih_Saat')),
                     sale.get('masa'),
                     sale.get('terminal_id'),
-                    sale.get('vardiya_id')
+                    sale.get('vardiya_id'),
+                    bool(sale.get('invoice_pending', False)),
+                    sale.get('invoice_note')
                 ))
     
     def get_sales_by_date(self, tarih=None):
@@ -413,6 +424,7 @@ class Database:
                     tip,
                     SUM(CASE WHEN COALESCE(tip, 'normal') = 'ikram' THEN 0 ELSE fiyat * adet END) as toplam,
                     SUM(CASE WHEN COALESCE(tip, 'normal') = 'ikram' THEN fiyat * adet ELSE 0 END) as ikram_toplam,
+                    SUM(CASE WHEN invoice_pending THEN 1 ELSE 0 END) as fatura_bekleyen_adet,
                     COUNT(*) as adet
                 FROM satislar
                 WHERE DATE(tarih_saat) = %s

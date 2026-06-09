@@ -13,7 +13,9 @@
 - `make install`: install dependencies from `requirements.txt`.
 - `python3 test_shifts.py`: API flow smoke test for kasa/vardiya lifecycle.
 - `python3 test_pos.py`: local TCP POS simulator for payment integration checks.
-- `make deploy` / `make status` / `make logs`: remote service sync and diagnostics (configured for `vet@kuvoz.local`).
+- Live server is `oktay@debianoktay:~/restoran`; production service is `fastfoot.service`.
+- Deploy code/web changes without overwriting runtime/config data (`config.txt`, `menu.txt`, `waiters.json`, `salons.json`, `integrations.json`, `active_adisyonlar.json`, `cashiers.json`, `kitchen.json`, `menu_meta.json`, `portion_stock*.json`) or PostgreSQL data.
+- `make deploy` / `make status` / `make logs`: legacy remote service helpers; verify target before using.
 
 ## Coding Style & Naming Conventions
 - Python: follow PEP 8, 4-space indentation, `snake_case` for functions/variables, `PascalCase` for classes.

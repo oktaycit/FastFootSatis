@@ -1,11 +1,11 @@
-# FastFootSatış Web Sunucusu - Başlangıç Rehberi
+# Restoran Web Sunucusu - Başlangıç Rehberi
 
 ## 🚀 Hızlı Başlangıç
 
 ### 1. Sunucuyu Başlatma
 
 ```bash
-cd /Users/oktaycit/Projeler/FastFootSatıs
+cd /path/to/restoran
 python3 web_server.py
 ```
 

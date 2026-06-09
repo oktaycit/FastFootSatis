@@ -16,6 +16,7 @@ namespace FastFootOkcBridge
     {
         private const int DefaultPort = 8787;
         private const int SaleTimeoutSeconds = 120;
+        private const int StalePendingThresholdSeconds = 180;
 
         private static readonly JavaScriptSerializer Json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
         private static readonly ConcurrentDictionary<string, PendingSale> PendingSales =
@@ -23,6 +24,8 @@ namespace FastFootOkcBridge
         private static readonly POSCommunication Communication =
             POSCommunication.getInstance("FastFootSatis");
         private static readonly object FiscalInfoLock = new object();
+        // Eşzamanlı satış isteklerini engelle — ÖKC aynı anda tek işlem yapabilir
+        private static readonly SemaphoreSlim SaleLock = new SemaphoreSlim(1, 1);
 
         private static volatile bool _deviceConnected;
         private static volatile bool _fiscalInfoLoaded;
@@ -48,6 +51,7 @@ namespace FastFootOkcBridge
             public int ReceiptNo { get; set; }
             public int ZNo { get; set; }
             public string RawSaleInfo { get; set; }
+            public DateTime CreatedAt { get; set; }
         }
 
         [STAThread]
@@ -74,7 +78,7 @@ namespace FastFootOkcBridge
             while (true)
             {
                 Application.DoEvents();
-                Thread.Sleep(50);
+                Thread.Sleep(10);  // 50ms → 10ms: Callback tepki süresini iyileştir
             }
         }
 
@@ -243,47 +247,93 @@ namespace FastFootOkcBridge
                 return;
             }
 
-            var pending = new PendingSale { BasketId = basketId };
-            PendingSales[basketId] = pending;
+            // Eski tamamlanmamış işlemleri temizle (StalePendingThresholdSeconds'den eski)
+            CleanStalePendingSales();
 
-            var sendStatus = Communication.sendBasket(body);
-            if (sendStatus != 1)
+            // Eşzamanlı satış engeli — ÖKC aynı anda tek işlem yapabilir
+            if (!SaleLock.Wait(TimeSpan.FromSeconds(10)))
             {
-                PendingSale removed;
-                PendingSales.TryRemove(basketId, out removed);
+                Console.WriteLine(string.Format("{0:yyyy-MM-dd HH:mm:ss} UYARI: Esanli satis istegi reddedildi, baska islem devam ediyor", DateTime.Now));
                 WriteJson(context, new Dictionary<string, object>
                 {
                     { "success", false },
-                    { "message", "IntegrationHub sendBasket basarisiz dondu" },
-                    { "sendStatus", sendStatus },
-                    { "deviceConnected", _deviceConnected }
-                }, 502);
+                    { "message", "Baska bir OKC islemi devam ediyor, lutfen bekleyin" }
+                }, 429);
                 return;
             }
 
-            if (!pending.Done.Wait(TimeSpan.FromSeconds(SaleTimeoutSeconds)))
+            try
             {
-                PendingSale removed;
-                PendingSales.TryRemove(basketId, out removed);
+                var pending = new PendingSale { BasketId = basketId, CreatedAt = DateTime.Now };
+                PendingSales[basketId] = pending;
+
+                Console.WriteLine(string.Format("{0:yyyy-MM-dd HH:mm:ss} Satis basladi: {1}", DateTime.Now, basketId));
+                var sendStatus = Communication.sendBasket(body);
+                if (sendStatus != 1)
+                {
+                    PendingSale removed;
+                    PendingSales.TryRemove(basketId, out removed);
+                    Console.WriteLine(string.Format("{0:yyyy-MM-dd HH:mm:ss} sendBasket basarisiz: status={1}", DateTime.Now, sendStatus));
+                    WriteJson(context, new Dictionary<string, object>
+                    {
+                        { "success", false },
+                        { "message", "IntegrationHub sendBasket basarisiz dondu" },
+                        { "sendStatus", sendStatus },
+                        { "deviceConnected", _deviceConnected }
+                    }, 502);
+                    return;
+                }
+
+                if (!pending.Done.Wait(TimeSpan.FromSeconds(SaleTimeoutSeconds)))
+                {
+                    PendingSale removed;
+                    PendingSales.TryRemove(basketId, out removed);
+                    Console.WriteLine(string.Format("{0:yyyy-MM-dd HH:mm:ss} ZAMAN ASIMI: {1} ({2}s)", DateTime.Now, basketId, SaleTimeoutSeconds));
+                    WriteJson(context, new Dictionary<string, object>
+                    {
+                        { "success", false },
+                        { "message", "OKC satis callback zaman asimi" },
+                        { "deviceConnected", _deviceConnected }
+                    }, 504);
+                    return;
+                }
+
+                Console.WriteLine(string.Format("{0:yyyy-MM-dd HH:mm:ss} Satis tamamlandi: {1} status={2}", DateTime.Now, basketId, pending.Status));
                 WriteJson(context, new Dictionary<string, object>
                 {
-                    { "success", false },
-                    { "message", "OKC satis callback zaman asimi" },
-                    { "deviceConnected", _deviceConnected }
-                }, 504);
-                return;
+                    { "success", pending.Success },
+                    { "status", pending.Status },
+                    { "message", string.IsNullOrWhiteSpace(pending.Message) ? "OK" : pending.Message },
+                    { "receiptNo", pending.ReceiptNo },
+                    { "zNo", pending.ZNo },
+                    { "basketID", pending.BasketId },
+                    { "rawSaleInfo", pending.RawSaleInfo }
+                }, pending.Success ? 200 : 502);
             }
-
-            WriteJson(context, new Dictionary<string, object>
+            finally
             {
-                { "success", pending.Success },
-                { "status", pending.Status },
-                { "message", string.IsNullOrWhiteSpace(pending.Message) ? "OK" : pending.Message },
-                { "receiptNo", pending.ReceiptNo },
-                { "zNo", pending.ZNo },
-                { "basketID", pending.BasketId },
-                { "rawSaleInfo", pending.RawSaleInfo }
-            }, pending.Success ? 200 : 502);
+                SaleLock.Release();
+            }
+        }
+
+        /// <summary>
+        /// StalePendingThresholdSeconds'den eski bekleyen satışları temizle.
+        /// Bu, timeout sonrası kalan "hayalet" pending entry'leri temizler.
+        /// </summary>
+        private static void CleanStalePendingSales()
+        {
+            var threshold = DateTime.Now.AddSeconds(-StalePendingThresholdSeconds);
+            foreach (var kvp in PendingSales)
+            {
+                if (kvp.Value.CreatedAt < threshold)
+                {
+                    PendingSale removed;
+                    if (PendingSales.TryRemove(kvp.Key, out removed))
+                    {
+                        Console.WriteLine(string.Format("{0:yyyy-MM-dd HH:mm:ss} Eski bekleyen satis temizlendi: {1}", DateTime.Now, kvp.Key));
+                    }
+                }
+            }
         }
 
         private static string GetFiscalInfo()

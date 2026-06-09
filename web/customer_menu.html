@@ -803,6 +803,7 @@
         const state = {
             menu: {},
             portionStock: {},
+            dailyMeals: { items: [], categories: [] },
             categories: [],
             activeCategory: null,
             searchQuery: '',
@@ -964,14 +965,32 @@
             return Number.isInteger(amount) ? String(amount) : String(amount).replace('.', ',');
         }
 
-        function isSoldOutItem(item) {
-            const stock = getPortionStock(getItemName(item));
+        function normalizeDailyText(value) {
+            return String(value || '').trim().toLocaleLowerCase('tr-TR');
+        }
+
+        function getDailyMealCategories() {
+            return Array.isArray(state.dailyMeals.categories) ? state.dailyMeals.categories : [];
+        }
+
+        function isDailyMealCategory(category) {
+            const target = normalizeDailyText(category);
+            return !!target && getDailyMealCategories().some(name => normalizeDailyText(name) === target);
+        }
+
+        function getTrackedPortionStock(category, name) {
+            return isDailyMealCategory(category) ? getPortionStock(name) : null;
+        }
+
+        function isSoldOutItem(item, category = '') {
+            const stock = getTrackedPortionStock(category, getItemName(item));
             return !!(stock && stock.tracked && Number(stock.kalan || 0) <= 0);
         }
 
-        function getCartQtyForName(name) {
+        function getCartQtyForName(name, category = '') {
             const stockName = getPortionStockName(name);
             return Object.values(state.cart).reduce((sum, item) => {
+                if (!isDailyMealCategory(item.category) || item.category !== category) return sum;
                 return sum + (getPortionStockName(item.urun) === stockName ? getPortionUnits(item.urun, item.adet) : 0);
             }, 0);
         }
@@ -1012,6 +1031,7 @@
             const data = await response.json();
             state.menu = getVisibleMenu(data.menu || {});
             state.portionStock = data.portion_stock || {};
+            state.dailyMeals = data.daily_meals || state.dailyMeals;
             state.categories = Object.keys(state.menu);
             state.activeCategory = state.categories[0] || null;
             const itemCount = Object.values(state.menu).reduce((sum, items) => sum + items.length, 0);
@@ -1067,19 +1087,21 @@
         };
 
         function renderRecommendations() {
-            const allItems = Object.values(state.menu).flat().filter(item => isBrowseMode || !isSoldOutItem(item));
+            const allItems = Object.entries(state.menu).flatMap(([category, items]) => {
+                return (items || []).map(item => ({ category, item }));
+            }).filter(entry => isBrowseMode || !isSoldOutItem(entry.item, entry.category));
             if (!allItems.length) {
                 el.recoRow.innerHTML = '';
                 return;
             }
-            const topItems = allItems.slice().sort((a, b) => getRecommendedScore(b) - getRecommendedScore(a)).slice(0, 8);
-            el.recoRow.innerHTML = topItems.map(item => {
+            const topItems = allItems.slice().sort((a, b) => getRecommendedScore(b.item) - getRecommendedScore(a.item)).slice(0, 8);
+            el.recoRow.innerHTML = topItems.map(({ category, item }) => {
                 const name = getItemName(item);
                 const price = getItemPrice(item);
                 if (isBrowseMode) {
                     return `<button class="reco-chip" onclick="jumpToItem('${escapeJs(name)}')">${escapeHtml(name)}</button>`;
                 }
-                return `<button class="reco-chip" onclick="addToCart('${escapeJs(name)}', ${price})">${escapeHtml(name)}</button>`;
+                return `<button class="reco-chip" onclick="addToCart('${escapeJs(name)}', ${price}, '${escapeJs(category)}')">${escapeHtml(name)}</button>`;
             }).join('');
         }
 
@@ -1113,7 +1135,7 @@
                 const imageUrl = getItemImageUrl(item);
                 const fallback = escapeHtml(getInitials(name));
                 const note = categoryNotes[state.activeCategory] || 'Liva seçkisi';
-                const stock = getPortionStock(name);
+                const stock = getTrackedPortionStock(state.activeCategory, name);
                 const tracked = !!(stock && stock.tracked);
                 const remaining = tracked ? Number(stock.kalan || 0) : null;
                 const soldOut = tracked && remaining <= 0;
@@ -1122,7 +1144,7 @@
                     : '';
                 const action = isBrowseMode
                     ? ''
-                    : `<button class="btn btn-main" ${soldOut ? 'disabled' : ''} onclick="addToCart('${escapeJs(name)}', ${price})">${soldOut ? 'Yok' : '+'}</button>`;
+                    : `<button class="btn btn-main" ${soldOut ? 'disabled' : ''} onclick="addToCart('${escapeJs(name)}', ${price}, '${escapeJs(state.activeCategory)}')">${soldOut ? 'Yok' : '+'}</button>`;
                 return `
                     <article class="item ${soldOut ? 'sold-out' : ''}" data-name="${escapeHtml(name)}">
                         <div class="item-visual" style="--item-color:${color}">
@@ -1139,8 +1161,8 @@
             }).join('');
         }
 
-        window.addToCart = function (name, price) {
-            const stock = getPortionStock(name);
+        window.addToCart = function (name, price, category = state.activeCategory) {
+            const stock = getTrackedPortionStock(category, name);
             if (stock && stock.tracked) {
                 const remaining = Number(stock.kalan || 0);
                 const stockName = getPortionStockName(name);
@@ -1149,13 +1171,13 @@
                     setStatus(`${stock.urun || stockName} tükendi`);
                     return;
                 }
-                if (getCartQtyForName(name) + requestedUnits > remaining + 0.001) {
+                if (getCartQtyForName(name, category) + requestedUnits > remaining + 0.001) {
                     setStatus(`${stock.urun || stockName} için sadece ${formatPortionAmount(remaining)} porsiyon kaldı`);
                     return;
                 }
             }
-            const key = `${name}__${price}`;
-            if (!state.cart[key]) state.cart[key] = { urun: name, fiyat: price, adet: 0 };
+            const key = `${category}__${name}__${price}`;
+            if (!state.cart[key]) state.cart[key] = { urun: name, fiyat: price, adet: 0, category };
             state.cart[key].adet += 1;
             renderCart();
         };
@@ -1192,6 +1214,7 @@
         function canSendCart() {
             const required = {};
             for (const item of Object.values(state.cart)) {
+                if (!isDailyMealCategory(item.category)) continue;
                 const stockName = getPortionStockName(item.urun);
                 required[stockName] = (required[stockName] || 0) + getPortionUnits(item.urun, item.adet);
             }

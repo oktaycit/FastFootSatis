@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Terminal Yönetimi - FastFootSatış</title>
+    <title>Terminal Yönetimi - Restoran</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet">
@@ -715,6 +715,45 @@
             font-family: 'Courier New', monospace;
         }
 
+        .quick-link-list {
+            padding: 14px;
+            display: grid;
+            gap: 10px;
+        }
+
+        .quick-link {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 10px;
+            align-items: center;
+            padding: 12px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--text);
+            text-decoration: none;
+        }
+
+        .quick-link strong {
+            display: block;
+            font-size: 13px;
+        }
+
+        .quick-link span {
+            display: block;
+            margin-top: 3px;
+            color: var(--text-muted);
+            font: 12px 'Courier New', monospace;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .quick-link b {
+            color: var(--accent);
+            font-size: 12px;
+        }
+
         /* ─── EMPTY STATE ─── */
         .empty-state {
             padding: 40px 20px;
@@ -837,7 +876,7 @@
                 <div class="header-icon">📡</div>
                 <div>
                     <h1>Terminal Yönetimi</h1>
-                    <p id="headerCompany">FastFoot Restoran Sistemi</p>
+                    <p id="headerCompany">Restoran Restoran Sistemi</p>
                 </div>
             </div>
         </div>
@@ -946,6 +985,35 @@
                 <!-- Add Terminal Form -->
                 <div class="panel-card">
                     <div class="panel-card-header">
+                        ⚡ Bugünkü Ekran Adresleri
+                    </div>
+                    <div class="quick-link-list" id="quickLinks">
+                        <a class="quick-link" href="/kasa-terminal" target="_blank" data-path="/kasa-terminal">
+                            <div>
+                                <strong>Kasa Hesap Terminali</strong>
+                                <span>/kasa-terminal</span>
+                            </div>
+                            <b>Aç</b>
+                        </a>
+                        <a class="quick-link" href="/garson-terminal" target="_blank" data-path="/garson-terminal">
+                            <div>
+                                <strong>Ortak Garson Terminali</strong>
+                                <span>/garson-terminal</span>
+                            </div>
+                            <b>Aç</b>
+                        </a>
+                        <a class="quick-link" href="/waiter" target="_blank" data-path="/waiter">
+                            <div>
+                                <strong>Garson Telefonu</strong>
+                                <span>/waiter</span>
+                            </div>
+                            <b>Aç</b>
+                        </a>
+                    </div>
+                </div>
+
+                <div class="panel-card">
+                    <div class="panel-card-header">
                         ➕ Terminal Ekle
                     </div>
                     <div class="new-terminal-form">
@@ -1028,6 +1096,17 @@
             kasa: 'Kasa'
         };
 
+        function updateQuickLinks(ip) {
+            const host = ip ? `${ip}:8000` : window.location.host;
+            document.querySelectorAll('#quickLinks .quick-link').forEach(link => {
+                const path = link.dataset.path || '/';
+                const url = `${window.location.protocol}//${host}${path}`;
+                link.href = url;
+                const span = link.querySelector('span');
+                if (span) span.textContent = url;
+            });
+        }
+
         // ─── SOCKET INIT ──────────────────────────────────────
         function initSocket() {
             try {
@@ -1048,8 +1127,9 @@
                     document.getElementById('infoIP').textContent = sys.ip || '---';
                     document.getElementById('infoMasa').textContent = (sys.masa_sayisi || 0) + ' Masa / ' + (sys.paket_sayisi || 0) + ' Paket';
                     document.getElementById('infoFirma').textContent = sys.company_name || '---';
-                    document.getElementById('headerCompany').textContent = sys.company_name || 'FastFoot';
+                    document.getElementById('headerCompany').textContent = sys.company_name || 'Restoran';
                     document.getElementById('serverIP').textContent = '📡 ' + (sys.ip || '---') + ':8000';
+                    updateQuickLinks(sys.ip || '');
                 });
 
                 // Terminal'den gelen sipariş gelince sayacı güncelle
@@ -1088,8 +1168,9 @@
                 document.getElementById('infoIP').textContent = data.ip || '---';
                 document.getElementById('infoMasa').textContent = data.masa_sayisi + ' Masa / ' + data.paket_sayisi + ' Paket';
                 document.getElementById('infoFirma').textContent = data.company_name || '---';
-                document.getElementById('headerCompany').textContent = data.company_name || 'FastFoot';
+                document.getElementById('headerCompany').textContent = data.company_name || 'Restoran';
                 document.getElementById('serverIP').textContent = '📡 ' + data.ip + ':8000';
+                updateQuickLinks(data.ip || '');
             } catch (e) {
                 // Socket.IO will handle status
             }
@@ -1332,6 +1413,7 @@
 
         // ─── INIT ─────────────────────────────────────────────
         window.onload = () => {
+            updateQuickLinks('');
             initSocket();
             fetchSystemInfo();
             renderTerminals();

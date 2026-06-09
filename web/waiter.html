@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>FastFoot - Garson Arayüzü</title>
+    <title>Restoran - Garson Arayüzü</title>
     <link rel="stylesheet" href="styles.css">
     <style>
         :root {
@@ -129,6 +129,33 @@
             font-size: 12px;
             font-weight: 700;
             cursor: pointer;
+        }
+
+        .btn-tools.dim-toggle {
+            width: 38px;
+            min-width: 38px;
+            padding: 8px 0;
+            background: #263445;
+        }
+
+        .terminal-mode-chip {
+            display: none;
+            color: #d6e4f0;
+            background: #263445;
+            border: 1px solid #3b4a5e;
+            border-radius: 999px;
+            padding: 5px 9px;
+            font-size: 11px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        body.shared-terminal .terminal-mode-chip {
+            display: inline-flex;
+        }
+
+        body.shared-terminal .btn-tools.qr-tools {
+            display: none;
         }
 
         .selected-table-info {
@@ -271,6 +298,62 @@
         .portion-badge.empty {
             background: #5c1f1f;
             color: #ffb4b4;
+        }
+
+        .grill-portion-list {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            color: var(--success);
+            font-size: 11px;
+            line-height: 1.2;
+            margin-top: 5px;
+        }
+
+        .basket-line-meta {
+            font-size: 10px;
+            color: #999;
+        }
+
+        .portion-stepper {
+            display: grid;
+            grid-template-columns: 30px minmax(54px, 1fr) 30px;
+            gap: 5px;
+            align-items: center;
+            min-width: 124px;
+            margin-top: 2px;
+        }
+
+        .portion-stepper button {
+            width: 30px;
+            height: 30px;
+            border: none;
+            border-radius: 8px;
+            background: #2f3542;
+            color: #fff;
+            font-size: 18px;
+            font-weight: 900;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .portion-stepper button:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .portion-stepper span {
+            min-height: 30px;
+            border-radius: 8px;
+            background: #101820;
+            color: #d7ecff;
+            font-size: 12px;
+            font-weight: 900;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 6px;
+            white-space: nowrap;
         }
 
         .portion-select-modal {
@@ -432,6 +515,31 @@
             box-sizing: border-box;
         }
 
+        .ready-note-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 7px;
+        }
+
+        .ready-note-btn {
+            min-height: 30px;
+            border: 1px solid #34445a;
+            border-radius: 8px;
+            background: #202733;
+            color: #dbeafe;
+            padding: 5px 9px;
+            font-size: 11px;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        .ready-note-btn.active {
+            border-color: #f1c40f;
+            background: #4a3513;
+            color: #ffe08a;
+        }
+
         .basket-item-actions {
             display: flex;
             align-items: center;
@@ -487,6 +595,25 @@
         }
 
         .btn-served:active {
+            transform: scale(0.98);
+        }
+
+        .btn-transfer-table {
+            background: #d97706;
+            color: #fff;
+            border: none;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-weight: 900;
+            font-size: 14px;
+            min-height: 48px;
+            white-space: nowrap;
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-transfer-table:active {
             transform: scale(0.98);
         }
 
@@ -595,16 +722,217 @@
             margin-top: 10px;
         }
 
+        .transfer-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.68);
+            z-index: 2150;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            padding: 15px;
+        }
+
+        .transfer-card {
+            width: 100%;
+            max-width: 520px;
+            max-height: min(78vh, 720px);
+            background: #171717;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+        }
+
+        .transfer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+
+        .transfer-title {
+            font-size: 18px;
+            font-weight: 900;
+            color: #f5f5f5;
+        }
+
+        .transfer-source {
+            margin-top: 4px;
+            font-size: 12px;
+            color: #b7c0cc;
+        }
+
+        .transfer-close {
+            width: 38px;
+            min-width: 38px;
+            height: 38px;
+            border: none;
+            border-radius: 8px;
+            background: #2a2a2a;
+            color: #fff;
+            font-size: 22px;
+            cursor: pointer;
+        }
+
+        .transfer-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
+            gap: 9px;
+            overflow-y: auto;
+            padding-right: 2px;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .transfer-group {
+            grid-column: 1 / -1;
+            padding: 8px 2px 2px;
+            color: #8bd3ff;
+            font-size: 12px;
+            font-weight: 900;
+            border-bottom: 1px solid #2b3440;
+        }
+
+        .transfer-target {
+            min-height: 72px;
+            border: 1px solid #2f3542;
+            border-radius: 8px;
+            background: #202020;
+            color: #fff;
+            padding: 8px;
+            font-weight: 900;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .transfer-target.occupied {
+            border-color: #d97706;
+            background: #2b2115;
+        }
+
+        .transfer-target:active {
+            transform: scale(0.98);
+            background: #2c3e50;
+        }
+
+        .transfer-target-name {
+            display: block;
+            font-size: 15px;
+            line-height: 1.2;
+        }
+
+        .transfer-meta {
+            display: block;
+            margin-top: 5px;
+            color: #fbbf24;
+            font-size: 11px;
+            line-height: 1.2;
+        }
+
+        .transfer-empty {
+            grid-column: 1 / -1;
+            color: #a8b3bf;
+            padding: 18px 4px;
+            text-align: center;
+        }
+
         @media (max-width: 720px) {
             .tools-grid {
                 grid-template-columns: 1fr;
             }
         }
 
+        body.low-light {
+            --primary: #1d5f86;
+            --secondary: #111827;
+            --success: #1f8a54;
+            --danger: #b43b35;
+            --bg-dark: #050607;
+            --panel-bg: #101316;
+            --text-light: #e5e7eb;
+        }
+
+        body.low-light .top-bar,
+        body.low-light .basket-panel {
+            background: #0b1015;
+            border-color: #202a35;
+            box-shadow: none;
+        }
+
+        body.low-light .login-box,
+        body.low-light .btn-item,
+        body.low-light .tab,
+        body.low-light .tools-card,
+        body.low-light .portion-select-card {
+            background: #101316;
+            border-color: #242c36;
+            box-shadow: none;
+        }
+
+        body.low-light .btn-item:active {
+            background: #17212b;
+        }
+
+        body.low-light .btn-send {
+            background: #1f7a4d;
+        }
+
+        body.low-light .btn-transfer-table {
+            background: #8a4f12;
+        }
+
+        body.low-light .transfer-card,
+        body.low-light .transfer-target {
+            background: #101316;
+            border-color: #242c36;
+            box-shadow: none;
+        }
+
+        body.low-light .transfer-target.occupied {
+            background: #201914;
+            border-color: #8a4f12;
+        }
+
+        body.low-light .ready-note-btn {
+            background: #161d25;
+            border-color: #283341;
+            color: #cbd5e1;
+        }
+
+        body.low-light .ready-note-btn.active {
+            background: #332612;
+            border-color: #9f7d24;
+            color: #f5d37a;
+        }
+
+        body.low-light .btn-served,
+        body.low-light .btn-item.order-ready,
+        body.low-light .selected-table-info.order-ready {
+            animation: none;
+            box-shadow: 0 0 0 2px rgba(184, 134, 11, 0.18);
+            filter: none;
+        }
+
     </style>
 </head>
 
 <body>
+    <script>
+        (function () {
+            const params = new URLSearchParams(window.location.search);
+            const shared = window.location.pathname.includes('garson-terminal')
+                || window.location.pathname.includes('/waiter/shared')
+                || params.get('shared') === '1'
+                || params.get('mode') === 'shared';
+            if (shared) document.body.classList.add('shared-terminal');
+            if (localStorage.getItem('waiter_low_light') !== 'normal') {
+                document.body.classList.add('low-light');
+            }
+        })();
+    </script>
     <!-- Login Screen -->
     <div id="loginOverlay" class="login-screen">
         <div class="login-box">
@@ -620,9 +948,11 @@
     <div class="app-container" id="mainApp" style="display: none;">
         <!-- Top Bar -->
         <div class="top-bar">
-            <h1 onclick="showScreen('table-screen')">FastFoot 🤵</h1>
+            <h1 onclick="showScreen('table-screen')">Restoran 🤵</h1>
             <div style="display: flex; align-items: center; gap: 10px;">
-                <button class="btn-tools" onclick="openQrTools()">QR/NFC</button>
+                <span class="terminal-mode-chip" id="terminalModeChip">ORTAK</span>
+                <button class="btn-tools dim-toggle" id="btnDimMode" onclick="toggleLowLight()" title="Düşük ışık">☾</button>
+                <button class="btn-tools qr-tools" onclick="openQrTools()">QR/NFC</button>
                 <span id="waiterDisplayName" style="color: #999; font-size: 12px;"></span>
                 <div class="selected-table-info" id="activeTableName">MASA SEÇİN</div>
             </div>
@@ -650,6 +980,7 @@
             <div class="basket-list" id="basketList"></div>
             <div class="basket-footer">
                 <div class="total" id="basketTotal">0.00 TL</div>
+                <button class="btn-transfer-table" id="btnTransferTable" onclick="openTransferModal()" style="display: none;">MASA TAŞI</button>
                 <button class="btn-served" id="btnMarkServed" onclick="markReadyItemsServed()" style="display: none;">SERVİS EDİLDİ</button>
                 <button class="btn-send" onclick="sendOrder()">GÖNDER</button>
             </div>
@@ -686,6 +1017,19 @@
         </div>
     </div>
 
+    <div id="transferModal" class="transfer-modal">
+        <div class="transfer-card">
+            <div class="transfer-header">
+                <div>
+                    <div class="transfer-title">Masa Taşı</div>
+                    <div class="transfer-source" id="transferSourceInfo">Kaynak: -</div>
+                </div>
+                <button class="transfer-close" type="button" onclick="closeTransferModal()">×</button>
+            </div>
+            <div class="transfer-grid" id="transferTargetGrid"></div>
+        </div>
+    </div>
+
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     <script>
@@ -707,6 +1051,8 @@
         let waiterMenuData = {};
         let portionStock = {};
         let dailyMeals = { items: [] };
+        let prepPanels = [];
+        let prepCategoryOverrides = {};
         const DEFAULT_PORTION_STOCK = 40;
         let waiterAdisyonlar = {};
         let sysInfo = {};
@@ -716,6 +1062,54 @@
         let currentCategory = null;
         let loggedWaiter = null;
         let loggedPin = null;
+        let pendingTransfer = null;
+        const sharedTerminalMode = isSharedTerminalMode();
+
+        function isSharedTerminalMode() {
+            const params = new URLSearchParams(window.location.search);
+            return window.location.pathname.includes('garson-terminal')
+                || window.location.pathname.includes('/waiter/shared')
+                || params.get('shared') === '1'
+                || params.get('mode') === 'shared';
+        }
+
+        function setLowLight(enabled) {
+            document.body.classList.toggle('low-light', enabled);
+            localStorage.setItem('waiter_low_light', enabled ? 'low' : 'normal');
+            const btn = document.getElementById('btnDimMode');
+            if (btn) {
+                btn.textContent = enabled ? '☾' : '☀';
+                btn.title = enabled ? 'Normal ışığa geç' : 'Düşük ışığa geç';
+            }
+        }
+
+        function toggleLowLight() {
+            setLowLight(!document.body.classList.contains('low-light'));
+        }
+
+        function openSharedTerminal() {
+            loggedWaiter = 'Ortak Terminal';
+            loggedPin = '';
+            document.getElementById('waiterDisplayName').textContent = 'Ortak Terminal';
+            document.getElementById('loginOverlay').style.display = 'none';
+            document.getElementById('mainApp').style.display = 'flex';
+            document.getElementById('terminalModeChip').textContent = 'ORTAK';
+            socket.emit('waiter_init', { name: loggedWaiter });
+        }
+
+        function openAuthenticatedWaiter(user) {
+            loggedWaiter = user?.name || 'Garson';
+            loggedPin = '';
+            document.getElementById('waiterDisplayName').textContent = '🤵 ' + loggedWaiter;
+            document.getElementById('loginOverlay').style.display = 'none';
+            document.getElementById('mainApp').style.display = 'flex';
+            socket.emit('waiter_init', { name: loggedWaiter });
+        }
+
+        setLowLight(document.body.classList.contains('low-light'));
+        if (sharedTerminalMode) {
+            openSharedTerminal();
+        }
 
         function isComplimentaryItem(item) {
             return (item?.tip || '') === 'ikram';
@@ -768,9 +1162,131 @@
             'baklavalar': 'Baklava',
             'dondurma': 'Dond.'
         };
+        const GRILL_PORTION_VALUES = [0.5, 1, 1.5];
 
         function normalizeMenuText(value) {
             return String(value || '').trim().toLocaleLowerCase('tr-TR');
+        }
+
+        function normalizePrepText(value) {
+            return String(value || '')
+                .trim()
+                .toLocaleLowerCase('tr-TR')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/ı/g, 'i');
+        }
+
+        function getPrepPanelById(panelId) {
+            return (prepPanels || []).find(panel => panel.id === panelId) || null;
+        }
+
+        function getDefaultPrepPanelId() {
+            return getPrepPanelById('mutfak') ? 'mutfak' : ((prepPanels || [])[0]?.id || 'mutfak');
+        }
+
+        function getPrepPanelForCategory(category) {
+            const categoryName = String(category || '').trim();
+            if (categoryName && prepCategoryOverrides[categoryName]) {
+                return prepCategoryOverrides[categoryName];
+            }
+
+            const normalized = normalizePrepText(categoryName);
+            const match = (prepPanels || []).find(panel => {
+                return (panel.category_keywords || []).some(keyword => {
+                    const key = normalizePrepText(keyword);
+                    return key && normalized.includes(key);
+                });
+            });
+            return match?.id || getDefaultPrepPanelId();
+        }
+
+        function getPrepPanelForOrderItem(name, category = '') {
+            const productText = normalizePrepText(name);
+            const productPanel = (prepPanels || []).find(panel => {
+                return (panel.product_keywords || []).some(keyword => {
+                    const key = normalizePrepText(keyword);
+                    return key && productText.includes(key);
+                });
+            });
+
+            if (productPanel?.id === 'izgara') return productPanel.id;
+
+            const categoryPanelId = getPrepPanelForCategory(category);
+            if (category && categoryPanelId !== getDefaultPrepPanelId()) return categoryPanelId;
+            if (productPanel?.id) return productPanel.id;
+            if (` ${productText} `.includes(' su ')) return 'icecek';
+            return categoryPanelId;
+        }
+
+        function getQuickNotesForBasketItem(item) {
+            const panelId = item.panelId || getPrepPanelForOrderItem(item.name, item.category);
+            const panel = getPrepPanelById(panelId);
+            return (panel?.quick_notes || [])
+                .map(note => String(note || '').trim())
+                .filter(Boolean);
+        }
+
+        function splitReadyNoteTokens(value) {
+            return String(value || '')
+                .split(',')
+                .map(note => note.trim())
+                .filter(Boolean);
+        }
+
+        function readyNoteKey(value) {
+            return normalizePrepText(value);
+        }
+
+        function basketItemHasReadyNote(item, note) {
+            const target = readyNoteKey(note);
+            return splitReadyNoteTokens(item.note || '').some(existing => readyNoteKey(existing) === target);
+        }
+
+        function toggleReadyNote(index, note) {
+            if (!basket[index]) return;
+            const tokens = splitReadyNoteTokens(basket[index].note || '');
+            const target = readyNoteKey(note);
+            const existingIndex = tokens.findIndex(existing => readyNoteKey(existing) === target);
+            if (existingIndex >= 0) {
+                tokens.splice(existingIndex, 1);
+            } else {
+                tokens.push(note);
+            }
+            basket[index].note = tokens.join(', ').slice(0, 160);
+            updateBasketDisplay();
+        }
+
+        function appendReadyNoteButtons(row, index, item) {
+            const container = row.querySelector('.ready-note-buttons');
+            if (!container) return;
+            const notes = getQuickNotesForBasketItem(item);
+            if (!notes.length) {
+                container.remove();
+                return;
+            }
+
+            notes.forEach(note => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'ready-note-btn' + (basketItemHasReadyNote(item, note) ? ' active' : '');
+                button.textContent = note;
+                button.onclick = () => toggleReadyNote(index, note);
+                container.appendChild(button);
+            });
+        }
+
+        function composeBasketItemNote(item) {
+            return [item?.baseNote || '', item?.note || '']
+                .map(part => String(part || '').trim())
+                .filter(Boolean)
+                .join('\n')
+                .slice(0, 160);
+        }
+
+        function isGrillCategory(category) {
+            const normalized = normalizeMenuText(category);
+            return normalized === 'ızgara' || normalized === 'izgara';
         }
 
         function getDailyMealCategoryNames() {
@@ -904,7 +1420,13 @@
         function formatOrderNote(note) {
             const text = String(note || '').trim();
             if (!text) return '';
-            return text.startsWith('Yemek:') ? text : `Not: ${text}`;
+            const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+            if (!lines.length) return '';
+            if (lines[0].startsWith('Yemek:')) {
+                const extra = lines.slice(1).join(', ');
+                return extra ? `${lines[0]} • Not: ${extra}` : lines[0];
+            }
+            return `Not: ${lines.join(', ')}`;
         }
 
         function parsePortionVariantName(name) {
@@ -968,6 +1490,81 @@
             const amount = Number(value);
             if (!Number.isFinite(amount)) return String(value || '0');
             return Number.isInteger(amount) ? String(amount) : amount.toFixed(2);
+        }
+
+        function roundMoney(value) {
+            const amount = Number(value);
+            if (!Number.isFinite(amount)) return 0;
+            return Math.round(amount * 100) / 100;
+        }
+
+        function parseTrailingPortionName(name) {
+            let cleanName = String(name || '').trim();
+            let multiplier = 1;
+            const match = cleanName.match(/\(\s*(\d+(?:[,.]\d+)?)\s*porsiyon\s*\)\s*$/i);
+            if (match) {
+                const parsed = Number(match[1].replace(',', '.'));
+                if (Number.isFinite(parsed) && parsed > 0) multiplier = parsed;
+                cleanName = cleanName.replace(/\(\s*\d+(?:[,.]\d+)?\s*porsiyon\s*\)\s*$/i, '').trim();
+            }
+            return { name: cleanName, multiplier };
+        }
+
+        function formatPortionChoiceLabel(value) {
+            const amount = Number(value);
+            if (amount === 0.5) return 'Yarım';
+            if (amount === 1) return '1 Porsiyon';
+            return `${formatPortionAmount(amount)} Porsiyon`;
+        }
+
+        function getPortionVariantUnitMultiplier(variant) {
+            if (!variant) return 1;
+            if (variant.type === 'half') return 0.5;
+            return 1;
+        }
+
+        function isFixedGrillServingName(name) {
+            const normalized = normalizeMenuText(name);
+            return normalized.includes('kişilik') || normalized.includes('kisilik');
+        }
+
+        function getGrillOrderInfo(card) {
+            if (!card) return null;
+
+            if (card.type === 'portion-group') {
+                const variants = sortPortionVariants(card.variants || []);
+                const fullVariant = variants.find(variant => variant.type === 'full');
+                const sourceVariant = fullVariant || variants[0];
+                if (!sourceVariant || !sourceVariant.item) return null;
+                const sourceMultiplier = getPortionVariantUnitMultiplier(sourceVariant);
+                const sourcePrice = Number(sourceVariant.item[1] || 0);
+                const basePrice = sourceMultiplier > 0 ? roundMoney(sourcePrice / sourceMultiplier) : sourcePrice;
+                return {
+                    name: card.name,
+                    basePrice,
+                    sourceItem: sourceVariant.item
+                };
+            }
+
+            const item = card.item;
+            if (!item) return null;
+            if (isFixedGrillServingName(item[0])) return null;
+            const parsedName = parseTrailingPortionName(item[0]);
+            const sourcePrice = Number(item[1] || 0);
+            const basePrice = parsedName.multiplier > 0
+                ? roundMoney(sourcePrice / parsedName.multiplier)
+                : sourcePrice;
+            return {
+                name: parsedName.name || item[0],
+                basePrice,
+                sourceItem: item
+            };
+        }
+
+        function getGrillPortionPriceHtml(basePrice) {
+            return `<span class="grill-portion-list">${GRILL_PORTION_VALUES.map(value => {
+                return `<span>${formatPortionChoiceLabel(value)}: ${formatMenuPrice(roundMoney(basePrice * value))} TL</span>`;
+            }).join('')}</span>`;
         }
 
         function getPortionPriceHtml(variants) {
@@ -1053,6 +1650,12 @@
 
         // Sayfa yüklendiğinde garsonları çek
         async function fetchWaiters() {
+            if (sharedTerminalMode) return;
+            const me = await fetch('/api/auth/me?path=/waiter').then(r => r.json()).catch(() => null);
+            if (me && me.success && me.can_access_path && me.user) {
+                openAuthenticatedWaiter(me.user);
+                return;
+            }
             const res = await fetch('/api/waiters');
             const waiters = await res.json();
             const select = document.getElementById('loginWaiterSelect');
@@ -1077,9 +1680,10 @@
             });
 
             if (res.ok) {
-                loggedWaiter = name;
+                const data = await res.json().catch(() => ({}));
+                loggedWaiter = data.user?.name || name;
                 loggedPin = pin;
-                document.getElementById('waiterDisplayName').textContent = '🤵 ' + name;
+                document.getElementById('waiterDisplayName').textContent = '🤵 ' + loggedWaiter;
                 document.getElementById('loginOverlay').style.display = 'none';
                 document.getElementById('mainApp').style.display = 'flex';
 
@@ -1097,6 +1701,8 @@
             waiterMenuData = buildWaiterMenuData(menuData);
             waiterAdisyonlar = data.adisyonlar || {};
             sysInfo = data.system;
+            prepPanels = Array.isArray(data.prep_panels) ? data.prep_panels : [];
+            prepCategoryOverrides = data.prep_category_overrides || {};
             renderTables();
             renderCategories();
         });
@@ -1130,25 +1736,21 @@
         });
 
         socket.on('error', (data) => {
+            pendingTransfer = null;
             alert((data && data.message) ? data.message : 'Bir hata oluştu');
+        });
+
+        socket.on('success', (data) => {
+            const message = (data && data.message) ? data.message : 'İşlem tamamlandı';
+            showWaiterToast(message, 'success');
+            if (data && data.type === 'transfer_table') {
+                handleTransferSuccess(data);
+            }
         });
 
         socket.on('order_ready', (data) => {
             if (window.navigator.vibrate) window.navigator.vibrate([300, 100, 300, 100, 300]);
-            const toast = document.createElement('div');
-            toast.style.cssText = `
-                position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-                background: #27ae60; color: white; padding: 15px 25px;
-                border-radius: 50px; z-index: 2000; font-weight: bold;
-                box-shadow: 0 4px 15px rgba(0,0,0,0.4);
-                animation: slideDown 0.5s ease;
-            `;
-            toast.textContent = `🔔 ${data.message}`;
-            document.body.appendChild(toast);
-            setTimeout(() => {
-                toast.style.animation = 'slideUp 0.5s ease';
-                setTimeout(() => toast.remove(), 500);
-            }, 5000);
+            showWaiterToast(`🔔 ${data.message}`, 'success', 5000);
 
             markTableItemsReady(data.masa, data.items_uids || []);
             renderTables();
@@ -1161,6 +1763,27 @@
             @keyframes slideUp { from { top: 20px; } to { top: -100px; } }
         `;
         document.head.appendChild(styleAnimate);
+
+        function showWaiterToast(message, type = 'success', duration = 2600) {
+            const toast = document.createElement('div');
+            const background = type === 'error' ? '#c0392b' : '#27ae60';
+            toast.style.cssText = `
+                position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+                background: ${background}; color: white; padding: 13px 20px;
+                border-radius: 50px; z-index: 2300; font-weight: bold;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+                animation: slideDown 0.5s ease;
+                max-width: calc(100vw - 32px);
+                text-align: center;
+                box-sizing: border-box;
+            `;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => {
+                toast.style.animation = 'slideUp 0.5s ease';
+                setTimeout(() => toast.remove(), 500);
+            }, duration);
+        }
 
         socket.on('masa_update', (data) => {
             waiterAdisyonlar[data.masa] = data.items || [];
@@ -1343,8 +1966,11 @@
             const cards = buildWaiterMenuCards(items);
             cards.forEach(card => {
                 const item = card.type === 'portion-group' ? card.variants[0].item : card.item;
-                const displayName = card.type === 'portion-group' ? card.name : item[0];
-                const stock = isDailyMealCategory(currentCategory) ? getPortionStock(currentCategory) : getPortionStock(displayName);
+                const grillOrderInfo = isGrillCategory(currentCategory) ? getGrillOrderInfo(card) : null;
+                const displayName = grillOrderInfo
+                    ? grillOrderInfo.name
+                    : (card.type === 'portion-group' ? card.name : item[0]);
+                const stock = isDailyMealCategory(currentCategory) ? getPortionStock(currentCategory) : null;
                 const tracked = !!(stock && stock.tracked);
                 const remaining = isDailyMealCategory(currentCategory) ? getDailyGroupRemaining(currentCategory) : (tracked ? Number(stock.kalan || 0) : null);
                 const soldOut = tracked && remaining <= 0;
@@ -1360,7 +1986,9 @@
                 const portionHtml = tracked
                     ? `<span class="portion-badge ${soldOut ? 'empty' : (remaining <= 5 ? 'low' : '')}">${soldOut ? 'TÜKENDİ' : 'Kalan: ' + formatPortionAmount(remaining)}</span>`
                     : '';
-                const priceHtml = card.type === 'portion-group'
+                const priceHtml = grillOrderInfo
+                    ? getGrillPortionPriceHtml(grillOrderInfo.basePrice)
+                    : card.type === 'portion-group'
                     ? getPortionPriceHtml(card.variants)
                     : `<span class="price">${formatMenuPrice(item[1])} TL</span>`;
                 div.innerHTML = `<span class="item-name">${escapeHtml(displayName)}${mealNames ? `<small style="display:block;color:#9ca3af;font-size:11px;margin-top:4px;">${escapeHtml(mealNames)}</small>` : ''}</span>${priceHtml}${portionHtml}`;
@@ -1369,7 +1997,9 @@
                         alert(`${displayName} tükendi`);
                         return;
                     }
-                    if (card.type === 'portion-group') {
+                    if (grillOrderInfo) {
+                        addGrillToBasket(grillOrderInfo, currentCategory);
+                    } else if (card.type === 'portion-group') {
                         await addPortionGroupToBasket(card.name, card.variants, currentCategory);
                     } else {
                         addToBasket(item[0], item[1], currentCategory);
@@ -1482,9 +2112,18 @@
             });
         }
 
+        function addGrillToBasket(grillOrderInfo, category = '') {
+            if (!grillOrderInfo || !grillOrderInfo.name) return;
+            addToBasket(grillOrderInfo.name, grillOrderInfo.basePrice, category, {
+                adet: 1,
+                portionSelectable: true
+            });
+        }
+
         function addToBasket(name, price, category = '', options = {}) {
             let note = options.note || '';
             let stockNameOverride = options.stockNameOverride || '';
+            const adet = normalizeBasketQuantity(options.adet || 1);
             if (!options.skipDailyMealChoice && isDailyMealCategory(category)) {
                 const selectedMeal = chooseDailyMeal(category);
                 if (selectedMeal === false) return;
@@ -1496,15 +2135,17 @@
                 stockNameOverride = selectedMeal.manual ? '' : selectedMeal.yemek;
             }
 
-            const stock = stockNameOverride ? getPortionStock(stockNameOverride) : getPortionStock(name);
+            const shouldCheckStock = !!stockNameOverride || isDailyMealCategory(category);
+            const stock = shouldCheckStock ? (stockNameOverride ? getPortionStock(stockNameOverride) : getPortionStock(name)) : null;
             if (stock && stock.tracked) {
                 const remaining = Number(stock.kalan || 0);
                 const stockName = stockNameOverride || getPortionStockName(name);
                 const alreadyInBasket = basket.reduce((sum, item) => {
+                    if (!item.stockName && !isDailyMealCategory(item.category)) return sum;
                     const itemStockName = item.stockName || getPortionStockName(item.name);
-                    return itemStockName === stockName ? sum + getPortionUnits(item.name) : sum;
+                    return itemStockName === stockName ? sum + getPortionUnits(item.name, item.adet || 1) : sum;
                 }, 0);
-                const requestedUnits = getPortionUnits(name);
+                const requestedUnits = getPortionUnits(name, adet);
                 if (remaining <= 0) {
                     alert(`${stock.urun || stockName} tükendi`);
                     return;
@@ -1514,7 +2155,17 @@
                     return;
                 }
             }
-            basket.push({ name, price, note, stockName: stockNameOverride });
+            basket.push({
+                name,
+                price: roundMoney(price),
+                adet,
+                baseNote: note,
+                note: options.customNote || '',
+                stockName: stockNameOverride,
+                category,
+                panelId: options.panelId || getPrepPanelForOrderItem(name, category),
+                portionSelectable: !!options.portionSelectable
+            });
             if (window.navigator.vibrate) window.navigator.vibrate(50);
             updateBasketDisplay();
         }
@@ -1527,6 +2178,46 @@
         function removeFromBasket(index) {
             basket.splice(index, 1);
             updateBasketDisplay();
+        }
+
+        function normalizeBasketQuantity(value) {
+            const parsed = Number(String(value ?? 1).replace(',', '.'));
+            if (!Number.isFinite(parsed) || parsed <= 0) return 1;
+            return roundMoney(parsed);
+        }
+
+        function getBasketLineTotal(item) {
+            const adet = normalizeBasketQuantity(item?.adet || 1);
+            const price = Number(item?.price || 0);
+            return roundMoney(Math.max(0, adet) * Math.max(0, price));
+        }
+
+        function getGrillPortionIndex(value) {
+            const normalized = normalizeBasketQuantity(value);
+            const index = GRILL_PORTION_VALUES.findIndex(portion => Math.abs(portion - normalized) < 0.001);
+            if (index !== -1) return index;
+            if (normalized <= GRILL_PORTION_VALUES[0]) return 0;
+            if (normalized >= GRILL_PORTION_VALUES[GRILL_PORTION_VALUES.length - 1]) {
+                return GRILL_PORTION_VALUES.length - 1;
+            }
+            return 1;
+        }
+
+        function adjustBasketPortion(index, direction) {
+            const item = basket[index];
+            if (!item || !item.portionSelectable) return;
+            const currentIndex = getGrillPortionIndex(item.adet || 1);
+            const nextIndex = Math.max(0, Math.min(GRILL_PORTION_VALUES.length - 1, currentIndex + direction));
+            item.adet = GRILL_PORTION_VALUES[nextIndex];
+            updateBasketDisplay();
+        }
+
+        function getBasketPriceMeta(item) {
+            const adet = normalizeBasketQuantity(item?.adet || 1);
+            const unitPrice = Number(item?.price || 0);
+            const total = getBasketLineTotal(item);
+            if (Math.abs(adet - 1) < 0.001) return `${formatMenuPrice(unitPrice)} TL`;
+            return `${formatMenuPrice(unitPrice)} TL x ${formatPortionAmount(adet)} = ${formatMenuPrice(total)} TL`;
         }
 
         function escapeHtml(value) {
@@ -1569,8 +2260,9 @@
         function canSendBasket() {
             const counts = {};
             basket.forEach(item => {
+                if (!item.stockName && !isDailyMealCategory(item.category)) return;
                 const stockName = item.stockName || getPortionStockName(item.name);
-                counts[stockName] = (counts[stockName] || 0) + getPortionUnits(item.name);
+                counts[stockName] = (counts[stockName] || 0) + getPortionUnits(item.name, item.adet || 1);
             });
             for (const [name, adet] of Object.entries(counts)) {
                 const stock = getPortionStock(name);
@@ -1597,9 +2289,13 @@
             let total = 0;
             const readyCount = serverItems.filter(isReadyItem).length;
             const servedButton = document.getElementById('btnMarkServed');
+            const transferButton = document.getElementById('btnTransferTable');
             if (servedButton) {
                 servedButton.style.display = readyCount ? 'inline-flex' : 'none';
                 servedButton.textContent = readyCount > 1 ? `SERVİS EDİLDİ (${readyCount})` : 'SERVİS EDİLDİ';
+            }
+            if (transferButton) {
+                transferButton.style.display = currentTable && serverItems.length ? 'inline-flex' : 'none';
             }
 
             // 1. Aktif Siparişler (Mutfakta/Hazır)
@@ -1617,11 +2313,15 @@
                 }
                 const itemNote = item.not || '';
                 const noteLabel = formatOrderNote(itemNote);
+                const quantity = normalizeBasketQuantity(item.adet || 1);
+                const serverPriceMeta = Math.abs(quantity - 1) < 0.001
+                    ? `${formatMenuPrice(item.fiyat)} TL`
+                    : `${formatMenuPrice(item.fiyat)} TL x ${formatPortionAmount(quantity)} = ${formatMenuPrice(getLineTotal(item))} TL`;
                 div.innerHTML = `
                     <div style="flex-grow: 1;">
                         ${statusBadge}
                         <span class="basket-item-name">${item.urun}${isIkram ? ' (İKRAM)' : ''}</span>
-                        <br/><span style="font-size: 10px; color: #999;">${isIkram ? 'İkram' : item.fiyat + ' TL'}</span>
+                        <br/><span class="basket-line-meta">${isIkram ? 'İkram' : serverPriceMeta}</span>
                         ${noteLabel ? `<br/><span class="basket-item-note">${escapeHtml(noteLabel)}</span>` : ''}
                     </div>
                     <div>
@@ -1637,26 +2337,39 @@
                 const div = document.createElement('div');
                 div.className = 'basket-item';
                 div.style.borderLeft = '3px solid #3498db';
+                const portionIndex = getGrillPortionIndex(item.adet || 1);
+                const baseNoteLabel = formatOrderNote(item.baseNote || '');
+                const portionControls = item.portionSelectable
+                    ? `<div class="portion-stepper">
+                            <button type="button" onclick="adjustBasketPortion(${index}, -1)" ${portionIndex === 0 ? 'disabled' : ''}>-</button>
+                            <span>${formatPortionChoiceLabel(GRILL_PORTION_VALUES[portionIndex])}</span>
+                            <button type="button" onclick="adjustBasketPortion(${index}, 1)" ${portionIndex === GRILL_PORTION_VALUES.length - 1 ? 'disabled' : ''}>+</button>
+                        </div>`
+                    : '';
                 div.innerHTML = `
                     <div style="flex-grow: 1;">
                         <span style="color: #3498db; font-size: 10px; font-weight: bold;">[YENİ]</span>
                         <span class="basket-item-name">${escapeHtml(item.name)}</span>
-                        <br/><span style="font-size: 10px; color: #999;">${item.price} TL</span>
+                        <br/><span class="basket-line-meta">${getBasketPriceMeta(item)}</span>
+                        ${baseNoteLabel ? `<br/><span class="basket-item-note">${escapeHtml(baseNoteLabel)}</span>` : ''}
                         <input
                             class="basket-note"
                             type="text"
                             maxlength="160"
-                            placeholder="Not: pilav bulgur olacak"
+                            placeholder="Kalem notu"
                             value="${escapeHtml(item.note || '')}"
                             oninput="updateBasketNote(${index}, this.value)"
                         >
+                        <div class="ready-note-buttons"></div>
                     </div>
                     <div class="basket-item-actions">
+                        ${portionControls}
                         <span class="remove" onclick="removeFromBasket(${index})">×</span>
                     </div>
                 `;
                 list.appendChild(div);
-                total += parseFloat(item.price);
+                appendReadyNoteButtons(div, index, item);
+                total += getBasketLineTotal(item);
             });
 
             if (totalEl) totalEl.textContent = total.toFixed(2) + ' TL';
@@ -1688,15 +2401,145 @@
                     masa: currentTable, // Masayı açıkça gönder
                     urun: item.name,
                     fiyat: item.price,
+                    adet: item.adet || 1,
                     garson: loggedWaiter,
-                    not: item.note || ''
+                    not: composeBasketItemNote(item)
                 });
             });
             basket = [];
             updateBasketDisplay();
         }
 
+        function getTransferTableGroups() {
+            const salons = Array.isArray(sysInfo.salons) ? sysInfo.salons : [];
+            if (salons.length > 0) {
+                return salons
+                    .map(salon => ({
+                        name: salon.name || 'Salon',
+                        tables: (salon.tables || []).filter(Boolean)
+                    }))
+                    .filter(group => group.tables.length > 0);
+            }
+
+            const masaCount = Number(sysInfo.masa_sayisi || 0);
+            if (!masaCount) return [];
+            return [{
+                name: 'Masalar',
+                tables: Array.from({ length: masaCount }, (_, index) => `Masa ${index + 1}`)
+            }];
+        }
+
+        function openTransferModal() {
+            if (!currentTable) {
+                alert('Önce masa seçin');
+                return;
+            }
+            if (basket.length > 0) {
+                alert('Masa taşımadan önce sepetteki yeni siparişleri gönderin veya silin.');
+                return;
+            }
+            if (!serverItems.length) {
+                alert('Taşınacak aktif sipariş bulunmuyor.');
+                return;
+            }
+
+            const grid = document.getElementById('transferTargetGrid');
+            const sourceInfo = document.getElementById('transferSourceInfo');
+            if (!grid) return;
+            grid.innerHTML = '';
+            if (sourceInfo) {
+                sourceInfo.textContent = `Kaynak: ${currentTable} · ${serverItems.length} ürün`;
+            }
+
+            let targetCount = 0;
+            getTransferTableGroups().forEach(group => {
+                const targets = group.tables.filter(table => table !== currentTable);
+                if (!targets.length) return;
+
+                const groupTitle = document.createElement('div');
+                groupTitle.className = 'transfer-group';
+                groupTitle.textContent = group.name;
+                grid.appendChild(groupTitle);
+
+                targets.forEach(table => {
+                    const items = getTableItems(table);
+                    const total = items.reduce((sum, item) => sum + (isComplimentaryItem(item) ? 0 : getLineTotal(item)), 0);
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'transfer-target' + (items.length ? ' occupied' : '');
+                    btn.innerHTML = `
+                        <span class="transfer-target-name">${escapeHtml(table)}</span>
+                        ${items.length ? `<span class="transfer-meta">${items.length} ürün · ${total.toFixed(2)} TL</span>` : '<span class="transfer-meta">Boş</span>'}
+                    `;
+                    btn.onclick = () => confirmTransfer(table);
+                    grid.appendChild(btn);
+                    targetCount += 1;
+                });
+            });
+
+            if (!targetCount) {
+                grid.innerHTML = '<div class="transfer-empty">Taşınacak hedef masa bulunamadı.</div>';
+            }
+
+            document.getElementById('transferModal').style.display = 'flex';
+        }
+
+        function confirmTransfer(targetTable) {
+            if (!currentTable || !targetTable) return;
+            const targetItems = getTableItems(targetTable);
+            const mergeNote = targetItems.length
+                ? `\n\n${targetTable} içinde ${targetItems.length} ürün var. Taşıma sonrası hesaplar birleşecek.`
+                : '';
+            const ok = confirm(`${currentTable} masasını ${targetTable} masasına taşımak istiyor musunuz?${mergeNote}`);
+            if (!ok) return;
+
+            pendingTransfer = {
+                source: currentTable,
+                target: targetTable
+            };
+            socket.emit('transfer_table', {
+                source_masa: currentTable,
+                target_masa: targetTable,
+                garson: loggedWaiter || 'Ortak Terminal'
+            });
+            closeTransferModal();
+        }
+
+        function closeTransferModal() {
+            const modal = document.getElementById('transferModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function handleTransferSuccess(data) {
+            const source = data.source_masa || pendingTransfer?.source;
+            const target = data.target_masa || pendingTransfer?.target;
+            if (!target || (pendingTransfer && target !== pendingTransfer.target)) {
+                pendingTransfer = null;
+                return;
+            }
+
+            currentTable = target;
+            basket = [];
+            serverItems = getTableItems(target);
+            document.getElementById('activeTableName').textContent = target;
+            updateActiveTableAlert();
+            showScreen('order-screen');
+            document.getElementById('basketPanel').style.display = 'flex';
+            socket.emit('select_masa', { masa: target });
+            renderTables();
+            updateBasketDisplay();
+            pendingTransfer = null;
+
+            if (source && window.navigator.vibrate) {
+                window.navigator.vibrate([80, 40, 80]);
+            }
+        }
+
         function openQrTools() {
+            if (sharedTerminalMode) {
+                alert('Ortak terminalde QR/NFC araçları kapalı.');
+                return;
+            }
             if (!loggedWaiter) {
                 alert('Önce giriş yapın');
                 return;

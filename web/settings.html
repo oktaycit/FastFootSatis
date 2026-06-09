@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FastFootSatış - Ayarlar</title>
+    <title>Restoran - Ayarlar</title>
     <link rel="stylesheet" href="styles.css">
     <style>
         /* ── Ayarlar sayfasına özel stiller ── */
@@ -488,6 +488,7 @@
                 <span class="status-indicator" id="connectionDot">●</span>
                 <span id="sysIp" class="ip-address">IP: ---</span>
                 <a href="/" style="color:#fff; text-decoration:none; font-size:14px;">← Ana Sayfa</a>
+                <a href="/logout" class="logout-link">Çıkış</a>
             </div>
         </div>
     </header>
@@ -752,6 +753,41 @@
                         <span class="slider"></span>
                     </label>
                 </div>
+
+                <hr class="divider">
+
+                <div class="toggle-row">
+                    <div>
+                        <div class="toggle-label">Hesap IP Termal Yazıcı</div>
+                        <div class="toggle-desc">Masaya hesap istendiğinde kasadaki termal yazıcıya hesap bilgisi gönderir</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="receiptPrinterEnabled">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+
+                <div class="form-row" style="margin-top:12px;">
+                    <div class="form-group">
+                        <label for="receiptPrinterIp">Hesap Yazıcı IP</label>
+                        <input type="text" id="receiptPrinterIp" placeholder="192.168.1.50">
+                    </div>
+                    <div class="form-group">
+                        <label for="receiptPrinterPort">Port</label>
+                        <input type="number" id="receiptPrinterPort" placeholder="9100">
+                    </div>
+                    <div class="form-group">
+                        <label for="receiptPrinterCopies">Kopya</label>
+                        <input type="number" id="receiptPrinterCopies" min="1" max="5" placeholder="1">
+                    </div>
+                </div>
+                <button class="btn-settings btn-info-s btn-sm" type="button" onclick="copyReceiptPrinterToServicePanels()"
+                    style="margin:0 0 4px 0;">
+                    🥤🍰 Bu IP'yi İçecek ve Tatlı Yazıcılarına Kopyala
+                </button>
+                <small style="display:block; color:var(--text-secondary);">
+                    Kasadaki ortak yazıcı içecek, tatlı ve hesap için kullanılacaksa aynı IP'yi bu üç alana verin.
+                </small>
 
                 <div class="form-row" style="margin-top:16px;">
                     <div class="form-group" style="max-width:360px;">
@@ -1179,13 +1215,14 @@
     <script>
         /* ── Ayarlar sayfası JS ── */
         const fallbackPrepPanels = [
-            { id: 'izgara', name: 'Izgara', title: 'IZGARA SİPARİŞ TAKİP', ticket_title: 'IZGARA FİŞİ', emoji: '🔥', aggregate: false, category_keywords: ['izgara', 'kebap', 'kofte', 'sis'], product_keywords: ['izgara', 'kofte', 'kebap', 'adana', 'beyti', 'sis', 'kanat', 'incik', 'biftek', 'karisik', 'tepsi'] },
-            { id: 'mutfak', name: 'Mutfak', title: 'MUTFAK SİPARİŞ TAKİP', ticket_title: 'MUTFAK FİŞİ', emoji: '👨‍🍳', aggregate: false, category_keywords: [], product_keywords: [] },
-            { id: 'icecek', name: 'İçecek', title: 'İÇECEK SİPARİŞ TAKİP', ticket_title: 'İÇECEK FİŞİ', emoji: '🥤', aggregate: true, category_keywords: ['icecek', 'mesrubat', 'cay', 'kahve', 'soda'], product_keywords: ['ayran', 'salgam', 'soda', 'gazoz', 'meyve suyu', 'mesrubat', 'kahve', 'cay'] },
-            { id: 'tatli', name: 'Tatlı', title: 'TATLI SİPARİŞ TAKİP', ticket_title: 'TATLI FİŞİ', emoji: '🍰', aggregate: false, category_keywords: ['tatli', 'baklava', 'dondurma', 'sut tatlilari', 'sutlu tatli'], product_keywords: ['baklava', 'sutlac', 'kazandibi', 'supangle', 'dondurma'] }
+            { id: 'izgara', name: 'Izgara', title: 'IZGARA SİPARİŞ TAKİP', ticket_title: 'IZGARA FİŞİ', emoji: '🔥', aggregate: false, category_keywords: ['izgara', 'kebap', 'kofte', 'sis'], product_keywords: ['izgara', 'kofte', 'kebap', 'adana', 'beyti', 'sis', 'kanat', 'incik', 'biftek', 'karisik', 'tepsi'], quick_notes: ['Az Pişmiş', 'Orta Pişmiş', 'Çok Pişmiş', 'Soğansız'] },
+            { id: 'mutfak', name: 'Mutfak', title: 'MUTFAK SİPARİŞ TAKİP', ticket_title: 'MUTFAK FİŞİ', emoji: '👨‍🍳', aggregate: false, category_keywords: [], product_keywords: [], quick_notes: ['Bulgur pilavlı', 'Pirinç pilavlı', 'Pilavsız'] },
+            { id: 'icecek', name: 'İçecek', title: 'İÇECEK SİPARİŞ TAKİP', ticket_title: 'İÇECEK FİŞİ', emoji: '🥤', aggregate: true, category_keywords: ['icecek', 'mesrubat', 'cay', 'kahve', 'soda'], product_keywords: ['ayran', 'salgam', 'soda', 'gazoz', 'meyve suyu', 'mesrubat', 'kahve', 'cay'], quick_notes: ['Buzsuz', 'Az buzlu', 'Şekersiz'] },
+            { id: 'tatli', name: 'Tatlı', title: 'TATLI SİPARİŞ TAKİP', ticket_title: 'TATLI FİŞİ', emoji: '🍰', aggregate: false, category_keywords: ['tatli', 'baklava', 'dondurma', 'sut tatlilari', 'sutlu tatli'], product_keywords: ['baklava', 'sutlac', 'kazandibi', 'supangle', 'dondurma'], quick_notes: ['Dondurmalı', 'Kaymaksız'] }
         ];
         let prepPanels = fallbackPrepPanels;
         let prepPrinters = {};
+        let receiptPrinter = {};
         let prepCategoryOverrides = {};
         let menuCategories = [];
 
@@ -1258,6 +1295,11 @@
 
                 prepPanels = Array.isArray(data.prep_panels) && data.prep_panels.length ? data.prep_panels : fallbackPrepPanels;
                 prepPrinters = data.prep_printers || {};
+                receiptPrinter = data.receipt_printer || {};
+                document.getElementById('receiptPrinterEnabled').checked = !!receiptPrinter.enabled;
+                document.getElementById('receiptPrinterIp').value = receiptPrinter.ip || '';
+                document.getElementById('receiptPrinterPort').value = receiptPrinter.port || 9100;
+                document.getElementById('receiptPrinterCopies').value = receiptPrinter.copies || 1;
                 prepCategoryOverrides = data.prep_category_overrides || {};
                 menuCategories = Array.isArray(data.menu_categories) ? data.menu_categories : [];
                 renderPrepSettings();
@@ -1402,6 +1444,12 @@
                                 <textarea class="prep-textarea" id="prep_product_keywords_${panel.id}">${escapeHtml(keywordsToText(panel.product_keywords))}</textarea>
                             </div>
                         </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Hazır Kalem Notları</label>
+                                <textarea class="prep-textarea" id="prep_quick_notes_${panel.id}" placeholder="Örn: Pilavsız, Soğansız">${escapeHtml(keywordsToText(panel.quick_notes))}</textarea>
+                            </div>
+                        </div>
                         <div class="toggle-row">
                             <div>
                                 <div class="toggle-label">Aynı ürünü tek kartta topla</div>
@@ -1491,7 +1539,8 @@
                 ticket_title: document.getElementById(`prep_ticket_${panel.id}`)?.value.trim() || panel.ticket_title,
                 aggregate: document.getElementById(`prep_aggregate_${panel.id}`)?.checked || false,
                 category_keywords: textToKeywords(document.getElementById(`prep_category_keywords_${panel.id}`)?.value),
-                product_keywords: textToKeywords(document.getElementById(`prep_product_keywords_${panel.id}`)?.value)
+                product_keywords: textToKeywords(document.getElementById(`prep_product_keywords_${panel.id}`)?.value),
+                quick_notes: textToKeywords(document.getElementById(`prep_quick_notes_${panel.id}`)?.value)
             }));
 
             const printers = {};
@@ -1511,6 +1560,34 @@
             });
 
             return { panels, printers, categoryOverrides };
+        }
+
+        function collectReceiptPrinterSettings() {
+            return {
+                enabled: document.getElementById('receiptPrinterEnabled')?.checked || false,
+                ip: document.getElementById('receiptPrinterIp')?.value.trim() || '',
+                port: parseInt(document.getElementById('receiptPrinterPort')?.value) || 9100,
+                copies: parseInt(document.getElementById('receiptPrinterCopies')?.value) || 1
+            };
+        }
+
+        function copyReceiptPrinterToServicePanels() {
+            const printer = collectReceiptPrinterSettings();
+            if (!printer.ip) {
+                showToast('Önce hesap yazıcısı IP adresini girin.', 'warning');
+                return;
+            }
+            ['icecek', 'tatli'].forEach(panelId => {
+                const enabled = document.getElementById(`prep_printer_enabled_${panelId}`);
+                const ip = document.getElementById(`prep_printer_ip_${panelId}`);
+                const port = document.getElementById(`prep_printer_port_${panelId}`);
+                const copies = document.getElementById(`prep_printer_copies_${panelId}`);
+                if (enabled) enabled.checked = true;
+                if (ip) ip.value = printer.ip;
+                if (port) port.value = printer.port;
+                if (copies) copies.value = printer.copies;
+            });
+            showToast('İçecek ve Tatlı yazıcıları kasadaki IP ile eşlendi.', 'success');
         }
 
         async function loadSystemInfo() {
@@ -1598,11 +1675,16 @@
                 return;
             }
             const prepSettings = collectPrepSettings();
+            const receiptPrinter = collectReceiptPrinterSettings();
             const missingPrinter = prepSettings.panels.find(panel =>
                 prepSettings.printers[panel.id]?.enabled && !prepSettings.printers[panel.id]?.ip
             );
             if (missingPrinter) {
                 showToast(`${missingPrinter.name} yazıcısı açık ama IP adresi boş.`, 'warning');
+                return;
+            }
+            if (receiptPrinter.enabled && !receiptPrinter.ip) {
+                showToast('Hesap yazıcısı açık ama IP adresi boş.', 'warning');
                 return;
             }
 
@@ -1627,6 +1709,7 @@
                 va_kitchen_approval: document.getElementById('vaKitchenApproval').checked,
                 prep_panels: prepSettings.panels,
                 prep_printers: prepSettings.printers,
+                receipt_printer: receiptPrinter,
                 prep_category_overrides: prepSettings.categoryOverrides,
                 mevcut_sifre: mevcutSifre
             };

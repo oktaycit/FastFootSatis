@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Delivery Platform Integration Manager
-FastFootSatış
+Restoran
 """
 
 import json

@@ -1,5 +1,5 @@
 /**
- * FastFootSatış - Client-Side JavaScript
+ * Restoran - Client-Side JavaScript
  * Real-time SocketIO communication and UI management
  */
 
@@ -8,6 +8,7 @@ let socket = null;
 let systemInfo = {};
 let menuData = {};
 let portionStock = {};
+let dailyMeals = { items: [], categories: [] };
 let adisyonlar = {};
 let currentMasa = null;
 let currentItems = [];
@@ -88,6 +89,37 @@ function getDefaultPaymentMethod() {
     return normalizePaymentMethod(systemInfo.default_payment_method || 'Nakit');
 }
 
+function normalizeTerminalRole(value) {
+    const role = String(value || '').trim().toLocaleLowerCase('tr-TR');
+    if (role === 'terminal' || role === 'garson' || role === 'order' || role === 'siparis') {
+        return 'terminal';
+    }
+    return 'kasa';
+}
+
+function captureTerminalRoleFromLocation() {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('role')) {
+        const role = normalizeTerminalRole(urlParams.get('role'));
+        localStorage.setItem('terminal_role', role);
+        console.log(`🎭 Role set from URL: ${role}`);
+        return role;
+    }
+    if (window.location.pathname.includes('kasa-terminal')) {
+        localStorage.setItem('terminal_role', 'kasa');
+        return 'kasa';
+    }
+    return normalizeTerminalRole(localStorage.getItem('terminal_role') || 'kasa');
+}
+
+function getTerminalRole() {
+    return normalizeTerminalRole(localStorage.getItem('terminal_role') || 'kasa');
+}
+
+function canEnterOrders() {
+    return getTerminalRole() !== 'kasa';
+}
+
 // DOM Elements
 const elements = {
     companyName: null,
@@ -122,6 +154,8 @@ const elements = {
     paymentNakit: null,
     paymentKart: null,
     paymentCari: null,
+    invoicePending: null,
+    invoiceNote: null,
     customerSelectionDiv: null,
     customerSearch: null,
     customerResults: null,
@@ -135,6 +169,15 @@ const elements = {
     btnCloseCompBill: null,
     splitButtonsArea: null,
     selectedCount: null,
+    cashierQuickSale: null,
+    quickSaleMasaHint: null,
+    btnQuickWater: null,
+    btnQuickDessert: null,
+    quickDessertForm: null,
+    quickDessertProduct: null,
+    quickDessertGrams: null,
+    btnQuickDessertAdd: null,
+    quickDessertPreview: null,
     // Caller ID Popup
     cidPopup: null,
     cidName: null,
@@ -223,6 +266,7 @@ function connectToServer() {
     socket.on('new_online_order', onNewOnlineOrder);
     socket.on('vardiya_update', onVardiyaUpdate);
     socket.on('portion_stock_update', onPortionStockUpdate);
+    socket.on('daily_meals_update', onDailyMealsUpdate);
 
     // New: Order ready notification
     socket.on('order_ready', (data) => {
@@ -332,19 +376,11 @@ function onInitialData(data) {
     systemInfo = data.system || {};
     menuData = data.menu || {};
     portionStock = data.portion_stock || {};
+    dailyMeals = data.daily_meals || dailyMeals;
     adisyonlar = data.adisyonlar || {};
     activeShift = data.active_shift || activeShift || null;
 
-    // Check for terminal role override in URL or localStorage
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.has('role')) {
-        const role = urlParams.get('role');
-        localStorage.setItem('terminal_role', role);
-        console.log(`🎭 Role set from URL: ${role}`);
-    }
-
-    const currentRole = localStorage.getItem('terminal_role') || 'kasa';
-    const isTerminal = (currentRole === 'terminal');
+    const currentRole = captureTerminalRoleFromLocation();
 
     // Update UI
     updateSystemInfo();
@@ -353,10 +389,34 @@ function onInitialData(data) {
     updateVardiyaUI(); // İlk yüklemede vardiya durumunu yansıt
     syncSelectedKasa(); // Sunucudan kasa secimine gore guncel vardiyayi tekrar iste
 
-    // Apply role restrictions
-    if (isTerminal) {
+    applyRoleProfile(currentRole);
+    populateQuickDessertOptions();
+    updateQuickSaleUI();
+}
+
+function applyRoleProfile(role = getTerminalRole()) {
+    document.body.classList.remove('cashier-terminal', 'order-terminal');
+    if (role === 'terminal') {
         applyTerminalRestrictions();
+        return;
     }
+    applyCashierProfile();
+}
+
+function applyCashierProfile() {
+    document.body.classList.add('cashier-terminal');
+    const banner = document.getElementById('terminalModeBanner');
+    if (banner) {
+        banner.querySelector('strong').textContent = 'KASA HESAP TERMİNALİ';
+        banner.querySelector('span').textContent = 'Sipariş girişi garson ekranlarında';
+    }
+    if (elements.currentMasaLabel && !currentMasa) {
+        elements.currentMasaLabel.textContent = 'Hesap için masa seçiniz';
+    }
+    if (elements.terminalId) {
+        elements.terminalId.style.color = '';
+    }
+    updateQuickSaleUI();
 }
 
 /**
@@ -364,6 +424,7 @@ function onInitialData(data) {
  */
 function applyTerminalRestrictions() {
     console.log('🛡️ Applying terminal restrictions (Checkout disabled)');
+    document.body.classList.add('order-terminal');
 
     // Hide payment buttons
     const paymentButtons = document.querySelector('.payment-buttons');
@@ -379,13 +440,19 @@ function applyTerminalRestrictions() {
             else el.style.display = 'none';
         }
     });
+    document.querySelectorAll('.main-actions, .management-buttons, .extra-modules').forEach(el => {
+        el.style.display = 'none';
+    });
+    ['btnTransfer', 'btnPrint', 'btnTotalPayment'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
 
     // Hide split buttons
     if (elements.splitButtonsArea) elements.splitButtonsArea.style.display = 'none';
 
     // Update terminal text to show it's a terminal
     if (elements.terminalId) {
-        elements.terminalId.textContent += ' (Sipariş Terminali)';
         elements.terminalId.style.color = '#f39c12';
     }
 
@@ -404,6 +471,7 @@ function onMasaSelected(data) {
 
     updateOrderDisplay();
     updateCourierArea();
+    updateQuickSaleUI();
 }
 
 function onMasaUpdate(data) {
@@ -509,6 +577,9 @@ function onSuccess(data) {
         return;
     }
     showNotification(data.message, 'success');
+    if (data && data.type === 'transfer_table' && data.target_masa) {
+        selectMasa(data.target_masa);
+    }
 }
 
 function onVardiyaUpdate(data) {
@@ -520,6 +591,14 @@ function onVardiyaUpdate(data) {
 function onPortionStockUpdate(data) {
     portionStock = data.portion_stock || {};
     renderMenu();
+    updateQuickSaleUI();
+}
+
+function onDailyMealsUpdate(data) {
+    dailyMeals = data.daily_meals || dailyMeals;
+    portionStock = data.portion_stock || portionStock;
+    renderMenu();
+    updateQuickSaleUI();
 }
 
 function getPortionStock(urun) {
@@ -536,8 +615,25 @@ function formatPortionAmount(value) {
     return Number.isInteger(amount) ? String(amount) : String(amount).replace('.', ',');
 }
 
-function canAddPortionItem(urun) {
-    const stock = getPortionStock(urun);
+function normalizeDailyText(value) {
+    return String(value || '').trim().toLocaleLowerCase('tr-TR');
+}
+
+function getDailyMealCategories() {
+    return Array.isArray(dailyMeals.categories) ? dailyMeals.categories : [];
+}
+
+function isDailyMealCategory(category) {
+    const target = normalizeDailyText(category);
+    return !!target && getDailyMealCategories().some(name => normalizeDailyText(name) === target);
+}
+
+function getTrackedPortionStock(category, urun) {
+    return isDailyMealCategory(category) ? getPortionStock(urun) : null;
+}
+
+function canAddPortionItem(urun, category = '') {
+    const stock = getTrackedPortionStock(category, urun);
     if (!stock || !stock.tracked) return true;
     const remaining = Number(stock.kalan || 0);
     if (remaining <= 0) {
@@ -547,11 +643,197 @@ function canAddPortionItem(urun) {
     return true;
 }
 
+function normalizeQuickSaleText(value) {
+    return String(value || '')
+        .trim()
+        .toLocaleLowerCase('tr-TR')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/ı/g, 'i')
+        .replace(/\s+/g, ' ');
+}
+
+function getVisibleMenuEntries() {
+    const entries = [];
+    Object.keys(menuData || {}).forEach(category => {
+        (menuData[category] || []).filter(isMenuItemVisible).forEach(item => {
+            const name = String(item[0] || '').trim();
+            const price = Number(item[1] || 0);
+            if (!name || !Number.isFinite(price)) return;
+            entries.push({ category, name, price, item });
+        });
+    });
+    return entries;
+}
+
+function findQuickWaterItem() {
+    const entries = getVisibleMenuEntries();
+    return entries.find(entry => {
+        const name = normalizeQuickSaleText(entry.name);
+        return /\bsu\b/.test(name) && !name.includes('meyve suyu');
+    }) || entries.find(entry => {
+        const name = normalizeQuickSaleText(entry.name);
+        return name.endsWith(' su') || name === 'su';
+    });
+}
+
+function getWeightedDessertOptions() {
+    return getVisibleMenuEntries().filter(entry => {
+        const category = normalizeQuickSaleText(entry.category);
+        const name = normalizeQuickSaleText(entry.name);
+        const looksWeighted = name.includes('kilogram') || name.includes(' kilo') || /\bkg\b/.test(name);
+        const looksDessert = category.includes('tatli') || category.includes('baklava') || category.includes('dondurma')
+            || name.includes('baklava') || name.includes('dondurma') || name.includes('tatli');
+        return looksWeighted && looksDessert;
+    });
+}
+
+function getSelectedQuickDessert() {
+    if (!elements.quickDessertProduct) return null;
+    const selectedName = elements.quickDessertProduct.value;
+    return getWeightedDessertOptions().find(item => item.name === selectedName) || null;
+}
+
+function formatOrderQuantity(value) {
+    const quantity = Number(value || 0);
+    if (!Number.isFinite(quantity)) return '0';
+    if (Number.isInteger(quantity)) return String(quantity);
+    return quantity.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+}
+
+function formatGramAmount(value) {
+    const grams = Number(value || 0);
+    if (!Number.isFinite(grams)) return '0';
+    return Number.isInteger(grams) ? String(grams) : grams.toFixed(1).replace(/0$/, '').replace(/\.$/, '');
+}
+
+function populateQuickDessertOptions() {
+    if (!elements.quickDessertProduct) return;
+    const selected = elements.quickDessertProduct.value;
+    const options = getWeightedDessertOptions();
+    elements.quickDessertProduct.innerHTML = '';
+
+    if (!options.length) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'Kiloluk tatlı bulunamadı';
+        elements.quickDessertProduct.appendChild(option);
+        elements.quickDessertProduct.disabled = true;
+        if (elements.btnQuickDessertAdd) elements.btnQuickDessertAdd.disabled = true;
+        updateQuickDessertPreview();
+        return;
+    }
+
+    options.forEach(entry => {
+        const option = document.createElement('option');
+        option.value = entry.name;
+        option.textContent = `${entry.name} - ${entry.price.toFixed(2)} TL/kg`;
+        elements.quickDessertProduct.appendChild(option);
+    });
+
+    if (selected && options.some(entry => entry.name === selected)) {
+        elements.quickDessertProduct.value = selected;
+    }
+    elements.quickDessertProduct.disabled = false;
+    if (elements.btnQuickDessertAdd) elements.btnQuickDessertAdd.disabled = !currentMasa;
+    updateQuickDessertPreview();
+}
+
+function updateQuickSaleUI() {
+    if (!elements.cashierQuickSale) return;
+
+    const hasTable = !!currentMasa;
+    if (elements.quickSaleMasaHint) {
+        elements.quickSaleMasaHint.textContent = hasTable ? currentMasa : 'Masa seçiniz';
+    }
+    if (elements.btnQuickWater) {
+        elements.btnQuickWater.disabled = !hasTable || !findQuickWaterItem();
+    }
+    if (elements.btnQuickDessert) {
+        elements.btnQuickDessert.disabled = !hasTable || getWeightedDessertOptions().length === 0;
+    }
+    if (elements.btnQuickDessertAdd) {
+        elements.btnQuickDessertAdd.disabled = !hasTable || !getSelectedQuickDessert();
+    }
+    updateQuickDessertPreview();
+}
+
+function toggleQuickDessertForm() {
+    if (!elements.quickDessertForm) return;
+    populateQuickDessertOptions();
+    elements.quickDessertForm.classList.toggle('open');
+    updateQuickSaleUI();
+    if (elements.quickDessertForm.classList.contains('open') && elements.quickDessertGrams) {
+        elements.quickDessertGrams.focus();
+    }
+}
+
+function updateQuickDessertPreview() {
+    if (!elements.quickDessertPreview) return;
+    const dessert = getSelectedQuickDessert();
+    if (!dessert) {
+        elements.quickDessertPreview.textContent = 'Kiloluk tatlı bulunamadı';
+        return;
+    }
+
+    const grams = Number(String(elements.quickDessertGrams?.value || '').replace(',', '.')) || 0;
+    if (grams <= 0) {
+        elements.quickDessertPreview.textContent = `${dessert.price.toFixed(2)} TL/kg`;
+        return;
+    }
+
+    const kg = grams / 1000;
+    const total = kg * dessert.price;
+    elements.quickDessertPreview.textContent = `${formatGramAmount(grams)} gr = ${formatOrderQuantity(kg)} kg / ${total.toFixed(2)} TL`;
+}
+
+function addQuickWaterToOrder() {
+    const water = findQuickWaterItem();
+    if (!water) {
+        showNotification('Menüde su ürünü bulunamadı.', 'warning');
+        return;
+    }
+    addItemToOrder(water.name, water.price, {
+        allowCashierQuickSale: true,
+        garson: 'Kasa'
+    });
+}
+
+function addQuickDessertToOrder() {
+    const dessert = getSelectedQuickDessert();
+    if (!dessert) {
+        showNotification('Kiloluk tatlı seçiniz.', 'warning');
+        return;
+    }
+    const grams = Number(String(elements.quickDessertGrams?.value || '').replace(',', '.')) || 0;
+    if (grams <= 0) {
+        showNotification('Gram miktarı giriniz.', 'warning');
+        return;
+    }
+
+    const kg = Math.round((grams / 1000) * 1000) / 1000;
+    if (kg <= 0) {
+        showNotification('Geçerli bir gram miktarı giriniz.', 'warning');
+        return;
+    }
+
+    addItemToOrder(dessert.name, dessert.price, {
+        allowCashierQuickSale: true,
+        adet: kg,
+        garson: 'Kasa',
+        not: `${formatGramAmount(grams)} gr`
+    });
+    if (elements.quickDessertGrams) {
+        elements.quickDessertGrams.value = '';
+    }
+    updateQuickDessertPreview();
+}
+
 function updateVardiyaUI() {
     const statusEl = document.getElementById('vardiyaStatus');
     if (!statusEl) return;
 
-    const currentRole = localStorage.getItem('terminal_role') || 'kasa';
+    const currentRole = getTerminalRole();
     const isTerminal = (currentRole === 'terminal');
 
     if (activeShift) {
@@ -583,7 +865,7 @@ function enableCheckoutButtons(enabled) {
     });
 
     // Terminal ise zaten kapalı kalmalı
-    if (localStorage.getItem('terminal_role') === 'terminal') {
+    if (getTerminalRole() === 'terminal') {
         applyTerminalRestrictions();
     }
 }
@@ -603,7 +885,10 @@ function updateSystemInfo() {
     }
 
     if (elements.terminalId && systemInfo.terminal_id) {
-        elements.terminalId.textContent = `Terminal ${systemInfo.terminal_id}`;
+        const role = getTerminalRole();
+        elements.terminalId.textContent = role === 'terminal'
+            ? `Terminal ${systemInfo.terminal_id} (Sipariş)`
+            : `Kasa ${systemInfo.terminal_id}`;
     }
 
     if (elements.ipAddress && systemInfo.ip) {
@@ -614,13 +899,26 @@ function updateSystemInfo() {
         elements.footerIp.textContent = `📡 IP: ${systemInfo.ip}`;
     }
 
+    if (elements.footerTerminal && systemInfo.terminal_id) {
+        const role = getTerminalRole();
+        elements.footerTerminal.textContent = role === 'terminal'
+            ? `🆔 Sipariş Terminali ${systemInfo.terminal_id}`
+            : `🆔 Kasa ${systemInfo.terminal_id}`;
+    }
+
     updateVardiyaUI();
+    applyRoleProfile(getTerminalRole());
 }
 
 function renderMenu() {
     if (!elements.menuContainer) return;
 
     elements.menuContainer.innerHTML = '';
+    populateQuickDessertOptions();
+    if (!canEnterOrders()) {
+        updateQuickSaleUI();
+        return;
+    }
 
     Object.keys(menuData).forEach((category, index) => {
         const visibleItems = (menuData[category] || []).filter(isMenuItemVisible);
@@ -640,7 +938,7 @@ function renderMenu() {
 
         visibleItems.forEach(item => {
             const [name, price] = item;
-            const stock = getPortionStock(name);
+            const stock = getTrackedPortionStock(category, name);
             const tracked = !!(stock && stock.tracked);
             const remaining = tracked ? Number(stock.kalan || 0) : null;
             const soldOut = tracked && remaining <= 0;
@@ -658,7 +956,7 @@ function renderMenu() {
                     showNotification(`${stock.urun || getPortionStockName(name)} tükendi`, 'warning');
                     return;
                 }
-                addItemToOrder(name, price);
+                addItemToOrder(name, price, { category });
             };
             itemsDiv.appendChild(itemBtn);
         });
@@ -666,6 +964,7 @@ function renderMenu() {
         categoryDiv.appendChild(itemsDiv);
         elements.menuContainer.appendChild(categoryDiv);
     });
+    updateQuickSaleUI();
 }
 
 function renderTables() {
@@ -805,6 +1104,7 @@ function selectMasa(masa) {
     // Reset selection on masa switch
     selectedItemIndices = [];
     updateSplitButtons();
+    updateQuickSaleUI();
 }
 
 function updateOrderDisplay() {
@@ -839,7 +1139,7 @@ function updateOrderDisplay() {
                 <div class="order-item-info" style="flex-grow: 1;">
                     <div class="order-item-name">
                         ${statusBadge}
-                        ${item.adet}x ${item.urun}${isIkram ? ' (İKRAM)' : ''}
+                        ${formatOrderQuantity(item.adet)}x ${item.urun}${isIkram ? ' (İKRAM)' : ''}
                     </div>
                     <div style="font-size: 10px; color: #777;">${item.garson || 'Bilinmiyor'} - ${item.saat || ''}</div>
                     ${itemNote ? `<div style="font-size: 11px; color: #b7791f; margin-top: 3px;">Not: ${escapeHtml(itemNote)}</div>` : ''}
@@ -883,18 +1183,34 @@ function updateOrderDisplay() {
 /**
  * Order management
  */
-function addItemToOrder(urun, fiyat) {
+function addItemToOrder(urun, fiyat, options = {}) {
+    const allowCashierQuickSale = options.allowCashierQuickSale === true;
+    if (!canEnterOrders() && !allowCashierQuickSale) {
+        showNotification('Kasada sipariş girişi kapalı. Siparişleri garson ekranından girin.', 'warning');
+        return;
+    }
     if (!currentMasa) {
         showNotification('Lütfen önce masa seçiniz!', 'warning');
         return;
     }
-    if (!canAddPortionItem(urun)) {
+    if (!canAddPortionItem(urun, options.category || '')) {
+        return;
+    }
+
+    const quantity = Number(options.adet || 1);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+        showNotification('Geçerli miktar giriniz.', 'warning');
         return;
     }
 
     socket.emit('add_item', {
+        masa: currentMasa,
         urun: urun,
-        fiyat: fiyat
+        fiyat: fiyat,
+        adet: quantity,
+        garson: options.garson || 'Bilinmiyor',
+        not: options.not || '',
+        source: allowCashierQuickSale ? 'cashier_quick_sale' : 'menu'
     });
 }
 
@@ -987,7 +1303,7 @@ function cancelItem(uid, event) {
  * Split Payment Modal Functions
  */
 function checkVardiya() {
-    const isTerminal = localStorage.getItem('terminal_role') === 'terminal';
+    const isTerminal = getTerminalRole() === 'terminal';
     if (isTerminal) return true; // Terminal restricts checkout via UI anyway
 
     if (!activeShift) {
@@ -1053,7 +1369,7 @@ function setSelectedComplimentary(ikram) {
         return;
     }
 
-    const currentRole = localStorage.getItem('terminal_role') || 'kasa';
+    const currentRole = getTerminalRole();
     if (currentRole === 'terminal') {
         showNotification('Bu terminal yetkili değildir!', 'error');
         return;
@@ -1091,7 +1407,7 @@ function closeComplimentaryBill() {
         return;
     }
 
-    const currentRole = localStorage.getItem('terminal_role') || 'kasa';
+    const currentRole = getTerminalRole();
     socket.emit('close_complimentary_bill', {
         masa: currentMasa,
         role: currentRole
@@ -1170,6 +1486,13 @@ function openPaymentModal(prefillType = null, isSelective = false) {
     elements.selectedCustomer.value = '';
     elements.selectedCustomerDisplay.textContent = 'Henüz müşteri seçilmedi';
     elements.customerSelectionDiv.style.display = selectedPaymentMethod === 'Açık Hesap' ? 'block' : 'none';
+    if (elements.invoicePending) {
+        elements.invoicePending.checked = false;
+    }
+    if (elements.invoiceNote) {
+        elements.invoiceNote.value = '';
+        elements.invoiceNote.disabled = true;
+    }
 
     // Show modal
     elements.paymentModal.style.display = 'block';
@@ -1366,10 +1689,12 @@ function finalizeSplitPayment() {
         payments.push({ type: 'Açık Hesap', amount: cari, customer: customer });
     }
 
-    const currentRole = localStorage.getItem('terminal_role') || 'kasa';
+    const currentRole = getTerminalRole();
     const payload = {
         payments: payments,
-        role: currentRole
+        role: currentRole,
+        invoice_pending: Boolean(elements.invoicePending && elements.invoicePending.checked),
+        invoice_note: elements.invoiceNote ? elements.invoiceNote.value.trim() : ''
     };
     if (isSelectivePayment) {
         payload.item_indices = selectedItemIndices;
@@ -1400,7 +1725,7 @@ function processPayment(type) {
         showNotification('Lütfen önce masa seçiniz!', 'warning');
         return;
     }
-    const currentRole = localStorage.getItem('terminal_role') || 'kasa';
+    const currentRole = getTerminalRole();
     if (currentRole === 'terminal') {
         showNotification('Bu terminal yetkili değildir!', 'error');
         return;
@@ -1463,7 +1788,7 @@ function setupEventListeners() {
 
     if (elements.btnAbout) {
         elements.btnAbout.onclick = () => {
-            alert(`FastFootSatış\nRestoran Yönetim Sistemi\n\nVersiyon: 1.0\nIP: ${systemInfo.ip || '---'}\nTerminal: ${systemInfo.terminal_id || '1'}`);
+            alert(`Restoran\nRestoran Yönetim Sistemi\n\nVersiyon: 1.0\nIP: ${systemInfo.ip || '---'}\nTerminal: ${systemInfo.terminal_id || '1'}`);
         };
     }
 
@@ -1480,6 +1805,17 @@ function setupEventListeners() {
 
     if (elements.btnFinalizePayment) {
         elements.btnFinalizePayment.onclick = () => finalizeSplitPayment();
+    }
+
+    if (elements.invoicePending && elements.invoiceNote) {
+        elements.invoicePending.onchange = () => {
+            elements.invoiceNote.disabled = !elements.invoicePending.checked;
+            if (elements.invoicePending.checked) {
+                elements.invoiceNote.focus();
+            } else {
+                elements.invoiceNote.value = '';
+            }
+        };
     }
 
     if (elements.paymentNakit) {
@@ -1532,6 +1868,32 @@ function setupEventListeners() {
 
     if (elements.btnCloseCompBill) {
         elements.btnCloseCompBill.onclick = () => closeComplimentaryBill();
+    }
+
+    if (elements.btnQuickWater) {
+        elements.btnQuickWater.onclick = () => addQuickWaterToOrder();
+    }
+
+    if (elements.btnQuickDessert) {
+        elements.btnQuickDessert.onclick = () => toggleQuickDessertForm();
+    }
+
+    if (elements.quickDessertProduct) {
+        elements.quickDessertProduct.onchange = () => updateQuickDessertPreview();
+    }
+
+    if (elements.quickDessertGrams) {
+        elements.quickDessertGrams.oninput = () => updateQuickDessertPreview();
+        elements.quickDessertGrams.onkeydown = (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                addQuickDessertToOrder();
+            }
+        };
+    }
+
+    if (elements.btnQuickDessertAdd) {
+        elements.btnQuickDessertAdd.onclick = () => addQuickDessertToOrder();
     }
 
 

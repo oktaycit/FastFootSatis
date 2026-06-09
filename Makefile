@@ -1,4 +1,4 @@
-# Makefile for FastFootSatıs
+# Makefile for Restoran
 
 # OS Detection
 ifeq ($(OS),Windows_NT)
@@ -18,18 +18,43 @@ else
 endif
 
 # Remote Server Variables
-REMOTE_USER = vet
-REMOTE_HOST = 192.168.1.197
+REMOTE_USER = oktay
+REMOTE_HOST = debianoktay
 REMOTE_DIR = ~/restoran
-REMOTE_SERVICE = kuvoz-web.service
+REMOTE_SERVICE = fastfoot.service
 
-.PHONY: help run install deploy status logs ssh
+DEPLOY_EXCLUDES = \
+	--exclude '.git' \
+	--exclude '.venv' \
+	--exclude '__pycache__' \
+	--exclude '.env' \
+	--exclude 'config.txt' \
+	--exclude 'menu.txt' \
+	--exclude 'waiters.json' \
+	--exclude 'salons.json' \
+	--exclude 'integrations.json' \
+	--exclude 'active_adisyonlar.json' \
+	--exclude 'cashiers.json' \
+	--exclude 'kitchen.json' \
+	--exclude 'users.json' \
+	--exclude 'auth_sessions.json' \
+	--exclude 'menu_meta.json' \
+	--exclude 'portion_stock*.json' \
+	--exclude 'gunluk_yemekler.txt' \
+	--exclude 'gunluk_yemekler/' \
+	--exclude 'sira_no.txt' \
+	--exclude 'Fisler/' \
+	--exclude 'output/' \
+	--exclude 'web/uploads/'
+
+.PHONY: help run install deploy deploy-dry-run status logs ssh
 
 help:
 	@echo "Platform Detected: $(PLATFORM)"
 	@echo "Available commands:"
 	@echo "  make run          - Run the web server locally"
 	@echo "  make install      - Install dependencies from requirements.txt"
+	@echo "  make deploy-dry-run - Preview deploy without changing remote files"
 	@echo "  make deploy       - Sync files to remote server (Unix only)"
 	@echo "  make status       - Check status of remote service"
 	@echo "  make restart      - Restart the remote service"
@@ -53,9 +78,13 @@ onlyoffice-install:
 	@echo "OnlyOffice AI dependencies installed."
 
 deploy:
-	@echo "Deploying to $(REMOTE_HOST)..."
-	rsync -avz --exclude '.git' --exclude '.venv' --exclude '__pycache__' ./ $(REMOTE_USER)@$(REMOTE_HOST):$(REMOTE_DIR)
+	@echo "Deploying to $(REMOTE_USER)@$(REMOTE_HOST):$(REMOTE_DIR)..."
+	rsync -avz $(DEPLOY_EXCLUDES) ./ $(REMOTE_USER)@$(REMOTE_HOST):$(REMOTE_DIR)
 	@echo "Deployment complete."
+
+deploy-dry-run:
+	@echo "Previewing deploy to $(REMOTE_USER)@$(REMOTE_HOST):$(REMOTE_DIR)..."
+	rsync -avzn --itemize-changes $(DEPLOY_EXCLUDES) ./ $(REMOTE_USER)@$(REMOTE_HOST):$(REMOTE_DIR)
 
 status:
 	ssh $(REMOTE_USER)@$(REMOTE_HOST) "sudo systemctl status $(REMOTE_SERVICE)"

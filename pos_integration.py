@@ -2,6 +2,7 @@ import socket
 import json
 import logging
 import time
+import threading
 import uuid
 
 try:
@@ -39,6 +40,7 @@ class POSManager:
         self.ip = ip
         self.port = port
         self.pos_type = pos_type # "demo", "beko-json", "hugin", "generic", "token-bridge"
+        self._sale_lock = threading.Lock()
         
     def sale(self, amount, table_name="", items=None, payments=None, order_id=None):
         """
@@ -57,9 +59,19 @@ class POSManager:
             logger.info(f"POS DEMO: Masa {table_name} için {amount:.2f} TL ödeme alınıyor...")
             time.sleep(2) # Simulate processing
             return True, "İşlem Başarılı (DEMO)"
-            
+
+        # Eşzamanlı ÖKC isteklerini engelle — cihaz aynı anda tek işlem yapabilir
+        if not self._sale_lock.acquire(timeout=10):
+            logger.warning("POS Lock: Başka bir ÖKC işlemi devam ediyor, istek reddedildi.")
+            return False, "Başka bir ÖKC işlemi devam ediyor, lütfen bekleyin"
+
         try:
             if self.pos_type in self.TOKEN_BRIDGE_TYPES:
+                # Bridge sağlık kontrolü — cihaz bağlı mı ve bekleyen işlem var mı?
+                bridge_ok, bridge_msg = self._check_bridge_health()
+                if not bridge_ok:
+                    return False, bridge_msg
+
                 payload = self._create_token_bridge_payload(
                     table_name=table_name,
                     items=items or [],
@@ -85,6 +97,8 @@ class POSManager:
         except Exception as e:
             logger.error(f"POS Beklenmedik Hata: {str(e)}")
             return False, f"POS Hatası: {str(e)}"
+        finally:
+            self._sale_lock.release()
 
     def _create_payload(self, amount, table_name):
         """Prepare payload based on pos_type"""
@@ -191,15 +205,52 @@ class POSManager:
     def _to_quantity_units(self, quantity):
         return int(round(float(quantity) * 1000))
 
+    def _check_bridge_health(self):
+        """Bridge sağlık kontrolü — cihaz bağlı mı ve bekleyen işlem var mı?"""
+        try:
+            url = f"http://{self.ip}:{self.port}/health"
+            resp = requests.get(url, timeout=5)
+            data = resp.json()
+            if not data.get("deviceConnected"):
+                logger.error("ÖKC Bridge: Cihaz bağlı değil")
+                return False, "ÖKC cihazı bağlı değil, lütfen USB bağlantısını kontrol edin"
+            pending = data.get("pendingSales", 0)
+            if pending > 0:
+                logger.warning(f"ÖKC Bridge: {pending} bekleyen işlem var, yeni istek bekleniyor...")
+                # Bekleyen işlemin bitmesini bekle (maks 15 saniye)
+                for _ in range(15):
+                    time.sleep(1)
+                    try:
+                        resp2 = requests.get(url, timeout=5)
+                        if resp2.json().get("pendingSales", 0) == 0:
+                            break
+                    except Exception:
+                        pass
+                else:
+                    return False, "ÖKC cihazında tamamlanmamış bir işlem var, lütfen biraz bekleyin"
+            return True, ""
+        except requests.RequestException:
+            # Health endpoint'e ulaşılamıyorsa bridge çalışmıyor olabilir
+            logger.warning("ÖKC Bridge health endpoint'e ulaşılamadı, satış yine de deneniyor")
+            return True, ""
+
     def _send_token_bridge_request(self, payload):
         """Send a Token basket payload to the Windows terminal OKC bridge."""
         url = f"http://{self.ip}:{self.port}/api/sale"
         response = requests.post(url, json=payload, timeout=130)
         response.raise_for_status()
         try:
-            return response.json()
+            result = response.json()
         except ValueError:
             return {"success": False, "message": response.text[:200]}
+
+        # Hata/iptal durumunda Bridge'in DLL ACK döngüsünü tamamlaması için bekle.
+        # Bu olmadan kullanıcı hemen "tekrar dene" dediğinde eski işlemle çakışabilir.
+        if result.get("status") == -1 or not result.get("success"):
+            logger.info("ÖKC işlemi başarısız, DLL ACK döngüsü için 2s bekleniyor...")
+            time.sleep(2)
+
+        return result
 
     def _send_request(self, payload):
         """Low level TCP socket communication"""

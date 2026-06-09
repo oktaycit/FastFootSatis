@@ -37,10 +37,21 @@ PhoneAgent_Docs/
 
 # Runtime/local state
 config.txt
+menu.txt
+waiters.json
+salons.json
+integrations.json
+active_adisyonlar.json
+cashiers.json
+kitchen.json
+users.json
+auth_sessions.json
 output/
+Fisler/
 menu_meta.json
 portion_stock.json
 portion_stock_reset.json
 gunluk_yemekler.txt
 gunluk_yemekler/
+sira_no.txt
 web/uploads/

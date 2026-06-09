@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FastFootSatış - Restoran Yönetim Sistemi</title>
+    <title>Restoran Yönetim Sistemi</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 
@@ -18,9 +18,15 @@
                 <span id="vardiyaStatus" style="margin-right: 10px;"></span>
                 <span id="terminalId">Terminal 1</span>
                 <span class="ip-address" id="ipAddress">IP: ---</span>
+                <a href="/logout" class="logout-link">Çıkış</a>
             </div>
         </div>
     </header>
+
+    <div class="terminal-mode-banner" id="terminalModeBanner">
+        <strong>KASA HESAP TERMİNALİ</strong>
+        <span>Sipariş girişi garson ekranlarında</span>
+    </div>
 
     <!-- Main Container -->
     <div class="main-container">
@@ -28,7 +34,7 @@
         <!-- Left Panel - Menu -->
         <div class="panel left-panel">
             <div class="panel-header">
-                <h2>🍽️ MENÜ</h2>
+                <h2>🍽️ SİPARİŞ MENÜSÜ</h2>
             </div>
             <div class="menu-container" id="menuContainer">
                 <!-- Menu items will be loaded here -->
@@ -40,7 +46,7 @@
         <!-- Center Panel - Tables/Tables -->
         <div class="panel center-panel">
             <div class="panel-header">
-                <h2>📋 MASALAR & PAKETLER</h2>
+                <h2>📋 MASALAR & HESAPLAR</h2>
             </div>
 
             <!-- Paket Servisi -->
@@ -89,102 +95,133 @@
             <div class="controls-container">
                 <!-- Total / Payment Button -->
                 <div class="total-display" id="btnTotalPayment" title="Ödeme Al">
-                    <span class="total-label">TOPLAM:</span>
+                    <span class="total-label">ÖDEME / TOPLAM:</span>
                     <span class="total-amount" id="totalAmount">0.00 TL</span>
                     <span class="complimentary-amount" id="complimentaryAmount"></span>
                 </div>
 
-                <!-- Print Button -->
-                <button class="btn btn-print" id="btnPrint">
-                    🖨️ FİŞ YAZDIR
-                </button>
+                <div class="cashier-quick-sale" id="cashierQuickSale">
+                    <div class="quick-sale-header">
+                        <strong>HIZLI KASA SATIŞI</strong>
+                        <span id="quickSaleMasaHint">Masa seçiniz</span>
+                    </div>
+                    <div class="quick-sale-actions">
+                        <button class="quick-sale-btn quick-sale-water" id="btnQuickWater" type="button">
+                            Su Ekle
+                        </button>
+                        <button class="quick-sale-btn quick-sale-dessert" id="btnQuickDessert" type="button">
+                            Kiloluk Tatlı
+                        </button>
+                    </div>
+                    <div class="quick-dessert-form" id="quickDessertForm">
+                        <select id="quickDessertProduct" aria-label="Kiloluk tatlı seçimi"></select>
+                        <div class="quick-sale-row">
+                            <input id="quickDessertGrams" type="number" min="1" step="1" inputmode="decimal"
+                                placeholder="Gram">
+                            <button id="btnQuickDessertAdd" type="button">Ekle</button>
+                        </div>
+                        <div class="quick-sale-preview" id="quickDessertPreview">Gram giriniz</div>
+                    </div>
+                </div>
 
-                <!-- Transfer Table Button -->
-                <button class="btn" id="btnTransfer" style="background: #e67e22; color: white;">
-                    🔄 MASA TAŞI
-                </button>
-
-                <!-- Bill Split Buttons -->
-                <div id="splitButtonsArea" style="display: none; margin-bottom: 8px;">
-                    <button class="btn" id="btnPaySelected"
-                        style="background: linear-gradient(135deg, #f1c40f, #f39c12); color: white;">
-                        ⚖️ SEÇİLENLERİ ÖDE (<span id="selectedCount">0</span>)
+                <div class="cashier-actions">
+                    <button class="btn action-btn action-btn-print" id="btnPrint" type="button">
+                        <span class="action-icon">🖨️</span>
+                        <span>Hesap Yazdır</span>
                     </button>
-                    <button class="btn" id="btnCompSelected"
-                        style="background: #0f766e; color: white; margin-top: 6px;">
-                        🎁 SEÇİLENLERİ İKRAM YAP
-                    </button>
-                    <button class="btn" id="btnUncompSelected"
-                        style="background: #475569; color: white; margin-top: 6px;">
-                        ↩️ SEÇİLENLERİ HESABA AL
+                    <button class="btn action-btn action-btn-transfer" id="btnTransfer" type="button">
+                        <span class="action-icon">🔄</span>
+                        <span>Masa Taşı</span>
                     </button>
                 </div>
 
-                <button class="btn" id="btnCloseCompBill"
-                    style="display: none; background: #0f766e; color: white; margin-bottom: 8px;">
-                    🎁 İKRAM KAPAT
+                <!-- Bill Split Buttons -->
+                <div class="split-actions" id="splitButtonsArea" style="display: none;">
+                    <button class="btn action-btn action-btn-selected-pay" id="btnPaySelected" type="button">
+                        <span class="action-icon">⚖️</span>
+                        <span>Seçilenleri Öde (<span id="selectedCount">0</span>)</span>
+                    </button>
+                    <button class="btn action-btn action-btn-comp" id="btnCompSelected" type="button">
+                        <span class="action-icon">🎁</span>
+                        <span>Seçilenleri İkram Yap</span>
+                    </button>
+                    <button class="btn action-btn action-btn-return" id="btnUncompSelected" type="button">
+                        <span class="action-icon">↩️</span>
+                        <span>Seçilenleri Hesaba Al</span>
+                    </button>
+                </div>
+
+                <button class="btn action-btn action-btn-comp" id="btnCloseCompBill" style="display: none;"
+                    type="button">
+                    <span class="action-icon">🎁</span>
+                    <span>İkram Kapat</span>
                 </button>
 
 
                 <!-- Main Actions -->
-                <div class="main-actions"
-                    style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;">
-                    <a href="/cari" style="text-decoration:none;">
-                        <button class="btn btn-secondary" id="btnCari" style="margin-bottom:0;">💰 CARİ</button>
+                <div class="main-actions action-grid action-grid-two">
+                    <a class="action-link" href="/cari">
+                        <button class="btn action-btn action-btn-ledger" id="btnCari" type="button">
+                            <span class="action-icon">💰</span>
+                            <span>Cari</span>
+                        </button>
                     </a>
-                    <a href="/kasa" style="text-decoration:none;">
-                        <button class="btn" style="background: #34495e; color: white; margin-bottom:0;"><i
-                                class="fas fa-cash-register"></i> KASA</button>
+                    <a class="action-link" href="/kasa">
+                        <button class="btn action-btn action-btn-register" type="button">
+                            <span class="action-icon">🏦</span>
+                            <span>Kasa</span>
+                        </button>
                     </a>
                 </div>
 
-                <!-- Secondary Management Buttons (Grouped) -->
-                <div class="management-buttons" style="margin-top: 10px;">
-                    <div style="display: grid; grid-template-columns: 1fr; gap: 5px;">
-                        <a href="/settings" style="text-decoration:none;" title="Ayarlar">
-                            <button class="btn btn-secondary" id="btnSettings"
-                                style="font-size: 11px; padding: 10px 5px;">⚙️ AYARLAR</button>
+                <div class="shortcut-section extra-modules">
+                    <div class="shortcut-title">Reyonlar</div>
+                    <div class="module-grid prep-shortcuts">
+                        <a class="module-shortcut module-izgara" href="/izgara" target="_blank">
+                            <span class="shortcut-icon">🔥</span>
+                            <strong>Izgara</strong>
+                            <small>Reyon</small>
+                        </a>
+                        <a class="module-shortcut module-mutfak" href="/mutfak" target="_blank">
+                            <span class="shortcut-icon">👨‍🍳</span>
+                            <strong>Mutfak</strong>
+                            <small>Reyon</small>
+                        </a>
+                        <a class="module-shortcut module-icecek" href="/icecek" target="_blank">
+                            <span class="shortcut-icon">🥤</span>
+                            <strong>İçecek</strong>
+                            <small>Reyon</small>
+                        </a>
+                        <a class="module-shortcut module-tatli" href="/tatli" target="_blank">
+                            <span class="shortcut-icon">🍰</span>
+                            <strong>Tatlı</strong>
+                            <small>Reyon</small>
                         </a>
                     </div>
-                </div>
 
-                <div class="extra-modules"
-                    style="margin-top: 5px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px;">
-                    <a href="/izgara" style="text-decoration:none;" target="_blank">
-                        <button class="btn"
-                            style="background: #b45309; color: white; font-size: 11px; padding: 10px 5px;">🔥
-                            IZGARA</button>
-                    </a>
-                    <a href="/mutfak" style="text-decoration:none;" target="_blank">
-                        <button class="btn"
-                            style="background: #2c3e50; color: white; font-size: 11px; padding: 10px 5px;">👨‍🍳
-                            MUTFAK</button>
-                    </a>
-                    <a href="/icecek" style="text-decoration:none;" target="_blank">
-                        <button class="btn"
-                            style="background: #0f766e; color: white; font-size: 11px; padding: 10px 5px;">🥤
-                            İÇECEK</button>
-                    </a>
-                    <a href="/tatli" style="text-decoration:none;" target="_blank">
-                        <button class="btn"
-                            style="background: #9d174d; color: white; font-size: 11px; padding: 10px 5px;">🍰
-                            TATLI</button>
-                    </a>
-                    <a href="/porsiyon" style="text-decoration:none;" target="_blank">
-                        <button class="btn"
-                            style="background: #475569; color: white; font-size: 11px; padding: 10px 5px;">📦
-                            PORSİYON</button>
-                    </a>
-                    <a href="/waiter" style="text-decoration:none;" target="_blank">
-                        <button class="btn"
-                            style="background: #e67e22; color: white; font-size: 11px; padding: 10px 5px;">🤵
-                            GARSON</button>
-                    </a>
-                    <a href="/waiters_manage" style="text-decoration:none;">
-                        <button class="btn"
-                            style="background: #8e44ad; color: white; font-size: 11px; padding: 10px 5px;">👥
-                            PERSONEL</button>
-                    </a>
+                    <div class="shortcut-title">Diğer</div>
+                    <div class="module-grid utility-shortcuts">
+                        <a class="module-shortcut module-portion" href="/porsiyon" target="_blank">
+                            <span class="shortcut-icon">📦</span>
+                            <strong>Porsiyon</strong>
+                            <small>Stok</small>
+                        </a>
+                        <a class="module-shortcut module-waiter" href="/waiter" target="_blank">
+                            <span class="shortcut-icon">🤵</span>
+                            <strong>Garson</strong>
+                            <small>Ekran</small>
+                        </a>
+                        <a class="module-shortcut module-personel" href="/waiters_manage">
+                            <span class="shortcut-icon">👥</span>
+                            <strong>Personel</strong>
+                            <small>Yönetim</small>
+                        </a>
+                        <a class="module-shortcut module-settings" href="/settings" title="Ayarlar">
+                            <span class="shortcut-icon">⚙️</span>
+                            <strong>Ayarlar</strong>
+                            <small>Sistem</small>
+                        </a>
+                    </div>
                 </div>
             </div>
 
@@ -271,6 +308,19 @@
                     </div>
                     <input type="hidden" id="selectedCustomer" value="">
                     <div class="selected-customer-name" id="selectedCustomerDisplay">Henüz müşteri seçilmedi</div>
+                </div>
+
+                <label class="invoice-option">
+                    <input type="checkbox" id="invoicePending">
+                    <span>
+                        <strong>Fatura bekliyor</strong>
+                        <small>Müşteri e-Fatura/e-Arşiv talep etti</small>
+                    </span>
+                </label>
+
+                <div class="invoice-note">
+                    <label for="invoiceNote">Fatura bilgisi / not</label>
+                    <input type="text" id="invoiceNote" placeholder="Firma, VKN/TCKN, telefon veya kısa not" disabled>
                 </div>
 
                 <div class="modal-actions">

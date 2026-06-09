@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-FastFootSatış - Web Server
+Restoran - Web Server
 Flask tabanlı restoran yönetim sistemi
 """
 
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, redirect, make_response, g
 from flask_socketio import SocketIO, emit
 import threading
 import time
@@ -29,6 +29,7 @@ import serial.tools.list_ports
 import urllib.parse
 import unicodedata
 from collections import defaultdict
+from functools import wraps
 from integrations import IntegrationManager
 from pos_integration import POSManager
 
@@ -89,6 +90,8 @@ INTEGRATION_CONFIG = os.path.join(SCRIPT_DIR, "integrations.json")
 SALONS_FILE = os.path.join(SCRIPT_DIR, "salons.json")
 CASHIERS_FILE = os.path.join(SCRIPT_DIR, "cashiers.json")
 KITCHEN_FILE = os.path.join(SCRIPT_DIR, "kitchen.json")
+USERS_FILE = os.path.join(SCRIPT_DIR, "users.json")
+AUTH_SESSIONS_FILE = os.path.join(SCRIPT_DIR, "auth_sessions.json")
 ACTIVE_ADISYONLAR_FILE = os.path.join(SCRIPT_DIR, "active_adisyonlar.json")
 PORTION_STOCK_FILE = os.path.join(SCRIPT_DIR, "portion_stock.json")
 PORTION_STOCK_RESET_FILE = os.path.join(SCRIPT_DIR, "portion_stock_reset.json")
@@ -96,6 +99,168 @@ DAILY_MEALS_FILE = os.path.join(SCRIPT_DIR, "gunluk_yemekler.txt")
 DAILY_MEALS_HISTORY_DIR = os.path.join(SCRIPT_DIR, "gunluk_yemekler")
 DEFAULT_PORTION_STOCK = 40
 SERVER_PORT = 5555
+AUTH_COOKIE_NAME = "ff_auth_token"
+AUTH_SESSION_DAYS = 30
+
+AUTH_PAGE_DEFINITIONS = {
+    "dashboard": {
+        "label": "Ana kasa ekranı",
+        "paths": ["/", "/index.html", "/kasa-terminal"],
+    },
+    "settings": {
+        "label": "Sistem ayarları",
+        "paths": ["/settings", "/settings.html"],
+    },
+    "personel": {
+        "label": "Personel ve yetkiler",
+        "paths": ["/personel", "/personel.html", "/waiters_manage", "/waiters_manage.html"],
+    },
+    "menu": {
+        "label": "Menü düzenleme",
+        "paths": ["/menu_edit", "/menu_edit.html"],
+    },
+    "kasa": {
+        "label": "Kasa ve vardiya",
+        "paths": ["/kasa", "/kasa_yonetimi.html"],
+    },
+    "gunsonu": {
+        "label": "Gün sonu",
+        "paths": ["/gunsonu", "/gunsonu.html"],
+    },
+    "cari": {
+        "label": "Cari hesaplar",
+        "paths": ["/cari", "/cari.html"],
+    },
+    "kurye": {
+        "label": "Kurye yönetimi",
+        "paths": ["/kurye", "/kurye_yonetimi.html"],
+    },
+    "terminals": {
+        "label": "Terminal yönetimi",
+        "paths": ["/terminals", "/terminals.html"],
+    },
+    "waiter": {
+        "label": "Garson ekranı",
+        "paths": ["/waiter", "/waiter.html", "/garson-terminal", "/waiter/shared"],
+    },
+    "table_session": {
+        "label": "Masa QR/NFC oturumu",
+        "paths": ["/waiter/table-session", "/table_session.html"],
+    },
+    "kitchen": {
+        "label": "Hazırlık ekranları",
+        "paths": ["/mutfak", "/mutfak.html", "/izgara", "/icecek", "/tatli"],
+        "prefixes": ["/reyon/"],
+    },
+    "porsiyon": {
+        "label": "Porsiyon takibi",
+        "paths": ["/porsiyon", "/porsiyon_takip.html"],
+    },
+    "puantaj": {
+        "label": "Puantaj",
+        "paths": ["/puantaj", "/puantaj.html"],
+    },
+}
+
+AUTH_ROLE_DEFINITIONS = {
+    "admin": {
+        "label": "Yönetici",
+        "level": 100,
+        "permissions": ["*"],
+    },
+    "manager": {
+        "label": "Müdür",
+        "level": 80,
+        "permissions": [
+            "dashboard", "settings", "personel", "menu", "kasa", "gunsonu", "cari",
+            "kurye", "terminals", "waiter", "table_session", "kitchen", "porsiyon", "puantaj"
+        ],
+    },
+    "cashier": {
+        "label": "Kasiyer",
+        "level": 60,
+        "permissions": ["dashboard", "kasa", "gunsonu", "cari", "kurye", "waiter", "kitchen", "porsiyon"],
+    },
+    "waiter": {
+        "label": "Garson",
+        "level": 30,
+        "permissions": ["waiter", "table_session"],
+    },
+    "kitchen": {
+        "label": "Mutfak",
+        "level": 25,
+        "permissions": ["kitchen", "porsiyon"],
+    },
+    "courier": {
+        "label": "Kurye",
+        "level": 20,
+        "permissions": ["kurye"],
+    },
+}
+
+AUTH_PATH_TO_PAGE = {}
+AUTH_PREFIX_TO_PAGE = []
+for page_key, page_info in AUTH_PAGE_DEFINITIONS.items():
+    for page_path in page_info.get("paths", []):
+        AUTH_PATH_TO_PAGE[page_path] = page_key
+    for page_prefix in page_info.get("prefixes", []):
+        AUTH_PREFIX_TO_PAGE.append((page_prefix, page_key))
+
+AUTH_API_PREFIX_PERMISSIONS = [
+    ("/api/settings", "settings"),
+    ("/api/serial/ports", "settings"),
+    ("/api/salons", "settings"),
+    ("/api/integration/settings", "settings"),
+    ("/api/public/policy/update", "settings"),
+    ("/api/va/blacklist", "settings"),
+    ("/api/menu/save", "menu"),
+    ("/api/menu/images", "menu"),
+    ("/api/menu/meta", "menu"),
+    ("/api/waiters", "personel"),
+    ("/api/cashiers", "personel"),
+    ("/api/kitchen", "personel"),
+    ("/api/couriers", "personel"),
+    ("/api/puantaj", "puantaj"),
+    ("/api/kasa", "kasa"),
+    ("/api/vardiya", "kasa"),
+    ("/api/gunsonu", "gunsonu"),
+    ("/api/cari", "cari"),
+    ("/api/courier-firms", "kurye"),
+    ("/api/online/orders", "dashboard"),
+    ("/api/waiter/table-session", "table_session"),
+    ("/api/waiter/nfc-tag", "table_session"),
+    ("/api/portion-stock", "porsiyon"),
+    ("/api/daily-meals", "porsiyon"),
+]
+
+AUTH_PUBLIC_PATH_PREFIXES = (
+    "/login",
+    "/login.html",
+    "/api/auth/login",
+    "/api/auth/options",
+    "/api/auth/me",
+    "/api/waiters/login",
+    "/api/public/",
+    "/api/online/order",
+    "/api/integration/webhook/",
+    "/api/system/info",
+    "/menu/public",
+    "/menu/liva",
+    "/liva",
+    "/menu/tokatliva",
+    "/tokatliva",
+    "/menu/qr-card",
+    "/customer_menu.html",
+    "/tokatliva_menu.html",
+    "/liva_qr_card.html",
+    "/uploads/",
+    "/socket.io/",
+)
+
+AUTH_PUBLIC_STATIC_EXTENSIONS = {
+    ".css", ".js", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp",
+    ".ico", ".woff", ".woff2", ".ttf", ".map", ".txt"
+}
 
 PREP_PANELS = {
     "izgara": {
@@ -151,6 +316,13 @@ PREP_PANEL_PRODUCT_EXCLUSIONS = {
     "izgara": ("kiremitte",)
 }
 
+PREP_PANEL_QUICK_NOTES = {
+    "izgara": ("Az Pişmiş", "Orta Pişmiş", "Çok Pişmiş", "Soğansız"),
+    "mutfak": ("Bulgur pilavlı", "Pirinç pilavlı", "Pilavsız"),
+    "icecek": ("Buzsuz", "Az buzlu", "Şekersiz"),
+    "tatli": ("Dondurmalı", "Kaymaksız")
+}
+
 PAYMENT_METHODS = ("Nakit", "Kredi Kartı", "Açık Hesap")
 
 DAILY_MEAL_GROUPS = (
@@ -184,7 +356,7 @@ os.makedirs(DAILY_MEALS_HISTORY_DIR, exist_ok=True)
 
 # Flask app setup
 app = Flask(__name__, static_folder='web', static_url_path='')
-app.config['SECRET_KEY'] = 'fastfoot_secret_key_2026'
+app.config['SECRET_KEY'] = 'restoran_secret_key_2026'
 app.json.sort_keys = False
 socketio = SocketIO(app, 
                    cors_allowed_origins="*",
@@ -280,6 +452,7 @@ class RestaurantServer:
         self.prep_panel_settings = self.get_default_prep_panel_settings()
         self.prep_category_overrides = {}
         self.prep_printers = self.get_default_prep_printer_settings()
+        self.receipt_printer = self.get_default_receipt_printer_settings()
         self.salons = []
         
         # Entegrasyonlar
@@ -317,6 +490,8 @@ class RestaurantServer:
         self.waiters = [] # [{"name": "Ahmet", "pin": "1234"}]
         self.cashiers = [] # [{"name": "Kasa 1"}]
         self.kitchen = [] # [{"name": "Aşçı 1"}]
+        self.users = []
+        self.auth_sessions = {}
         
         # Aktif bağlantılar
         self.active_connections = {}
@@ -355,6 +530,8 @@ class RestaurantServer:
         self.load_waiters()
         self.load_cashiers()
         self.load_kitchen()
+        self.load_users()
+        self.load_auth_sessions()
         self.refresh_adisyonlar()
         self.load_active_adisyonlar() # Aktif adisyonları geri yükle
         self.load_menu_data()
@@ -362,6 +539,10 @@ class RestaurantServer:
         self.normalize_active_order_panels()
         self.load_daily_meals()
         self.load_portion_stock()
+
+        self.prep_printer_batch_delay = 1.0
+        self.prep_printer_batch_lock = threading.Lock()
+        self.prep_printer_batches = {}
         
         # Sid -> Kasa ID haritalaması (Vardiya işlemleri için)
         self.sid_kasa_map = {} # {sid: kasa_id}
@@ -380,11 +561,30 @@ class RestaurantServer:
     def item_line_total(item):
         """Adisyon kalemi için liste fiyatı üzerinden satır toplamı."""
         try:
-            adet = int((item or {}).get('adet', 1))
+            adet = RestaurantServer.coerce_order_quantity((item or {}).get('adet', 1))
             fiyat = float((item or {}).get('fiyat', 0))
             return max(0, adet) * max(0.0, fiyat)
         except Exception:
             return 0.0
+
+    @staticmethod
+    def coerce_order_quantity(value, default=1):
+        """Adet/kg miktarını pozitif sayı olarak normalize eder."""
+        try:
+            quantity = float(str(value).replace(',', '.'))
+        except Exception:
+            quantity = float(default)
+        if quantity <= 0:
+            quantity = float(default)
+        quantity = round(quantity, 3)
+        return int(quantity) if quantity.is_integer() else quantity
+
+    @staticmethod
+    def format_order_quantity(value):
+        quantity = RestaurantServer.coerce_order_quantity(value)
+        if isinstance(quantity, int):
+            return str(quantity)
+        return f"{quantity:.3f}".rstrip('0').rstrip('.')
 
     def calculate_adisyon_totals(self, items):
         """Ciroya girecek tutarı ve ikram değerini ayrı hesapla."""
@@ -712,13 +912,36 @@ class RestaurantServer:
                 keywords.append(keyword[:40])
         return keywords
 
+    def normalize_note_option_list(self, value, fallback=None):
+        if fallback is None:
+            fallback = []
+        if isinstance(value, str):
+            raw_items = value.replace("\n", ",").split(",")
+        elif isinstance(value, (list, tuple)):
+            raw_items = value
+        else:
+            raw_items = fallback
+
+        notes = []
+        seen = set()
+        for item in raw_items:
+            note = re.sub(r"\s+", " ", str(item or "")).strip()
+            note_key = self._normalize_text_for_match(note)
+            if note and note_key and note_key not in seen:
+                notes.append(note[:60])
+                seen.add(note_key)
+            if len(notes) >= 24:
+                break
+        return notes
+
     def get_default_prep_panel_settings(self):
         settings = {}
         for panel_id, panel in PREP_PANELS.items():
             settings[panel_id] = {
                 **panel,
                 "category_keywords": list(PREP_PANEL_CATEGORY_KEYWORDS.get(panel_id, ())),
-                "product_keywords": list(PREP_PANEL_PRODUCT_KEYWORDS.get(panel_id, ()))
+                "product_keywords": list(PREP_PANEL_PRODUCT_KEYWORDS.get(panel_id, ())),
+                "quick_notes": list(PREP_PANEL_QUICK_NOTES.get(panel_id, ()))
             }
         return settings
 
@@ -731,6 +954,14 @@ class RestaurantServer:
                 "copies": 1
             }
             for panel_id in PREP_PANELS.keys()
+        }
+
+    def get_default_receipt_printer_settings(self):
+        return {
+            "enabled": False,
+            "ip": "",
+            "port": 9100,
+            "copies": 1
         }
 
     def coerce_json_setting(self, value, fallback):
@@ -783,6 +1014,10 @@ class RestaurantServer:
                 "product_keywords": self.normalize_keyword_list(
                     raw.get("product_keywords"),
                     default.get("product_keywords", [])
+                ),
+                "quick_notes": self.normalize_note_option_list(
+                    raw.get("quick_notes"),
+                    default.get("quick_notes", [])
                 )
             }
         return sanitized
@@ -820,6 +1055,19 @@ class RestaurantServer:
             }
         return sanitized
 
+    def sanitize_receipt_printer_settings(self, printer_data=None):
+        default = self.get_default_receipt_printer_settings()
+        printer_data = self.coerce_json_setting(printer_data, {})
+        if not isinstance(printer_data, dict):
+            printer_data = {}
+
+        return {
+            "enabled": self.bool_from_setting(printer_data.get("enabled"), default["enabled"]),
+            "ip": str(printer_data.get("ip") or default["ip"]).strip()[:80],
+            "port": self.bounded_int(printer_data.get("port"), default["port"], 1, 65535),
+            "copies": self.bounded_int(printer_data.get("copies"), default["copies"], 1, 5)
+        }
+
     def get_prep_panel_info(self, panel_id):
         return (
             self.prep_panel_settings.get(panel_id)
@@ -854,7 +1102,7 @@ class RestaurantServer:
 
         not_bilgisi = str(not_bilgisi or '').strip()[:160]
         try:
-            adet = max(1, int(adet))
+            adet = self.coerce_order_quantity(adet)
         except Exception:
             adet = 1
         try:
@@ -867,6 +1115,7 @@ class RestaurantServer:
             return (None, stock_error) if return_error else None
 
         siparis_id = str(uuid.uuid4())[:8]
+        created_at = datetime.datetime.now().astimezone()
         kategori = self.get_menu_category_for_product(urun)
         panel = self.get_preparation_panel_for_product(urun, kategori)
         panel_info = self.get_prep_panel_info(panel)
@@ -881,7 +1130,8 @@ class RestaurantServer:
             'garson': garson,
             'not': not_bilgisi,
             'durum': 'mutfakta',
-            'saat': datetime.datetime.now().strftime("%H:%M:%S")
+            'saat': created_at.strftime("%H:%M:%S"),
+            'created_at': created_at.isoformat(timespec='seconds')
         }
         self.adisyonlar[masa_adi].append(siparis)
         self.save_active_adisyonlar()
@@ -903,6 +1153,7 @@ class RestaurantServer:
             'adet': adet,
             'not': not_bilgisi,
             'saat': siparis['saat'],
+            'created_at': siparis['created_at'],
             'garson': garson,
             'terminal_id': terminal_id or f"public:{masa_adi}"
         }
@@ -938,7 +1189,12 @@ class RestaurantServer:
             "va_kitchen_approval": "EVET",
             "prep_panels_json": "",
             "prep_category_overrides_json": "{}",
-            "prep_printers_json": "{}"
+            "prep_printers_json": "{}",
+            "receipt_printer_json": "{}",
+            "receipt_printer_enabled": "HAYIR",
+            "receipt_printer_ip": "",
+            "receipt_printer_port": "9100",
+            "receipt_printer_copies": "1"
         }
         for panel_id in PREP_PANELS.keys():
             defaults[f"prep_printer_{panel_id}_enabled"] = "HAYIR"
@@ -991,6 +1247,16 @@ class RestaurantServer:
                     "copies": defaults.get(f"prep_printer_{panel_id}_copies")
                 }
         self.prep_printers = self.sanitize_prep_printer_settings(printer_json)
+
+        receipt_json = self.coerce_json_setting(defaults.get("receipt_printer_json"), {})
+        if not receipt_json:
+            receipt_json = {
+                "enabled": defaults.get("receipt_printer_enabled"),
+                "ip": defaults.get("receipt_printer_ip"),
+                "port": defaults.get("receipt_printer_port"),
+                "copies": defaults.get("receipt_printer_copies")
+            }
+        self.receipt_printer = self.sanitize_receipt_printer_settings(receipt_json)
         
         # QR Menü ve Online Sipariş Ayarları
         # Env değişkeni varsa önceliklidir, yoksa config.txt'ten okunur
@@ -1043,6 +1309,14 @@ class RestaurantServer:
                     f.write(f"prep_printer_{panel_id}_ip:{printer.get('ip', '')}\n")
                     f.write(f"prep_printer_{panel_id}_port:{printer.get('port', 9100)}\n")
                     f.write(f"prep_printer_{panel_id}_copies:{printer.get('copies', 1)}\n")
+                f.write(
+                    "receipt_printer_json:"
+                    f"{json.dumps(self.receipt_printer, ensure_ascii=False)}\n"
+                )
+                f.write(f"receipt_printer_enabled:{'EVET' if self.receipt_printer.get('enabled') else 'HAYIR'}\n")
+                f.write(f"receipt_printer_ip:{self.receipt_printer.get('ip', '')}\n")
+                f.write(f"receipt_printer_port:{self.receipt_printer.get('port', 9100)}\n")
+                f.write(f"receipt_printer_copies:{self.receipt_printer.get('copies', 1)}\n")
                 f.write(f"verify_mode:{self.verify_mode}\n")
                 f.write(f"online_orders_enabled:{'EVET' if self.online_orders_enabled else 'HAYIR'}\n")
                 f.write(f"va_max_duration:{self.va_max_duration}\n")
@@ -1068,7 +1342,8 @@ class RestaurantServer:
             'cid_enabled': self.cid_enabled,
             'pos_enabled': self.pos_enabled,
             'pos_type': self.pos_type,
-            'default_payment_method': self.default_payment_method
+            'default_payment_method': self.default_payment_method,
+            'receipt_printer_enabled': self.receipt_printer.get("enabled", False)
         }
 
     def get_initial_payload(self, sid=None):
@@ -1186,6 +1461,565 @@ class RestaurantServer:
         except Exception as e:
             logger.error(f"Mutfak personeli kaydetme hatası: {e}")
             return False
+
+    # ==================== AUTH / USER MANAGEMENT ====================
+
+    def get_auth_page_definitions(self):
+        return {
+            key: {
+                "key": key,
+                "label": info.get("label", key),
+                "paths": info.get("paths", []),
+                "prefixes": info.get("prefixes", []),
+            }
+            for key, info in AUTH_PAGE_DEFINITIONS.items()
+        }
+
+    def get_auth_role_definitions(self):
+        return {
+            key: {
+                "key": key,
+                "label": info.get("label", key),
+                "level": int(info.get("level", 0)),
+                "permissions": list(info.get("permissions", [])),
+            }
+            for key, info in AUTH_ROLE_DEFINITIONS.items()
+        }
+
+    def get_role_permissions(self, role):
+        role_info = AUTH_ROLE_DEFINITIONS.get(role) or AUTH_ROLE_DEFINITIONS["waiter"]
+        permissions = role_info.get("permissions", [])
+        if "*" in permissions:
+            return ["*"]
+        valid_pages = set(AUTH_PAGE_DEFINITIONS.keys())
+        return [p for p in permissions if p in valid_pages]
+
+    def get_role_level(self, role):
+        return int((AUTH_ROLE_DEFINITIONS.get(role) or {}).get("level", 0))
+
+    def normalize_permissions(self, permissions, role):
+        if permissions == "*" or permissions == ["*"]:
+            return ["*"]
+        valid_pages = set(AUTH_PAGE_DEFINITIONS.keys())
+        if not isinstance(permissions, list):
+            permissions = self.get_role_permissions(role)
+        cleaned = []
+        for page in permissions:
+            page = str(page or "").strip()
+            if page in valid_pages and page not in cleaned:
+                cleaned.append(page)
+        return cleaned or self.get_role_permissions(role)
+
+    def normalize_schedule(self, schedule=None):
+        schedule = schedule if isinstance(schedule, dict) else {}
+        days = schedule.get("days")
+        if not isinstance(days, list):
+            days = list(range(7))
+        clean_days = []
+        for day in days:
+            try:
+                day_int = int(day)
+            except Exception:
+                continue
+            if 0 <= day_int <= 6 and day_int not in clean_days:
+                clean_days.append(day_int)
+        return {
+            "enabled": bool(schedule.get("enabled", False)),
+            "days": clean_days or list(range(7)),
+            "start": self.normalize_time_string(schedule.get("start"), "00:00"),
+            "end": self.normalize_time_string(schedule.get("end"), "23:59"),
+        }
+
+    @staticmethod
+    def normalize_time_string(value, fallback="00:00"):
+        value = str(value or "").strip()
+        match = re.match(r"^([01]?\d|2[0-3]):([0-5]\d)$", value)
+        if not match:
+            return fallback
+        return f"{int(match.group(1)):02d}:{match.group(2)}"
+
+    def hash_pin(self, pin, salt=None):
+        salt = salt or secrets.token_hex(12)
+        raw = f"{salt}:{pin}:{app.config['SECRET_KEY']}".encode("utf-8")
+        return salt, hashlib.sha256(raw).hexdigest()
+
+    def normalize_user(self, raw, fallback_role="waiter"):
+        raw = raw if isinstance(raw, dict) else {}
+        name = str(raw.get("name") or raw.get("username") or "").strip()
+        if not name:
+            return None
+        role = str(raw.get("role") or fallback_role or "waiter").strip()
+        if role not in AUTH_ROLE_DEFINITIONS:
+            role = "waiter"
+
+        user = {
+            "id": str(raw.get("id") or uuid.uuid4()),
+            "name": name,
+            "role": role,
+            "active": bool(raw.get("active", True)),
+            "permissions": self.normalize_permissions(raw.get("permissions"), role),
+            "schedule": self.normalize_schedule(raw.get("schedule")),
+            "created_at": raw.get("created_at") or datetime.datetime.now().isoformat(timespec="seconds"),
+            "updated_at": raw.get("updated_at") or datetime.datetime.now().isoformat(timespec="seconds"),
+        }
+
+        if raw.get("pin_hash") and raw.get("pin_salt"):
+            user["pin_hash"] = raw.get("pin_hash")
+            user["pin_salt"] = raw.get("pin_salt")
+        elif raw.get("pin") is not None:
+            salt, pin_hash = self.hash_pin(str(raw.get("pin")))
+            user["pin_hash"] = pin_hash
+            user["pin_salt"] = salt
+        else:
+            user["pin_hash"] = raw.get("pin_hash", "")
+            user["pin_salt"] = raw.get("pin_salt", "")
+
+        return user
+
+    def build_default_users(self):
+        users = [
+            {
+                "id": "bootstrap-admin",
+                "name": "Yönetici",
+                "pin": self.admin_password,
+                "role": "admin",
+                "active": True,
+                "permissions": ["*"],
+                "schedule": {"enabled": False},
+            }
+        ]
+
+        existing_names = {"yönetici"}
+        for waiter in self.waiters:
+            name = str(waiter.get("name") or "").strip()
+            if not name or name.lower() in existing_names:
+                continue
+            existing_names.add(name.lower())
+            users.append({
+                "name": name,
+                "pin": waiter.get("pin", ""),
+                "role": "waiter",
+                "active": True,
+                "permissions": self.get_role_permissions("waiter"),
+            })
+
+        for cashier in self.cashiers:
+            name = str(cashier.get("name") or "").strip()
+            if not name or name.lower() in existing_names:
+                continue
+            existing_names.add(name.lower())
+            users.append({
+                "name": name,
+                "pin": cashier.get("pin", "0000"),
+                "role": "cashier",
+                "active": True,
+                "permissions": self.get_role_permissions("cashier"),
+            })
+
+        for cook in self.kitchen:
+            name = str(cook.get("name") or "").strip()
+            if not name or name.lower() in existing_names:
+                continue
+            existing_names.add(name.lower())
+            users.append({
+                "name": name,
+                "pin": cook.get("pin", "0000"),
+                "role": "kitchen",
+                "active": True,
+                "permissions": self.get_role_permissions("kitchen"),
+            })
+
+        return users
+
+    def load_users(self):
+        raw_users = []
+        if os.path.exists(USERS_FILE):
+            try:
+                with open(USERS_FILE, "r", encoding="utf-8") as f:
+                    raw_users = json.load(f)
+            except Exception as e:
+                logger.error(f"Kullanıcı yükleme hatası: {e}")
+                raw_users = []
+        else:
+            raw_users = self.build_default_users()
+
+        normalized = []
+        seen_names = set()
+        for raw in raw_users if isinstance(raw_users, list) else []:
+            user = self.normalize_user(raw)
+            if not user:
+                continue
+            key = user["name"].strip().lower()
+            if key in seen_names:
+                continue
+            seen_names.add(key)
+            normalized.append(user)
+
+        if not any(u.get("role") == "admin" for u in normalized):
+            admin = self.normalize_user({
+                "id": "bootstrap-admin",
+                "name": "Yönetici",
+                "pin": self.admin_password,
+                "role": "admin",
+                "permissions": ["*"],
+                "active": True,
+            })
+            if admin:
+                normalized.insert(0, admin)
+
+        self.users = sorted(
+            normalized,
+            key=lambda u: (-self.get_role_level(u.get("role")), u.get("name", "").lower())
+        )
+        logger.info(f"✓ {len(self.users)} kullanıcı/yetki yüklendi")
+
+    def save_users(self):
+        try:
+            now = datetime.datetime.now().isoformat(timespec="seconds")
+            for user in self.users:
+                user["updated_at"] = now
+            with open(USERS_FILE, "w", encoding="utf-8") as f:
+                json.dump(self.users, f, ensure_ascii=False, indent=2)
+            logger.info("✓ Kullanıcı/yetki ayarları kaydedildi")
+            return True
+        except Exception as e:
+            logger.error(f"Kullanıcı kaydetme hatası: {e}")
+            return False
+
+    def public_user(self, user, include_permissions=True):
+        if not user:
+            return None
+        data = {
+            "id": user.get("id"),
+            "name": user.get("name"),
+            "role": user.get("role"),
+            "role_label": AUTH_ROLE_DEFINITIONS.get(user.get("role"), {}).get("label", user.get("role")),
+            "level": self.get_role_level(user.get("role")),
+            "active": bool(user.get("active", True)),
+            "schedule": user.get("schedule") or self.normalize_schedule(),
+        }
+        if include_permissions:
+            data["permissions"] = list(user.get("permissions") or [])
+        return data
+
+    def list_login_users(self):
+        return [
+            self.public_user(user, include_permissions=False)
+            for user in self.users
+            if user.get("active", True)
+        ]
+
+    def find_user(self, user_id=None, name=None):
+        if user_id:
+            for user in self.users:
+                if str(user.get("id")) == str(user_id):
+                    return user
+        if name:
+            wanted = str(name).strip().lower()
+            for user in self.users:
+                if str(user.get("name", "")).strip().lower() == wanted:
+                    return user
+        return None
+
+    def verify_user_pin(self, user, pin):
+        if not user:
+            return False
+        pin = str(pin or "")
+        if user.get("pin_hash") and user.get("pin_salt"):
+            _, pin_hash = self.hash_pin(pin, user.get("pin_salt"))
+            return hmac.compare_digest(pin_hash, user.get("pin_hash"))
+        return hmac.compare_digest(str(user.get("pin", "")), pin)
+
+    def user_schedule_allowed(self, user, now=None):
+        if not user or not user.get("active", True):
+            return False, "Kullanıcı pasif"
+        schedule = self.normalize_schedule(user.get("schedule"))
+        if not schedule.get("enabled"):
+            return True, None
+
+        now = now or datetime.datetime.now()
+        start = datetime.datetime.strptime(schedule["start"], "%H:%M").time()
+        end = datetime.datetime.strptime(schedule["end"], "%H:%M").time()
+        current = now.time()
+        today = now.weekday()
+        yesterday = (today - 1) % 7
+        days = set(schedule.get("days") or [])
+
+        if start <= end:
+            allowed = today in days and start <= current <= end
+        else:
+            allowed = (today in days and current >= start) or (yesterday in days and current <= end)
+        if allowed:
+            return True, None
+        return False, "Bu kullanıcı için giriş saati dışında"
+
+    def user_has_permission(self, user, page_key):
+        if not page_key:
+            return True
+        if not user or not user.get("active", True):
+            return False
+        permissions = user.get("permissions") or self.get_role_permissions(user.get("role"))
+        return "*" in permissions or page_key in permissions
+
+    def required_page_for_path(self, path):
+        path = (path or "/").split("?", 1)[0]
+        if len(path) > 1 and path.endswith("/"):
+            path = path.rstrip("/")
+        if path in AUTH_PATH_TO_PAGE:
+            return AUTH_PATH_TO_PAGE[path]
+        for prefix, page_key in AUTH_PREFIX_TO_PAGE:
+            if path.startswith(prefix):
+                return page_key
+        if path.startswith("/api/"):
+            if request.method == "GET" and path in ("/api/waiters", "/api/cashiers", "/api/kitchen", "/api/couriers"):
+                return None
+            for prefix, page_key in AUTH_API_PREFIX_PERMISSIONS:
+                if path == prefix or path.startswith(prefix + "/"):
+                    return page_key
+            return None
+        return None
+
+    def is_public_request_path(self, path):
+        path = path or "/"
+        if path == "/api/public/policy/update":
+            return False
+        for prefix in AUTH_PUBLIC_PATH_PREFIXES:
+            if prefix.endswith("/"):
+                if path.startswith(prefix):
+                    return True
+            elif path == prefix:
+                return True
+        ext = os.path.splitext(path)[1].lower()
+        return ext in AUTH_PUBLIC_STATIC_EXTENSIONS
+
+    @staticmethod
+    def normalize_local_path(value, fallback="/"):
+        value = str(value or "").strip() or fallback
+        parsed = urllib.parse.urlparse(value)
+        if parsed.scheme or parsed.netloc:
+            return fallback
+        path = parsed.path or fallback
+        if not path.startswith("/"):
+            path = "/" + path
+        if parsed.query:
+            path = f"{path}?{parsed.query}"
+        return path
+
+    def authenticate_login(self, name, pin, requested_path="/"):
+        requested_path = self.normalize_local_path(requested_path)
+        user = self.find_user(name=name)
+        if not user or not self.verify_user_pin(user, pin):
+            return None, "Kullanıcı adı veya PIN hatalı"
+        allowed, reason = self.user_schedule_allowed(user)
+        if not allowed:
+            return None, reason
+        return user, None
+
+    def get_user_landing_page(self, user):
+        """Kullanıcının yetkili olduğu ilk sayfanın yolunu döndür."""
+        permissions = user.get("permissions") or self.get_role_permissions(user.get("role"))
+        if "*" in permissions:
+            return "/"
+        # Rol tanımındaki izin sırasına göre ilk yetkili sayfayı bul
+        for perm in permissions:
+            page_info = AUTH_PAGE_DEFINITIONS.get(perm)
+            if page_info:
+                paths = page_info.get("paths", [])
+                if paths:
+                    return paths[0]
+        return "/"
+
+    def hash_auth_token(self, token):
+        return hmac.new(
+            app.config["SECRET_KEY"].encode("utf-8"),
+            str(token or "").encode("utf-8"),
+            hashlib.sha256
+        ).hexdigest()
+
+    def load_auth_sessions(self):
+        self.auth_sessions = {}
+        if not os.path.exists(AUTH_SESSIONS_FILE):
+            return
+        try:
+            with open(AUTH_SESSIONS_FILE, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            now_ts = time.time()
+            for token_hash, session in (raw if isinstance(raw, dict) else {}).items():
+                if float(session.get("expires_at", 0)) > now_ts:
+                    self.auth_sessions[token_hash] = session
+        except Exception as e:
+            logger.error(f"Oturum yükleme hatası: {e}")
+            self.auth_sessions = {}
+
+    def save_auth_sessions(self):
+        try:
+            now_ts = time.time()
+            active = {
+                token_hash: session
+                for token_hash, session in self.auth_sessions.items()
+                if float(session.get("expires_at", 0)) > now_ts
+            }
+            self.auth_sessions = active
+            with open(AUTH_SESSIONS_FILE, "w", encoding="utf-8") as f:
+                json.dump(active, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception as e:
+            logger.error(f"Oturum kaydetme hatası: {e}")
+            return False
+
+    def create_auth_session(self, user, remember=True, device_name="", ip="", user_agent=""):
+        token = secrets.token_urlsafe(32)
+        token_hash = self.hash_auth_token(token)
+        now_ts = time.time()
+        max_age = AUTH_SESSION_DAYS * 24 * 60 * 60 if remember else 12 * 60 * 60
+        self.auth_sessions[token_hash] = {
+            "user_id": user.get("id"),
+            "created_at": now_ts,
+            "last_seen_at": now_ts,
+            "expires_at": now_ts + max_age,
+            "remember": bool(remember),
+            "device_name": str(device_name or "")[:80],
+            "ip": str(ip or "")[:80],
+            "user_agent": str(user_agent or "")[:240],
+        }
+        self.save_auth_sessions()
+        return token, max_age
+
+    def revoke_auth_session(self, token):
+        token_hash = self.hash_auth_token(token)
+        removed = self.auth_sessions.pop(token_hash, None) is not None
+        if removed:
+            self.save_auth_sessions()
+        return removed
+
+    def validate_auth_token(self, token, required_page=None):
+        if not token:
+            return None, "Oturum bulunamadı", 401
+        token_hash = self.hash_auth_token(token)
+        session = self.auth_sessions.get(token_hash)
+        if not session:
+            return None, "Oturum geçersiz veya süresi dolmuş", 401
+        if float(session.get("expires_at", 0)) <= time.time():
+            self.auth_sessions.pop(token_hash, None)
+            self.save_auth_sessions()
+            return None, "Oturum süresi dolmuş", 401
+
+        user = self.find_user(user_id=session.get("user_id"))
+        if not user:
+            return None, "Kullanıcı bulunamadı", 401
+
+        allowed, reason = self.user_schedule_allowed(user)
+        if not allowed:
+            return None, reason, 403
+
+        if required_page and not self.user_has_permission(user, required_page):
+            page_label = AUTH_PAGE_DEFINITIONS.get(required_page, {}).get("label", required_page)
+            return None, f"Bu kullanıcının {page_label} yetkisi yok", 403
+
+        now_ts = time.time()
+        if now_ts - float(session.get("last_seen_at", 0)) > 120:
+            session["last_seen_at"] = now_ts
+        return user, None, 200
+
+    def get_request_token(self):
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            return auth_header.split(" ", 1)[1].strip()
+        return request.cookies.get(AUTH_COOKIE_NAME, "")
+
+    def validate_current_request(self, required_page=None):
+        return self.validate_auth_token(self.get_request_token(), required_page=required_page)
+
+    def get_socket_user(self, sid, required_pages=None):
+        info = self.active_connections.get(sid) or {}
+        user = self.find_user(user_id=info.get("user_id"))
+        if not user:
+            return None, "Oturum bulunamadı"
+        allowed, reason = self.user_schedule_allowed(user)
+        if not allowed:
+            return None, reason
+        if required_pages:
+            if isinstance(required_pages, str):
+                required_pages = [required_pages]
+            if not any(self.user_has_permission(user, page) for page in required_pages):
+                return None, "Bu işlem için yetkiniz yok"
+        return user, None
+
+    def can_manage_user(self, actor, target_role):
+        if not actor:
+            return False
+        actor_role = actor.get("role")
+        if actor_role == "admin":
+            return True
+        return self.get_role_level(actor_role) > self.get_role_level(target_role)
+
+    def upsert_user(self, data, actor=None):
+        data = data if isinstance(data, dict) else {}
+        user_id = str(data.get("id") or "").strip()
+        existing = self.find_user(user_id=user_id) if user_id else None
+        role = str(data.get("role") or (existing or {}).get("role") or "waiter")
+        if role not in AUTH_ROLE_DEFINITIONS:
+            role = "waiter"
+        if actor and not self.can_manage_user(actor, role):
+            return None, "Bu yetki seviyesindeki kullanıcıyı düzenleyemezsiniz"
+
+        name = str(data.get("name") or (existing or {}).get("name") or "").strip()
+        if not name:
+            return None, "Kullanıcı adı gerekli"
+        duplicate = self.find_user(name=name)
+        if duplicate and (not existing or duplicate.get("id") != existing.get("id")):
+            return None, "Bu isimde bir kullanıcı zaten var"
+
+        raw = dict(existing or {})
+        raw.update({
+            "id": user_id or raw.get("id") or str(uuid.uuid4()),
+            "name": name,
+            "role": role,
+            "active": bool(data.get("active", raw.get("active", True))),
+            "permissions": self.normalize_permissions(data.get("permissions"), role),
+            "schedule": self.normalize_schedule(data.get("schedule")),
+            "updated_at": datetime.datetime.now().isoformat(timespec="seconds"),
+        })
+        if data.get("pin"):
+            salt, pin_hash = self.hash_pin(str(data.get("pin")))
+            raw["pin_salt"] = salt
+            raw["pin_hash"] = pin_hash
+        elif not existing:
+            return None, "Yeni kullanıcı için PIN gerekli"
+
+        user = self.normalize_user(raw)
+        if not user:
+            return None, "Kullanıcı oluşturulamadı"
+
+        if existing:
+            idx = self.users.index(existing)
+            self.users[idx] = user
+        else:
+            self.users.append(user)
+        self.users = sorted(
+            self.users,
+            key=lambda u: (-self.get_role_level(u.get("role")), u.get("name", "").lower())
+        )
+        self.save_users()
+        return user, None
+
+    def delete_user(self, user_id, actor=None):
+        user = self.find_user(user_id=user_id)
+        if not user:
+            return False, "Kullanıcı bulunamadı"
+        if actor and actor.get("id") == user.get("id"):
+            return False, "Kendi kullanıcınızı silemezsiniz"
+        if actor and not self.can_manage_user(actor, user.get("role")):
+            return False, "Bu yetki seviyesindeki kullanıcıyı silemezsiniz"
+        if user.get("role") == "admin" and sum(1 for u in self.users if u.get("role") == "admin") <= 1:
+            return False, "Son yönetici kullanıcısı silinemez"
+        self.users = [u for u in self.users if u.get("id") != user.get("id")]
+        for token_hash, session in list(self.auth_sessions.items()):
+            if session.get("user_id") == user.get("id"):
+                self.auth_sessions.pop(token_hash, None)
+        self.save_users()
+        self.save_auth_sessions()
+        return True, None
             
     def send_to_kitchen_legacy(self, masa_adi, urun_adi, adet=1):
         """Mevcut mutfak.py (port 5556) sistemine sipariş gönderir"""
@@ -1235,59 +2069,566 @@ class RestaurantServer:
             lines.append(current)
         return lines
 
+    def ticket_upper(self, value):
+        """Türkçe karakterleri koruyarak termal fiş için büyük harfe çevir."""
+        text = str(value or "")
+        translation = str.maketrans({
+            "i": "İ",
+            "ı": "I",
+            "ğ": "Ğ",
+            "ü": "Ü",
+            "ş": "Ş",
+            "ö": "Ö",
+            "ç": "Ç",
+        })
+        return text.translate(translation).upper()
+
+    def get_section_name_for_adisyon(self, masa_adi):
+        table_name = str(masa_adi or "").strip()
+        table_key = self.normalize_ticket_table_name(table_name)
+        for salon in self.salons:
+            if table_name in salon.get("tables", []):
+                return salon.get("name") or "Bölüm"
+            if any(self.normalize_ticket_table_name(table) == table_key for table in salon.get("tables", [])):
+                return salon.get("name") or "Bölüm"
+        normalized = table_name.lower()
+        if normalized.startswith("paket"):
+            return "Paket"
+        if normalized.startswith("online"):
+            return "Online"
+        prefix_match = re.match(r"^([A-ZÇĞİÖŞÜ]+)\d+$", table_key)
+        fallback_sections = {
+            "D": "Bahçe",
+            "E": "Bahçe",
+            "F": "Bahçe",
+            "A": "Ana Salon",
+            "B": "Ana Salon",
+            "C": "Ana Salon",
+            "P": "Ana Salon",
+            "T": "Teras",
+            "V": "Vip",
+        }
+        if prefix_match:
+            section = fallback_sections.get(prefix_match.group(1))
+            if section:
+                return section
+        return "Genel"
+
+    def normalize_ticket_table_name(self, masa_adi):
+        text = str(masa_adi or "").strip().upper().replace(" ", "")
+        match = re.match(r"^([A-ZÇĞİÖŞÜ]+)0*(\d+)$", text)
+        if match:
+            return f"{match.group(1)}{int(match.group(2))}"
+        return text
+
+    def display_table_name_for_ticket(self, masa_adi):
+        text = str(masa_adi or "").strip()
+        match = re.match(r"^([A-Za-zÇĞİÖŞÜçğıöşü]+)0+(\d+)$", text)
+        if match:
+            return f"{match.group(1)}{int(match.group(2))}"
+        return text
+
+    def clean_prep_ticket_note(self, note):
+        text = str(note or "").strip()
+        return re.sub(r'^(not|yemek|çeşit|cesit)\s*:\s*', '', text, flags=re.IGNORECASE).strip()
+
+    def split_order_note_details(self, note):
+        """Günlük yemek çeşidini kalem notlarından ayır."""
+        text = str(note or "").strip()
+        if not text:
+            return "", ""
+
+        meal_name = ""
+        note_parts = []
+        for line in re.split(r'[\r\n]+', text):
+            line = line.strip()
+            if not line:
+                continue
+            match = re.match(r'^(yemek|çeşit|cesit)\s*:\s*(.+)$', line, flags=re.IGNORECASE)
+            if match and not meal_name:
+                value = match.group(2).strip()
+                split_value = re.split(r'\s*[|•]\s*', value, maxsplit=1)
+                meal_name = split_value[0].strip()
+                if len(split_value) > 1 and split_value[1].strip():
+                    note_parts.append(split_value[1].strip())
+                continue
+
+            cleaned = self.clean_prep_ticket_note(line)
+            if cleaned:
+                note_parts.append(cleaned)
+
+        return meal_name, " / ".join(note_parts)
+
+    def prep_ticket_portion_label(self, value):
+        amount = self.coerce_order_quantity(value, default=0)
+        if abs(amount - 0.5) < 0.001:
+            return "Yarım Porsiyon"
+        if abs(amount - 1) < 0.001:
+            return "Tam Porsiyon"
+        if abs(amount - 1.5) < 0.001:
+            return "Bir Buçuk Porsiyon"
+        return ""
+
+    def prep_ticket_explicit_portion_info(self, urun):
+        name = str(urun or "").strip()
+        match = re.match(r'^(tam|yarım|yarim)\s+porsiyon\s+(.+)$', name, flags=re.IGNORECASE)
+        if match:
+            label = "Yarım Porsiyon" if self._normalize_text_for_match(match.group(1)) == "yarim" else "Tam Porsiyon"
+            return label, match.group(2).strip()
+
+        match = re.search(r'\(\s*(\d+(?:[,.]\d+)?)\s*porsiyon\s*\)\s*$', name, flags=re.IGNORECASE)
+        if match:
+            label = self.prep_ticket_portion_label(match.group(1).replace(',', '.'))
+            if label:
+                base_name = re.sub(r'\(\s*\d+(?:[,.]\d+)?\s*porsiyon\s*\)\s*$', '', name, flags=re.IGNORECASE).strip()
+                return label, base_name
+        return "", name
+
+    def is_dynamic_prep_portion_order(self, raw, urun, adet):
+        if not self.prep_ticket_portion_label(adet):
+            return False
+        panel = str(raw.get("panel") or "").strip()
+        kategori = raw.get("kategori")
+        if not panel:
+            panel = self.get_preparation_panel_for_product(urun, kategori)
+        return panel == "izgara"
+
+    def prep_ticket_display_item(self, raw, urun, adet):
+        label, base_name = self.prep_ticket_explicit_portion_info(urun)
+        if label and base_name:
+            return f"{label} {base_name}", adet
+
+        if self.is_dynamic_prep_portion_order(raw, urun, adet):
+            return f"{self.prep_ticket_portion_label(adet)} {urun}", 1
+
+        return urun, adet
+
+    def extract_meal_name_from_note(self, note):
+        """Not alanında 'Yemek: xxx' formatı varsa yemek adını döndür."""
+        meal_name, _ = self.split_order_note_details(note)
+        return meal_name or None
+
+    def prep_ticket_items(self, order_data):
+        raw_items = order_data.get("items")
+        if not isinstance(raw_items, list) or not raw_items:
+            raw_items = [order_data]
+
+        grouped = []
+        grouped_index = {}
+        for raw in raw_items:
+            if not isinstance(raw, dict):
+                continue
+            urun = str(raw.get("urun") or "").strip()
+            if not urun:
+                continue
+            raw_note = str(raw.get("not") or "").strip()
+            meal_name, extra_note = self.split_order_note_details(raw_note)
+            adet = self.coerce_order_quantity(raw.get("adet", 1))
+            raw_with_context = {
+                "kategori": order_data.get("kategori"),
+                "panel": order_data.get("panel"),
+                **raw
+            }
+
+            if meal_name:
+                # Porsiyon bilgisini koru (Tam/Yarım), kategori adını yemek adıyla değiştir
+                label, _ = self.prep_ticket_explicit_portion_info(urun)
+                if label:
+                    display_urun = f"{label} {meal_name}"
+                else:
+                    display_urun = meal_name
+                display_adet = adet
+                note = extra_note
+            else:
+                display_urun, display_adet = self.prep_ticket_display_item(raw_with_context, urun, adet)
+                note = self.clean_prep_ticket_note(raw_note)
+
+            key = (display_urun, note)
+            if key in grouped_index:
+                existing = grouped[grouped_index[key]]
+                existing["adet"] = self.coerce_order_quantity(existing.get("adet", 1)) + display_adet
+            else:
+                grouped_index[key] = len(grouped)
+                grouped.append({
+                    "urun": display_urun,
+                    "adet": display_adet,
+                    "not": note
+                })
+        return grouped
+
+    def thermal_text_bytes(self, value):
+        return str(value or "").encode("cp1254", errors="replace")
+
+    def escpos_line(self, value="", align="left", bold=False, size=0, font_b=False):
+        align_map = {"left": 0, "center": 1, "right": 2}
+        body = [
+            b"\x1ba" + bytes([align_map.get(align, 0)]),
+            b"\x1bE" + (b"\x01" if bold else b"\x00"),
+            b"\x1bM" + (b"\x01" if font_b else b"\x00"),
+            b"\x1d!" + bytes([size]),
+            self.thermal_text_bytes(value),
+            b"\n",
+        ]
+        return b"".join(body)
+
+    def prep_ticket_font(self, size, bold=False):
+        try:
+            from PIL import ImageFont
+            font_candidates = [
+                "/usr/share/fonts/truetype/liberation/LiberationMono-Bold.ttf" if bold else
+                "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf" if bold else
+                "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+                "/Library/Fonts/Arial Unicode.ttf",
+                "/System/Library/Fonts/Supplemental/Arial.ttf",
+            ]
+            for font_path in font_candidates:
+                if os.path.exists(font_path):
+                    return ImageFont.truetype(font_path, size=size)
+            return ImageFont.load_default()
+        except Exception:
+            return None
+
+    def text_pixel_width(self, draw, text, font):
+        bbox = draw.textbbox((0, 0), str(text or ""), font=font)
+        return bbox[2] - bbox[0]
+
+    def wrap_ticket_text_pixels(self, draw, text, font, max_width):
+        words = str(text or "").strip().split()
+        if not words:
+            return []
+        lines = []
+        current = ""
+        for word in words:
+            candidate = f"{current} {word}".strip()
+            if self.text_pixel_width(draw, candidate, font) <= max_width:
+                current = candidate
+                continue
+            if current:
+                lines.append(current)
+            current = word
+            while self.text_pixel_width(draw, current, font) > max_width and len(current) > 1:
+                split_at = max(1, len(current) - 1)
+                while split_at > 1 and self.text_pixel_width(draw, current[:split_at], font) > max_width:
+                    split_at -= 1
+                lines.append(current[:split_at])
+                current = current[split_at:]
+        if current:
+            lines.append(current)
+        return lines
+
+    def escpos_raster_image(self, image):
+        bw = image.convert("L").point(lambda pixel: 0 if pixel < 180 else 255, "1")
+        width, height = bw.size
+        width_bytes = (width + 7) // 8
+        padded_width = width_bytes * 8
+        if padded_width != width:
+            from PIL import Image
+            padded = Image.new("1", (padded_width, height), 1)
+            padded.paste(bw, (0, 0))
+            bw = padded
+            width = padded_width
+
+        pixels = bw.load()
+        data = bytearray()
+        for y in range(height):
+            for x_byte in range(width_bytes):
+                value = 0
+                for bit in range(8):
+                    x = x_byte * 8 + bit
+                    if pixels[x, y] == 0:
+                        value |= 0x80 >> bit
+                data.append(value)
+
+        x_l = width_bytes & 0xFF
+        x_h = (width_bytes >> 8) & 0xFF
+        y_l = height & 0xFF
+        y_h = (height >> 8) & 0xFF
+        return b"\x1dv0\x00" + bytes([x_l, x_h, y_l, y_h]) + bytes(data)
+
+    def build_prep_ticket_raster(self, order_data):
+        try:
+            from PIL import Image, ImageDraw
+        except Exception as e:
+            logger.warning(f"Raster fiş desteği yok, metin fişe dönülüyor: {e}")
+            return None
+
+        canvas_width = 576
+        margin_x = 26
+        y = 8
+        image = Image.new("L", (canvas_width, 1200), 255)
+        draw = ImageDraw.Draw(image)
+        label_font = self.prep_ticket_font(23, bold=True)
+        small_font = self.prep_ticket_font(26, bold=True)
+        section_font = self.prep_ticket_font(43, bold=True)
+        date_font = self.prep_ticket_font(30, bold=True)
+        item_font = self.prep_ticket_font(39, bold=True)
+        note_font = self.prep_ticket_font(37, bold=True)
+
+        if not all([label_font, small_font, section_font, date_font, item_font, note_font]):
+            return None
+
+        masa_adi = str(order_data.get("masa") or "-").strip()
+        section = self.ticket_upper(self.get_section_name_for_adisyon(masa_adi))
+        masa = self.ticket_upper(self.display_table_name_for_ticket(masa_adi))
+        now = datetime.datetime.now().strftime("%d.%m.%Y / %H:%M")
+        garson = self.ticket_upper(order_data.get("garson") or "")
+        ticket_items = self.prep_ticket_items(order_data)
+
+        def draw_text(x, text, font, fill=0):
+            nonlocal y
+            draw.text((x, y), text, font=font, fill=fill)
+            bbox = draw.textbbox((x, y), text, font=font)
+            return bbox[3] - bbox[1]
+
+        def rule(offset=0):
+            nonlocal y
+            y += offset
+            draw.line((margin_x, y, canvas_width - margin_x, y), fill=0, width=2)
+            y += 8
+
+        draw.text((170, y), "Bölüm", font=label_font, fill=0)
+        draw.text((385, y), "Masa", font=label_font, fill=0)
+        y += 30
+        rule()
+
+        draw.text((margin_x, y), section[:14], font=section_font, fill=0)
+        masa_width = self.text_pixel_width(draw, masa, section_font)
+        draw.text((canvas_width - margin_x - masa_width, y), masa, font=section_font, fill=0)
+        y += 44
+        date_width = self.text_pixel_width(draw, now, date_font)
+        draw.text((canvas_width - margin_x - date_width, y), now, font=date_font, fill=0)
+        y += 36
+        rule(2)
+
+        if garson:
+            draw.text((margin_x, y), garson, font=small_font, fill=0)
+            y += 31
+            rule(2)
+
+        max_item_width = canvas_width - (margin_x * 2)
+        for item_index, item in enumerate(ticket_items):
+            if item_index > 0:
+                y += 4
+            adet = self.format_order_quantity(item.get("adet", 1))
+            urun = self.ticket_upper(item.get("urun") or "")
+            note = self.ticket_upper(item.get("not") or "")
+            item_text = f"{adet} {urun}".strip()
+            for line in self.wrap_ticket_text_pixels(draw, item_text, item_font, max_item_width):
+                draw.text((margin_x, y), line, font=item_font, fill=0)
+                y += 42
+            if note:
+                for line in self.wrap_ticket_text_pixels(draw, note, note_font, max_item_width - 28):
+                    draw.text((margin_x + 28, y), line, font=note_font, fill=0)
+                    y += 40
+
+        if not ticket_items:
+            draw.text((margin_x, y), "SİPARİŞ", font=item_font, fill=0)
+            y += 42
+
+        y += 28
+        cropped = image.crop((0, 0, canvas_width, min(y, image.height)))
+        return self.escpos_raster_image(cropped)
+
     def build_prep_ticket_text(self, panel_id, order_data):
-        panel = self.get_prep_panel_info(panel_id)
+        raster_ticket = self.build_prep_ticket_raster(order_data)
+        if raster_ticket:
+            return raster_ticket
+
         width = 32
-        now = datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+        wide_width = 16
+        masa_adi = str(order_data.get("masa") or "-").strip()
+        section = self.ticket_upper(self.get_section_name_for_adisyon(masa_adi))
+        masa = self.ticket_upper(self.display_table_name_for_ticket(masa_adi))
+        now = datetime.datetime.now().strftime("%d.%m.%Y / %H:%M")
+        garson = self.ticket_upper(order_data.get("garson") or "")
+        ticket_items = self.prep_ticket_items(order_data)
+
+        output = []
+        output.append(self.escpos_line(f"{'Bölüm':^16}{'Masa':^16}", align="left", font_b=True))
+        output.append(self.escpos_line("-" * width))
+        output.append(self.escpos_line(f"{section[:12]:<12}{masa[:4]:>4}", bold=True, size=0x10))
+        output.append(self.escpos_line(now, align="right", bold=True))
+        output.append(self.escpos_line("-" * width))
+        if garson:
+            output.append(self.escpos_line(garson, bold=True, font_b=True))
+            output.append(self.escpos_line("-" * width))
+
+        for item in ticket_items:
+            adet = self.format_order_quantity(item.get("adet", 1))
+            urun = self.ticket_upper(item.get("urun") or "")
+            note = self.ticket_upper(item.get("not") or "")
+            item_text = f"{adet} {urun}".strip()
+            for index, line in enumerate(self.wrap_ticket_text(item_text, wide_width)):
+                prefix = "" if index == 0 else "  "
+                output.append(self.escpos_line(f"{prefix}{line}", bold=True, size=0x10))
+            if note:
+                for line in self.wrap_ticket_text(note, wide_width):
+                    output.append(self.escpos_line(f"  {line}", size=0x10))
+
+        return b"".join(output)
+
+    def build_receipt_ticket_text(self, masa_adi, items, sira):
+        width = 32
+        now = datetime.datetime.now().strftime("%d-%m-%Y %H:%M")
+        totals = self.calculate_adisyon_totals(items)
+        total = totals['payable_total']
+        ikram_total = totals['ikram_total']
         lines = [
             self.company_name[:width].center(width),
-            str(panel.get("ticket_title") or "SIPARIS FISI")[:width].center(width),
+            "HESAP BILGISI".center(width),
             "=" * width,
             now,
-            f"Reyon: {panel.get('name', panel_id)}",
-            f"Masa : {order_data.get('masa', '-')}",
-            f"Saat : {order_data.get('saat', '-')}",
-            f"Garson: {order_data.get('garson') or '-'}",
+            f"Fis No: {sira}",
+            f"Masa  : {masa_adi}",
             "-" * width,
         ]
-        item_text = f"{order_data.get('adet', 1)} x {order_data.get('urun', '')}"
-        lines.extend(self.wrap_ticket_text(item_text, width))
-        note = str(order_data.get("not") or "").strip()
-        if note:
+
+        for item in items:
+            ikram = " (IKRAM)" if item.get("tip") == "ikram" else ""
+            item_title = f"{self.format_order_quantity(item.get('adet', 1))} x {item.get('urun', '')}{ikram}"
+            lines.extend(self.wrap_ticket_text(item_title, width))
+            line_total = 0 if item.get("tip") == "ikram" else self.item_line_total(item)
+            lines.append(f"{line_total:>26.2f} TL")
+            note = str(item.get("not") or "").strip()
+            if note:
+                lines.extend(self.wrap_ticket_text(f"Not: {note}", width))
             lines.append("-" * width)
-            lines.append("Not:")
-            lines.extend(self.wrap_ticket_text(note, width))
-        lines.extend(["=" * width, "", "", ""])
+
+        if lines[-1] == "-" * width:
+            lines.pop()
+        lines.append("=" * width)
+        if ikram_total > 0:
+            lines.append(f"{'IKRAM:':<18}{ikram_total:>10.2f} TL")
+        lines.append(f"{'TOPLAM:':<18}{total:>10.2f} TL")
+        lines.extend(["=" * width, "Afiyet Olsun".center(width), "", "", ""])
         return "\n".join(lines)
 
     def encode_thermal_ticket(self, text):
         # ESC/POS: init, Turkish code page on many devices, body, paper cut.
-        return b"\x1b@\x1bt\r" + text.encode("cp857", errors="replace") + b"\n\n\n\x1dV\x00"
+        if isinstance(text, bytes):
+            payload = text
+            feed = b"\n\n\n"
+        else:
+            payload = text.encode("cp1254", errors="replace")
+            feed = b"\n\n\n"
+        return b"\x1b@\x1bR\x0c\x1bt\x30" + payload + feed + b"\x1dV\x00"
 
-    def send_prep_ticket_to_printer(self, panel_id, order_data):
-        printer = self.prep_printers.get(panel_id, {})
+    def send_thermal_text_to_ip_printer(self, printer, text, label):
         if not printer.get("enabled"):
-            return
+            return False
 
         ip = str(printer.get("ip") or "").strip()
         if not ip:
-            logger.warning(f"Reyon yazıcısı IP eksik: {panel_id}")
-            return
+            logger.warning(f"Termal yazıcı IP eksik: {label}")
+            return False
 
         port = self.bounded_int(printer.get("port"), 9100, 1, 65535)
         copies = self.bounded_int(printer.get("copies"), 1, 1, 5)
-        payload = self.encode_thermal_ticket(self.build_prep_ticket_text(panel_id, order_data))
+        payload = self.encode_thermal_ticket(text)
 
         def task():
             for copy_index in range(copies):
                 try:
                     with socket.create_connection((ip, port), timeout=5) as client:
                         client.sendall(payload)
-                    logger.info(f"🖨️ {panel_id} fişi yazıcıya gönderildi: {ip}:{port} ({copy_index + 1}/{copies})")
+                    logger.info(f"🖨️ {label} yazıcıya gönderildi: {ip}:{port} ({copy_index + 1}/{copies})")
                 except Exception as e:
-                    logger.error(f"Reyon yazıcı hatası ({panel_id} {ip}:{port}): {e}")
+                    logger.error(f"Termal yazıcı hatası ({label} {ip}:{port}): {e}")
 
         threading.Thread(target=task, daemon=True).start()
+        return True
+
+    def should_batch_prep_ticket(self, panel_id):
+        panel = self.get_prep_panel_info(panel_id)
+        return bool(panel.get("aggregate")) or panel_id == "icecek"
+
+    def queue_prep_ticket_batch(self, panel_id, order_data):
+        key = (
+            str(panel_id or "").strip(),
+            str(order_data.get("masa") or "").strip(),
+        )
+        if not key[0] or not key[1]:
+            return False
+
+        item = {
+            "uid": order_data.get("uid"),
+            "urun": order_data.get("urun"),
+            "kategori": order_data.get("kategori"),
+            "panel": order_data.get("panel") or panel_id,
+            "adet": order_data.get("adet", 1),
+            "not": order_data.get("not") or "",
+            "saat": order_data.get("saat") or "",
+            "garson": order_data.get("garson") or "",
+        }
+
+        with self.prep_printer_batch_lock:
+            batch = self.prep_printer_batches.get(key)
+            if not batch:
+                batch = {
+                    "panel_id": key[0],
+                    "payload": {
+                        **order_data,
+                        "items": [],
+                    },
+                    "timer": None,
+                }
+                self.prep_printer_batches[key] = batch
+
+            batch["payload"]["items"].append(item)
+            batch["payload"]["saat"] = order_data.get("saat") or batch["payload"].get("saat", "")
+            if order_data.get("garson"):
+                current_garson = batch["payload"].get("garson")
+                if not current_garson:
+                    batch["payload"]["garson"] = order_data.get("garson")
+                elif current_garson != order_data.get("garson") and order_data.get("garson") not in current_garson:
+                    batch["payload"]["garson"] = f"{current_garson} / {order_data.get('garson')}"
+
+            timer = batch.get("timer")
+            if timer:
+                timer.cancel()
+            batch["timer"] = threading.Timer(
+                self.prep_printer_batch_delay,
+                self.flush_prep_ticket_batch,
+                args=(key,)
+            )
+            batch["timer"].daemon = True
+            batch["timer"].start()
+        return True
+
+    def flush_prep_ticket_batch(self, key):
+        with self.prep_printer_batch_lock:
+            batch = self.prep_printer_batches.pop(key, None)
+        if not batch:
+            return
+
+        panel_id = batch["panel_id"]
+        payload = batch["payload"]
+        item_count = len(payload.get("items") or [])
+        printer = self.prep_printers.get(panel_id, {})
+        text = self.build_prep_ticket_text(panel_id, payload)
+        sent = self.send_thermal_text_to_ip_printer(printer, text, f"{panel_id} toplu fisi")
+        if sent:
+            logger.info(
+                f"🖨️ {panel_id} toplu fişi hazırlandı: "
+                f"{payload.get('masa')} ({item_count} kalem)"
+            )
+
+    def send_prep_ticket_to_printer(self, panel_id, order_data):
+        if self.should_batch_prep_ticket(panel_id):
+            self.queue_prep_ticket_batch(panel_id, order_data)
+            return
+
+        printer = self.prep_printers.get(panel_id, {})
+        text = self.build_prep_ticket_text(panel_id, order_data)
+        self.send_thermal_text_to_ip_printer(printer, text, f"{panel_id} fisi")
+
+    def send_receipt_to_printer(self, receipt_text):
+        return self.send_thermal_text_to_ip_printer(
+            self.receipt_printer,
+            receipt_text,
+            "hesap fisi"
+        )
 
     def load_salons(self):
         """Salon listesini yükle"""
@@ -1538,15 +2879,33 @@ class RestaurantServer:
     def _strip_portion_variant_prefix(self, urun):
         name = str(urun or '').strip()
         match = re.match(r'^(tam|yarım|yarim)\s+porsiyon\s+(.+)$', name, flags=re.IGNORECASE)
-        return match.group(2).strip() if match else name
+        if match:
+            name = match.group(2).strip()
+        name = re.sub(r'\(\s*\d+(?:[,.]\d+)?\s*porsiyon\s*\)\s*$', '', name, flags=re.IGNORECASE).strip()
+        return name
+
+    def _portion_variant_match_rank(self, urun):
+        normalized = self._normalize_text_for_match(urun)
+        if normalized.startswith('tam porsiyon '):
+            return 0
+        if normalized.startswith('yarim porsiyon '):
+            return 2
+        return 1
 
     def _find_menu_product_entry(self, urun):
         target = self._normalize_product_key(urun)
+        fallback_target = self._normalize_product_key(self._strip_portion_variant_prefix(urun))
+        fallback_matches = []
         for category, items in self.menu_data.items():
             for item in items:
                 name = str(item[0] or '').strip()
                 if self._normalize_product_key(name) == target:
                     return category, name, item
+                if fallback_target and self._normalize_product_key(self._strip_portion_variant_prefix(name)) == fallback_target:
+                    fallback_matches.append((self._portion_variant_match_rank(name), category, name, item))
+        if fallback_matches:
+            _, category, name, item = sorted(fallback_matches, key=lambda entry: entry[0])[0]
+            return category, name, item
         return '', '', None
 
     def _find_menu_product_name(self, urun):
@@ -1873,6 +3232,43 @@ class RestaurantServer:
             if self._normalize_text_for_match(item.get('kategori')) == self._normalize_text_for_match(category)
         ]
 
+    def _daily_meal_stock_keys(self):
+        keys = set()
+        for category in self._daily_meal_categories():
+            if self.get_daily_meals_for_category(category):
+                keys.add(self._normalize_product_key(category))
+        for item in self.daily_meals:
+            meal_name = str(item.get('yemek') or '').strip()
+            if meal_name:
+                keys.add(self._normalize_product_key(meal_name))
+        return keys
+
+    def _is_daily_meal_stock_name(self, urun):
+        stock_name = str(urun or '').strip()
+        if not stock_name:
+            return False
+        return self._normalize_product_key(stock_name) in self._daily_meal_stock_keys()
+
+    def _is_daily_meal_stock_entry(self, key, entry=None):
+        stock_key = self._normalize_product_key(key)
+        if stock_key in self._daily_meal_stock_keys():
+            return True
+        if entry:
+            return self._is_daily_meal_stock_name(entry.get('urun'))
+        return False
+
+    def _should_track_portion_order(self, urun, not_bilgisi=''):
+        meal_name = self.get_daily_meal_name_from_note(urun, not_bilgisi)
+        if meal_name:
+            return True
+
+        group_name = self.get_daily_meal_group_for_product(urun)
+        if group_name and self.get_daily_meals_for_category(group_name):
+            return True
+
+        stock_name = self.get_portion_stock_name(urun)
+        return self._is_daily_meal_stock_name(stock_name)
+
     def get_daily_meal_group_total(self, category):
         return round(sum(
             self._coerce_portion_amount(item.get('porsiyon', 0))
@@ -1979,9 +3375,11 @@ class RestaurantServer:
         category = self.get_daily_meal_group_for_product(urun)
         if not category:
             return ''
-        note = str(not_bilgisi or '').strip()
-        note = re.sub(r'^(yemek|çeşit|cesit)\s*:\s*', '', note, flags=re.IGNORECASE).strip()
-        if not note:
+        meal_note, extra_note = self.split_order_note_details(not_bilgisi)
+        note = meal_note or str(not_bilgisi or '').strip()
+        if not meal_note:
+            note = re.sub(r'^(yemek|çeşit|cesit)\s*:\s*', '', note, flags=re.IGNORECASE).strip()
+        if not note or (extra_note and not meal_note):
             meals = self.get_daily_meals_for_category(category)
             return meals[0]['yemek'] if len(meals) == 1 else ''
         note_key = self._normalize_product_key(note)
@@ -2011,7 +3409,7 @@ class RestaurantServer:
 
     def get_portion_units_for_order(self, urun, adet=1):
         try:
-            adet = max(1, int(adet))
+            adet = self.coerce_order_quantity(adet)
         except Exception:
             adet = 1
 
@@ -2120,20 +3518,16 @@ class RestaurantServer:
         now_iso = datetime.datetime.now().isoformat()
         with self.portion_lock:
             self.portion_stock = {}
-            for items in self.menu_data.values():
-                for item in items:
-                    if not item:
-                        continue
-                    stock_name = self.get_portion_stock_name(item[0])
-                    stock_key = self._normalize_product_key(stock_name)
-                    if not stock_key or stock_key in self.portion_stock:
-                        continue
-                    default_amount = self.get_daily_meal_group_total(stock_name) or DEFAULT_PORTION_STOCK
-                    self.portion_stock[stock_key] = {
-                        'urun': stock_name,
-                        'kalan': float(default_amount),
+            for category in self._daily_meal_categories():
+                total = self.get_daily_meal_group_total(category)
+                group_key = self._normalize_product_key(category)
+                if total > 0 and group_key:
+                    self.portion_stock[group_key] = {
+                        'urun': category,
+                        'kategori': category,
+                        'kalan': self._coerce_portion_amount(total),
                         'updated_at': now_iso,
-                        'is_default': True,
+                        'is_default': False,
                         'reset_date': date_key
                     }
             for item in self.daily_meals:
@@ -2155,7 +3549,7 @@ class RestaurantServer:
             if persist:
                 self.save_portion_stock()
                 self.save_portion_stock_reset_date(date_key)
-        logger.info(f"✓ Porsiyon stokları {date_key} için {DEFAULT_PORTION_STOCK} varsayılana yenilendi")
+        logger.info(f"✓ Günlük yemek porsiyon stokları {date_key} için yenilendi")
 
     def reset_daily_portion_stock_if_needed(self):
         today_key = self.get_portion_stock_today_key()
@@ -2183,23 +3577,28 @@ class RestaurantServer:
         self.portion_reset_thread.start()
 
     def ensure_default_portion_stock(self):
-        """Menüdeki her ortak porsiyon satırına varsayılan stok aç."""
+        """Sadece günlük yemekler için porsiyon stoku tut."""
         now_iso = datetime.datetime.now().isoformat()
+        changed = False
         with self.portion_lock:
-            for items in self.menu_data.values():
-                for item in items:
-                    if not item:
-                        continue
-                    stock_name = self.get_portion_stock_name(item[0])
-                    stock_key = self._normalize_product_key(stock_name)
-                    if stock_key and stock_key not in self.portion_stock:
-                        default_amount = self.get_daily_meal_group_total(stock_name) or DEFAULT_PORTION_STOCK
-                        self.portion_stock[stock_key] = {
-                            'urun': stock_name,
-                            'kalan': float(default_amount),
+            for stock_key, entry in list(self.portion_stock.items()):
+                if not self._is_daily_meal_stock_entry(stock_key, entry):
+                    del self.portion_stock[stock_key]
+                    changed = True
+
+            for category in self._daily_meal_categories():
+                total = self.get_daily_meal_group_total(category)
+                group_key = self._normalize_product_key(category)
+                if total > 0 and group_key:
+                    if group_key not in self.portion_stock:
+                        self.portion_stock[group_key] = {
+                            'urun': category,
+                            'kategori': category,
+                            'kalan': self._coerce_portion_amount(total),
                             'updated_at': now_iso,
-                            'is_default': True
+                            'is_default': False
                         }
+                        changed = True
             for item in self.daily_meals:
                 meal_name = item.get('yemek')
                 meal_key = self._normalize_product_key(meal_name)
@@ -2211,6 +3610,10 @@ class RestaurantServer:
                         'updated_at': now_iso,
                         'is_default': False
                     }
+                    changed = True
+
+            if changed:
+                self.save_portion_stock()
 
     def load_portion_stock(self):
         """Mutfak tarafından girilen tahmini kalan porsiyonları yükle."""
@@ -2250,6 +3653,8 @@ class RestaurantServer:
                         continue
 
                     canonical_name = self.get_portion_stock_name(urun)
+                    if not self._is_daily_meal_stock_name(canonical_name):
+                        continue
                     stock_key = self._normalize_product_key(canonical_name)
                     if stock_key:
                         self.portion_stock[stock_key] = {
@@ -2272,7 +3677,7 @@ class RestaurantServer:
                 payload = {}
                 for entry in sorted(self.portion_stock.values(), key=lambda x: x.get('urun', '')):
                     urun = entry.get('urun')
-                    if not urun:
+                    if not urun or not self._is_daily_meal_stock_name(urun):
                         continue
                     payload[urun] = {
                         'urun': urun,
@@ -2339,8 +3744,12 @@ class RestaurantServer:
             canonical_name = self.get_portion_stock_name(urun)
             kategori = str(update.get('kategori') or update.get('category') or '').strip()
             stock_key = self._normalize_product_key(canonical_name)
+            if not self._is_daily_meal_stock_name(canonical_name):
+                errors.append(f"{canonical_name} günlük yemek listesinde değil")
+                continue
             if raw_kalan is None or raw_kalan == '':
-                raw_kalan = DEFAULT_PORTION_STOCK
+                stock_entry = self.portion_stock.get(stock_key, {})
+                raw_kalan = stock_entry.get('kalan', 0)
 
             try:
                 kalan = max(0.0, round(float(raw_kalan), 2))
@@ -2397,6 +3806,8 @@ class RestaurantServer:
             if not urun:
                 continue
             not_bilgisi = item.get('not') or item.get('not_bilgisi') or ''
+            if not self._should_track_portion_order(urun, not_bilgisi):
+                continue
             units = self.get_portion_units_for_order(urun, item.get('adet', 1))
             key = self.get_portion_stock_key(urun, not_bilgisi)
             required[key] += units
@@ -2423,6 +3834,8 @@ class RestaurantServer:
     def consume_portion_stock(self, urun, adet=1, not_bilgisi=''):
         self.reset_daily_portion_stock_if_needed()
         self.ensure_default_portion_stock()
+        if not self._should_track_portion_order(urun, not_bilgisi):
+            return True, None
         units = self.get_portion_units_for_order(urun, adet)
         stock_name = self.get_order_portion_stock_name(urun, not_bilgisi)
         key = self._normalize_product_key(stock_name)
@@ -2471,6 +3884,8 @@ class RestaurantServer:
     def restore_portion_stock(self, urun, adet=1, not_bilgisi=''):
         self.reset_daily_portion_stock_if_needed()
         self.ensure_default_portion_stock()
+        if not self._should_track_portion_order(urun, not_bilgisi):
+            return False
         units = self.get_portion_units_for_order(urun, adet)
         stock_name = self.get_order_portion_stock_name(urun, not_bilgisi)
         key = self._normalize_product_key(stock_name)
@@ -2694,7 +4109,7 @@ class RestaurantServer:
             'history': [
                 {
                     'urun': h['urun'], 
-                    'adet': h['adet'], 
+                    'adet': self.coerce_order_quantity(h['adet']),
                     'fiyat': float(h['fiyat']), 
                     'tarih': str(h['tarih_saat']),
                     'odeme': h['odeme']
@@ -2711,9 +4126,175 @@ server = RestaurantServer()
 
 # ==================== FLASK ROUTES ====================
 
+def auth_error_response(message, status=401):
+    if request.path.startswith("/api/") or request.is_json:
+        return jsonify({"success": False, "error": message, "auth_required": status == 401}), status
+    next_url = urllib.parse.quote(request.full_path if request.query_string else request.path)
+    return redirect(f"/login?next={next_url}")
+
+
+def require_auth_page(page_key=None):
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            user, err, status = server.validate_current_request(required_page=page_key)
+            if not user:
+                return auth_error_response(err, status)
+            g.current_user = user
+            return fn(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+@app.before_request
+def enforce_auth_for_pages_and_apis():
+    path = request.path or "/"
+    if server.is_public_request_path(path):
+        return None
+
+    ext = os.path.splitext(path)[1].lower()
+    required_page = server.required_page_for_path(path)
+
+    if required_page or path.startswith("/api/") or ext == ".html":
+        user, err, status = server.validate_current_request(required_page=required_page)
+        if not user:
+            return auth_error_response(err, status)
+        g.current_user = user
+    return None
+
+
+@app.route('/login')
+def login_page():
+    """Kullanıcı giriş sayfası"""
+    return app.send_static_file('login.html')
+
+
+@app.route('/api/auth/options')
+def auth_options_api():
+    """Giriş ekranı için kullanıcı ve yetki seçenekleri."""
+    return jsonify({
+        'success': True,
+        'users': server.list_login_users(),
+        'roles': server.get_auth_role_definitions(),
+        'pages': server.get_auth_page_definitions()
+    })
+
+
+@app.route('/api/auth/me')
+def auth_me_api():
+    """Aktif oturum bilgisi."""
+    token = server.get_request_token()
+    user, err, status = server.validate_auth_token(token) if token else (None, None, 200)
+    if not user:
+        return jsonify({'success': False, 'user': None, 'error': err, 'status': status})
+    requested_path = request.args.get('path') or ''
+    page_key = server.required_page_for_path(requested_path) if requested_path else None
+    return jsonify({
+        'success': True,
+        'user': server.public_user(user),
+        'can_access_path': server.user_has_permission(user, page_key) if page_key else True
+    })
+
+
+@app.route('/api/auth/login', methods=['POST'])
+def auth_login_api():
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or data.get('username') or '').strip()
+    pin = str(data.get('pin') or '')
+    requested_path = server.normalize_local_path(data.get('next') or data.get('path') or request.args.get('next') or '/')
+    remember = bool(data.get('remember', True))
+    user, err = server.authenticate_login(name, pin, requested_path=requested_path)
+    if not user:
+        return jsonify({'success': False, 'error': err or 'Giriş yapılamadı'}), 401
+
+    # Hedef sayfaya yetkisi yoksa, yetkili olduğu sayfaya yönlendir
+    redirect_path = requested_path or '/'
+    page_key = server.required_page_for_path(redirect_path)
+    if page_key and not server.user_has_permission(user, page_key):
+        redirect_path = server.get_user_landing_page(user)
+
+    token, max_age = server.create_auth_session(
+        user,
+        remember=remember,
+        device_name=data.get('device_name') or '',
+        ip=request.remote_addr or '',
+        user_agent=request.headers.get('User-Agent', '')
+    )
+    response = make_response(jsonify({
+        'success': True,
+        'user': server.public_user(user),
+        'next': redirect_path
+    }))
+    response.set_cookie(
+        AUTH_COOKIE_NAME,
+        token,
+        max_age=max_age if remember else None,
+        httponly=True,
+        samesite='Lax'
+    )
+    return response
+
+
+@app.route('/api/auth/logout', methods=['POST'])
+@require_auth_page()
+def auth_logout_api():
+    token = server.get_request_token()
+    if token:
+        server.revoke_auth_session(token)
+    response = make_response(jsonify({'success': True}))
+    response.delete_cookie(AUTH_COOKIE_NAME)
+    return response
+
+
+@app.route('/logout')
+def auth_logout_page():
+    """Kullanıcı oturumunu kapatıp giriş ekranına döndür."""
+    token = server.get_request_token()
+    if token:
+        server.revoke_auth_session(token)
+    response = make_response(redirect('/login?next=/'))
+    response.delete_cookie(AUTH_COOKIE_NAME)
+    return response
+
+
+@app.route('/api/auth/users', methods=['GET'])
+@require_auth_page('personel')
+def auth_users_api():
+    return jsonify({
+        'success': True,
+        'users': [server.public_user(user) for user in server.users],
+        'roles': server.get_auth_role_definitions(),
+        'pages': server.get_auth_page_definitions()
+    })
+
+
+@app.route('/api/auth/users', methods=['POST'])
+@require_auth_page('personel')
+def auth_user_save_api():
+    actor = getattr(g, 'current_user', None)
+    user, err = server.upsert_user(request.get_json(silent=True) or {}, actor=actor)
+    if not user:
+        return jsonify({'success': False, 'error': err}), 400
+    return jsonify({'success': True, 'user': server.public_user(user)})
+
+
+@app.route('/api/auth/users/<user_id>', methods=['DELETE'])
+@require_auth_page('personel')
+def auth_user_delete_api(user_id):
+    actor = getattr(g, 'current_user', None)
+    ok, err = server.delete_user(user_id, actor=actor)
+    if not ok:
+        return jsonify({'success': False, 'error': err}), 400
+    return jsonify({'success': True})
+
 @app.route('/')
 def index():
     """Ana sayfa"""
+    return app.send_static_file('index.html')
+
+@app.route('/kasa-terminal')
+def kasa_terminal_page():
+    """Sipariş girişi kapalı kasa/hesap terminali"""
     return app.send_static_file('index.html')
 
 @app.route('/terminals')
@@ -2786,6 +4367,12 @@ def porsiyon_page():
 @app.route('/waiter')
 def waiter_page():
     """Garson arayüzü"""
+    return app.send_static_file('waiter.html')
+
+@app.route('/garson-terminal')
+@app.route('/waiter/shared')
+def shared_waiter_terminal_page():
+    """Ortak ve kilitli garson terminali"""
     return app.send_static_file('waiter.html')
 
 @app.route('/waiters_manage')
@@ -2890,6 +4477,7 @@ def get_settings():
         'prep_panels': server.get_preparation_panels(),
         'prep_category_overrides': server.prep_category_overrides,
         'prep_printers': server.prep_printers,
+        'receipt_printer': server.receipt_printer,
         'menu_categories': list(server.menu_data.keys()),
         'daily_meal_categories': server._daily_meal_categories(),
         'va_max_duration': server.va_max_duration,
@@ -2949,6 +4537,9 @@ def save_settings():
     )
     server.prep_printers = server.sanitize_prep_printer_settings(
         data.get('prep_printers', server.prep_printers)
+    )
+    server.receipt_printer = server.sanitize_receipt_printer_settings(
+        data.get('receipt_printer', server.receipt_printer)
     )
     server.normalize_active_order_panels()
 
@@ -3018,6 +4609,7 @@ def get_gunsonu_ozet():
                 'tip': r['tip'],
                 'toplam': t,
                 'ikram_toplam': ik,
+                'fatura_bekleyen_adet': int(r.get('fatura_bekleyen_adet') or 0),
                 'adet': r['adet']
             })
         return jsonify({
@@ -3043,10 +4635,12 @@ def get_gunsonu_detay():
         for r in rows:
             result.append({
                 'urun': r['urun'],
-                'adet': r['adet'],
+                'adet': server.coerce_order_quantity(r['adet']),
                 'fiyat': float(r['fiyat']),
                 'odeme': r['odeme'],
                 'tip': r.get('tip', 'normal'),
+                'invoice_pending': bool(r.get('invoice_pending', False)),
+                'invoice_note': r.get('invoice_note') or '',
                 'tarih_saat': str(r['tarih_saat']) if r['tarih_saat'] else ''
             })
         return jsonify({'success': True, 'detay': result, 'tarih': tarih})
@@ -3286,7 +4880,7 @@ def lookup_customer(phone):
                 'history': [
                     {
                         'urun': h['urun'], 
-                        'adet': h['adet'], 
+                        'adet': server.coerce_order_quantity(h['adet']),
                         'fiyat': float(h['fiyat']), 
                         'tarih': str(h['tarih_saat'])
                     } for h in history
@@ -3427,7 +5021,7 @@ def get_waiters_api():
 @app.route('/api/waiters', methods=['POST'])
 def add_waiter_api():
     try:
-        data = request.json
+        data = request.get_json(silent=True) or {}
         name = data.get('name', '').strip()
         pin = data.get('pin', '').strip()
         if not name or not pin:
@@ -3435,6 +5029,14 @@ def add_waiter_api():
         
         server.waiters.append({'name': name, 'pin': pin})
         server.save_waiters()
+        if not server.find_user(name=name):
+            server.upsert_user({
+                'name': name,
+                'pin': pin,
+                'role': 'waiter',
+                'permissions': server.get_role_permissions('waiter'),
+                'active': True
+            }, actor=getattr(g, 'current_user', None))
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
@@ -3457,11 +5059,23 @@ def get_cashiers_api():
 @app.route('/api/cashiers', methods=['POST'])
 def add_cashier_api():
     try:
-        data = request.json
-        if not data.get('name'):
+        data = request.get_json(silent=True) or {}
+        name = (data.get('name') or '').strip()
+        pin = (data.get('pin') or '').strip()
+        if not name:
             return jsonify({'success': False, 'error': 'İsim gerekli'})
-        server.cashiers.append({'name': data['name']})
+        if not pin:
+            return jsonify({'success': False, 'error': 'PIN gerekli'})
+        server.cashiers.append({'name': name, 'pin': pin})
         server.save_cashiers()
+        if not server.find_user(name=name):
+            server.upsert_user({
+                'name': name,
+                'pin': pin,
+                'role': 'cashier',
+                'permissions': server.get_role_permissions('cashier'),
+                'active': True
+            }, actor=getattr(g, 'current_user', None))
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
@@ -3486,13 +5100,24 @@ def get_kitchen_api():
 def add_kitchen_api():
     """Yeni mutfak personeli ekle"""
     try:
-        data = request.json
+        data = request.get_json(silent=True) or {}
         name = (data.get('name') or '').strip()
+        pin = (data.get('pin') or '').strip()
         if not name:
             return jsonify({'success': False, 'error': 'İsim gerekli'}), 400
+        if not pin:
+            return jsonify({'success': False, 'error': 'PIN gerekli'}), 400
             
-        server.kitchen.append({'name': name})
+        server.kitchen.append({'name': name, 'pin': pin})
         server.save_kitchen()
+        if not server.find_user(name=name):
+            server.upsert_user({
+                'name': name,
+                'pin': pin,
+                'role': 'kitchen',
+                'permissions': server.get_role_permissions('kitchen'),
+                'active': True
+            }, actor=getattr(g, 'current_user', None))
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
@@ -3548,13 +5173,28 @@ def delete_courier_api_unified(id):
 
 @app.route('/api/waiters/login', methods=['POST'])
 def waiter_login_api_unified():
-    data = request.json
+    data = request.get_json(silent=True) or {}
     name = data.get('name', '')
     pin = data.get('pin', '')
-    waiter = next((w for w in server.waiters if w['name'] == name and w['pin'] == pin), None)
-    if waiter:
-        return jsonify({'success': True})
-    return jsonify({'success': False, 'error': 'Hatalı PIN!'}), 401
+    user, err = server.authenticate_login(name, pin, requested_path='/waiter')
+    if not user or not server.user_has_permission(user, 'waiter'):
+        return jsonify({'success': False, 'error': err or 'Hatalı PIN!'}), 401
+    token, max_age = server.create_auth_session(
+        user,
+        remember=True,
+        device_name='Garson ekranı',
+        ip=request.remote_addr or '',
+        user_agent=request.headers.get('User-Agent', '')
+    )
+    response = make_response(jsonify({'success': True, 'user': server.public_user(user)}))
+    response.set_cookie(
+        AUTH_COOKIE_NAME,
+        token,
+        max_age=max_age,
+        httponly=True,
+        samesite='Lax'
+    )
+    return response
 
 @app.route('/api/portion-stock', methods=['GET'])
 def get_portion_stock_api():
@@ -3987,12 +5627,13 @@ def api_waiter_create_table_session():
     waiter_pin = (data.get('waiter_pin') or "").strip()
     admin_password = (data.get('admin_password') or "").strip()
 
-    authorized = False
+    current_user = getattr(g, 'current_user', None)
+    authorized = bool(current_user and server.user_has_permission(current_user, 'table_session'))
     if admin_password and admin_password == server.admin_password:
         authorized = True
     elif waiter_name and waiter_pin:
-        waiter = next((w for w in server.waiters if w.get('name') == waiter_name and w.get('pin') == waiter_pin), None)
-        authorized = waiter is not None
+        user, _ = server.authenticate_login(waiter_name, waiter_pin, requested_path='/waiter/table-session')
+        authorized = bool(user and server.user_has_permission(user, 'table_session'))
     if not authorized:
         return jsonify({'success': False, 'error': 'Yetkisiz istek'}), 401
 
@@ -4032,12 +5673,13 @@ def api_waiter_register_nfc_tag():
     waiter_pin = (data.get('waiter_pin') or "").strip()
     admin_password = (data.get('admin_password') or "").strip()
 
-    authorized = False
+    current_user = getattr(g, 'current_user', None)
+    authorized = bool(current_user and server.user_has_permission(current_user, 'table_session'))
     if admin_password and admin_password == server.admin_password:
         authorized = True
     elif waiter_name and waiter_pin:
-        waiter = next((w for w in server.waiters if w.get('name') == waiter_name and w.get('pin') == waiter_pin), None)
-        authorized = waiter is not None
+        user, _ = server.authenticate_login(waiter_name, waiter_pin, requested_path='/waiter/table-session')
+        authorized = bool(user and server.user_has_permission(user, 'table_session'))
     if not authorized:
         return jsonify({'success': False, 'error': 'Yetkisiz istek'}), 401
 
@@ -4354,16 +5996,31 @@ def get_adisyon(masa_adi):
 
 # ==================== SOCKETIO EVENTS ====================
 
+def require_socket_permission(required_pages=None):
+    user, err = server.get_socket_user(request.sid, required_pages=required_pages)
+    if not user:
+        emit('error', {'message': err or 'Oturum yetkisi yok'})
+        return None
+    return user
+
+
 @socketio.on('connect')
 def handle_connect():
     """Client bağlandı"""
     sid = request.sid
     client_ip = request.remote_addr
+    user, err, status = server.validate_auth_token(request.cookies.get(AUTH_COOKIE_NAME, ""))
+    if not user:
+        logger.warning(f"🔒 Yetkisiz socket bağlantısı reddedildi: {client_ip} ({err})")
+        return False
     server.active_connections[sid] = {
         'ip': client_ip,
-        'connected_at': time.time()
+        'connected_at': time.time(),
+        'user_id': user.get('id'),
+        'user_name': user.get('name'),
+        'role': user.get('role')
     }
-    logger.info(f"✅ Client bağlandı: {client_ip} ({sid})")
+    logger.info(f"✅ Client bağlandı: {client_ip} ({sid}) - {user.get('name')}")
     
     # İlk verileri gönder
     emit('initial_data', server.get_initial_payload(sid))
@@ -4386,6 +6043,9 @@ def handle_disconnect():
 def handle_waiter_init(data):
     """Garson oturumunu kaydet"""
     sid = request.sid
+    user = require_socket_permission(['waiter', 'dashboard'])
+    if not user:
+        return
     waiter_name = data.get('name')
     if waiter_name:
         server.waiter_sessions[waiter_name].add(sid)
@@ -4395,6 +6055,9 @@ def handle_waiter_init(data):
 def handle_set_kasa(data):
     """Kasa ID'sini bu session için ata"""
     sid = request.sid
+    user = require_socket_permission(['dashboard', 'kasa'])
+    if not user:
+        return
     kasa_id = data.get('kasa_id')
     if kasa_id:
         server.sid_kasa_map[sid] = kasa_id
@@ -4406,6 +6069,9 @@ def handle_set_kasa(data):
 def handle_select_masa(data):
     """Masa seçimi"""
     sid = request.sid
+    user = require_socket_permission()
+    if not user:
+        return
     masa_adi = data.get('masa')
     server.current_selections[sid] = masa_adi
     
@@ -4422,6 +6088,9 @@ def handle_select_masa(data):
 def handle_add_item(data):
     """Sipariş ekle"""
     sid = request.sid
+    user = require_socket_permission(['dashboard', 'waiter'])
+    if not user:
+        return
     # Masayı önce gelen veriden al, yoksa session'dan bak
     masa_adi = data.get('masa') or server.current_selections.get(sid)
     
@@ -4441,7 +6110,7 @@ def handle_add_item(data):
         urun=urun,
         fiyat=fiyat,
         garson=data.get('garson', 'Bilinmiyor'),
-        adet=1,
+        adet=data.get('adet', 1),
         not_bilgisi=not_bilgisi,
         tip=data.get('tip', 'normal'),
         return_error=True
@@ -4452,10 +6121,16 @@ def handle_add_item(data):
 @socketio.on('kitchen_order_ready')
 def handle_kitchen_order_ready(data):
     """Mutfaktan sipariş hazır bildirimi"""
+    user = require_socket_permission('kitchen')
+    if not user:
+        return
     masa = data.get('masa')
     waiters = data.get('waiters', [])
     items_uids = data.get('items_uids', []) # Mutfaktan gelen hazır ürün ID'leri
     items_uid_set = set(items_uids)
+    if not items_uid_set:
+        emit('error', {'message': 'Hazır yapılacak ürün seçilmedi'})
+        return
     
     logger.info(f"📢 Sipariş hazır: {masa} (UIDs: {items_uids})")
 
@@ -4484,7 +6159,7 @@ def handle_kitchen_order_ready(data):
                 socketio.emit('order_ready', {
                     'masa': masa or 'Hazırlık',
                     'items_uids': items_uids,
-                    'message': f"{masa or 'Hazırlık'} siparişi hazır!"
+                    'message': f"{masa or 'Hazırlık'} için {len(items_uids)} kalem hazır!"
                 }, room=sid)
     
     # Değişen tüm masaları güncelle (toplu içecek onayı birden fazla masayı etkileyebilir)
@@ -4496,6 +6171,9 @@ def handle_kitchen_order_ready(data):
 @socketio.on('mark_order_served')
 def handle_mark_order_served(data):
     """Garson hazır siparişi masaya servis etti olarak işaretler."""
+    user = require_socket_permission(['dashboard', 'waiter'])
+    if not user:
+        return
     masa_adi = data.get('masa')
     items_uids = data.get('items_uids') or []
     garson = data.get('garson') or 'Bilinmiyor'
@@ -4533,6 +6211,9 @@ def handle_mark_order_served(data):
 def handle_cancel_item(data):
     """Garson siparişi iptal eder"""
     sid = request.sid
+    user = require_socket_permission(['dashboard', 'waiter'])
+    if not user:
+        return
     masa_adi = data.get('masa')
     item_uid = data.get('uid')
     
@@ -4581,8 +6262,13 @@ def handle_cancel_item(data):
 @socketio.on('transfer_table')
 def handle_transfer_table(data):
     """Bir masadaki siparişleri başka bir masaya taşı"""
+    sid = request.sid
+    user = require_socket_permission(['dashboard', 'waiter'])
+    if not user:
+        return
     source_masa = data.get('source_masa')
     target_masa = data.get('target_masa')
+    garson = (data.get('garson') or data.get('waiter') or '').strip()
     
     if not source_masa or not target_masa:
         emit('error', {'message': 'Kaynak ve hedef masa bilgisi eksik'})
@@ -4604,9 +6290,11 @@ def handle_transfer_table(data):
     # Taşıma işlemi
     server.adisyonlar[target_masa].extend(items_to_move)
     server.adisyonlar[source_masa] = []
+    server.current_selections[sid] = target_masa
     server.save_active_adisyonlar() # Persistence
     
-    logger.info(f"🔄 Masa taşıma: {source_masa} ➔ {target_masa} ({len(items_to_move)} ürün)")
+    actor = f" - {garson}" if garson else ""
+    logger.info(f"🔄 Masa taşıma: {source_masa} ➔ {target_masa} ({len(items_to_move)} ürün){actor}")
     
     # Her iki masa için de güncellemeleri tüm clientlara bildir
     for masa_adi in [source_masa, target_masa]:
@@ -4619,11 +6307,19 @@ def handle_transfer_table(data):
             'source': 'transfer'
         })
     
-    emit('success', {'message': f'{source_masa} masası {target_masa} masasına başarıyla taşındı'})
+    emit('success', {
+        'type': 'transfer_table',
+        'message': f'{source_masa} masası {target_masa} masasına başarıyla taşındı',
+        'source_masa': source_masa,
+        'target_masa': target_masa
+    })
 
 @socketio.on('assign_courier')
 def handle_assign_courier(data):
     """Siparişe kurye ata"""
+    user = require_socket_permission(['dashboard', 'kurye'])
+    if not user:
+        return
     masa_adi = data.get('masa')
     kurye_id = data.get('kurye_id')
     kurye_ad = data.get('kurye_ad')
@@ -4654,6 +6350,9 @@ def handle_assign_courier(data):
 @socketio.on('send_courier_info')
 def handle_send_courier_info(data):
     """Kuryeye sipariş bilgilerini gönder (WhatsApp linki vb.)"""
+    user = require_socket_permission(['dashboard', 'kurye'])
+    if not user:
+        return
     masa_adi = data.get('masa')
     kurye_tel = data.get('kurye_tel')
     
@@ -4700,6 +6399,9 @@ def handle_send_courier_info(data):
 def handle_remove_item(data):
     """Sipariş kaldır"""
     sid = request.sid
+    user = require_socket_permission(['dashboard', 'waiter'])
+    if not user:
+        return
     masa_adi = server.current_selections.get(sid)
     index = data.get('index', -1)
     
@@ -4739,6 +6441,9 @@ def handle_remove_item(data):
 def handle_set_item_comp(data):
     """Seçili adisyon kalemlerini ikram/normal olarak işaretle."""
     sid = request.sid
+    user = require_socket_permission(['dashboard', 'kasa'])
+    if not user:
+        return
     if data.get('role') == 'terminal':
         emit('error', {'message': 'Yetki hatası: Kasa işlemi yapılamaz'})
         return
@@ -4784,6 +6489,9 @@ def handle_set_item_comp(data):
 def handle_payment(data):
     """Ödeme al"""
     sid = request.sid
+    user = require_socket_permission(['dashboard', 'kasa'])
+    if not user:
+        return
     masa_adi = server.current_selections.get(sid)
     
     if not masa_adi or masa_adi not in server.adisyonlar:
@@ -4803,6 +6511,8 @@ def handle_payment(data):
     payments = data.get('payments', [])
     payment_type = data.get('type', 'Nakit') # Eski format desteği
     item_indices = data.get('item_indices', []) # YENİ: Seçili ürünlerin indexleri
+    invoice_pending = bool(data.get('invoice_pending', False))
+    invoice_note = (data.get('invoice_note') or '').strip()
 
     # Hangi kalemlerin ödendiğini belirle
     normalized_item_indices = []
@@ -4902,7 +6612,9 @@ def handle_payment(data):
                 'Tarih_Saat': timestamp,
                 'masa': masa_adi,
                 'terminal_id': server.terminal_id,
-                'vardiya_id': vardiya_id
+                'vardiya_id': vardiya_id,
+                'invoice_pending': invoice_pending,
+                'invoice_note': invoice_note if invoice_pending else None
             })
         
         if USE_DATABASE:
@@ -4932,6 +6644,8 @@ def handle_payment(data):
             'masa': masa_adi,
             'type': final_payment_label,
             'payments': payments,
+            'invoice_pending': invoice_pending,
+            'invoice_note': invoice_note if invoice_pending else '',
             'is_partial': is_partial
         })
 
@@ -4950,6 +6664,8 @@ def handle_payment(data):
             msg = f"Parçalı ödeme alındı: {details}"
         if ikram_total > 0:
             msg += f" | İkram: {ikram_total:.2f} TL"
+        if invoice_pending:
+            msg += " | Fatura bekliyor"
             
         emit('success', {'message': msg})
         
@@ -4966,6 +6682,8 @@ def handle_payment(data):
                 'total': payable_total,
                 'ikram_total': ikram_total,
                 'payment_type': final_payment_label,
+                'invoice_pending': invoice_pending,
+                'invoice_note': invoice_note if invoice_pending else '',
                 'timestamp': timestamp
             }
             # Arka planda gönder (Arayüzü bekletme)
@@ -4985,6 +6703,9 @@ def handle_payment(data):
 def handle_close_complimentary_bill(data):
     """Tamamı ikram olan hesabı tahsilat oluşturmadan kapat."""
     sid = request.sid
+    user = require_socket_permission(['dashboard', 'kasa'])
+    if not user:
+        return
     if data.get('role') == 'terminal':
         emit('error', {'message': 'Yetki hatası: Kasa işlemi yapılamaz'})
         return
@@ -5048,6 +6769,9 @@ def handle_close_complimentary_bill(data):
 def handle_print_receipt(data):
     """Fiş yazdır"""
     sid = request.sid
+    user = require_socket_permission(['dashboard', 'kasa'])
+    if not user:
+        return
     masa_adi = server.current_selections.get(sid)
     
     if not masa_adi or masa_adi not in server.adisyonlar:
@@ -5061,39 +6785,17 @@ def handle_print_receipt(data):
     
     try:
         sira = server.get_and_inc_counter()
-        now = datetime.datetime.now().strftime("%d-%m-%Y      %H:%M")
         fn = os.path.join(FIS_KLASORU, f"Fis_{sira}.txt")
-        totals = server.calculate_adisyon_totals(items)
-        total = totals['payable_total']
-        ikram_total = totals['ikram_total']
-        C_WIDTH = 19 
-        
+        receipt_text = server.build_receipt_ticket_text(masa_adi, items, sira)
+
         with open(fn, "w", encoding="utf-8") as f:
-            f.write(f"{server.company_name[:C_WIDTH]:^{C_WIDTH}}\n")
-            f.write(f"{'SİPARİŞ FİŞİ':^{C_WIDTH}}\n")
-            f.write(f"{'='*C_WIDTH}\n")
-            f.write(f"{now}\n")
-            f.write(f"Fiş No:{sira:<8} {masa_adi}\n")
-            f.write(f"{'-'*C_WIDTH}\n")
-            f.write(f"{'Ürün':<10} {'Ad.':<5} {'Tutar':}\n")
-            f.write(f"{'-'*C_WIDTH}\n")
-            for i in items:
-                ik = " (IK)" if i.get("tip") == "ikram" else ""
-                urun_adi = (i['urun'] + ik)[:14]
-                line_total = 0 if i.get("tip") == "ikram" else server.item_line_total(i)
-                f.write(f"{urun_adi:<12} {i['adet']:<1} {line_total:>6.2f}TL\n")
-            f.write(f"{'='*C_WIDTH}\n")
-            if ikram_total > 0:
-                f.write(f"{'IKRAM:':<10}{ikram_total:>11.2f}TL \n")
-            f.write(f"{'TOPLAM:':<10}{total:>11.2f}TL \n")
-            f.write(f"{'='*C_WIDTH}\n")
-            f.write(f"{'Afiyet Olsun':^{C_WIDTH}}\n")
-            f.write("\n\n\n")
+            f.write(receipt_text)
 
         full_path = os.path.abspath(fn)
+        sent_to_ip_printer = server.send_receipt_to_printer(receipt_text)
         
-        # Yazdırma komutu
-        if server.direct_print:
+        # IP hesap yazıcısı tanımlı değilse eski yerel yazdırma yolunu kullan.
+        if not sent_to_ip_printer and server.direct_print:
             system = platform.system()
             try:
                 if system == "Windows":
@@ -5109,7 +6811,7 @@ def handle_print_receipt(data):
                     subprocess.run(["open", full_path])
                 elif system == "Windows":
                     os.startfile(full_path)
-        else:
+        elif not sent_to_ip_printer:
             # Direct print kapalıysa sadece dosyayı aç (izleme amaçlı)
             system = platform.system()
             if system == "Darwin":
@@ -5119,7 +6821,7 @@ def handle_print_receipt(data):
             else:
                 subprocess.run(["xdg-open", full_path])
 
-        emit('success', {'message': 'Fiş oluşturuldu ve yazdırılmaya gönderildi'})
+        emit('success', {'message': 'Hesap bilgisi oluşturuldu ve yazdırmaya gönderildi'})
         
     except Exception as e:
         logger.error(f"Fiş oluşturma hatası: {e}")

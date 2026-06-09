@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FastFootSatış - Gün Sonu Z Raporu</title>
+    <title>Restoran - Gün Sonu Z Raporu</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
@@ -333,6 +333,20 @@
             border: 1px solid var(--border);
         }
 
+        .fatura-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 4px;
+            padding: 3px 8px;
+            border-radius: 20px;
+            background: rgba(245, 158, 11, 0.16);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.35);
+            font-size: 11px;
+            font-weight: 700;
+        }
+
         .tutar-cell {
             font-weight: 700;
             color: #fbbf24;
@@ -527,12 +541,13 @@
                                 <th>Fiyat</th>
                                 <th>Toplam</th>
                                 <th>Ödeme</th>
+                                <th>Fatura</th>
                                 <th>Saat</th>
                             </tr>
                         </thead>
                         <tbody id="detayBody">
                             <tr>
-                                <td colspan="7" class="empty-state"
+                                <td colspan="8" class="empty-state"
                                     style="padding:30px; text-align:center; color:var(--muted);">Yükleniyor...</td>
                             </tr>
                         </tbody>
@@ -579,11 +594,12 @@
                 // Kartları güncelle
                 document.getElementById('statCiro').textContent = formatTL(genel);
 
-                let nakit = 0, nakitAdet = 0, kart = 0, kartAdet = 0;
+                let nakit = 0, nakitAdet = 0, kart = 0, kartAdet = 0, faturaBekleyenAdet = 0;
                 ozet.forEach(o => {
                     const tipler = (o.odeme || '').toLowerCase();
                     if (tipler.includes('nakit')) { nakit += o.toplam; nakitAdet += o.adet; }
                     else if (tipler.includes('kart') || tipler.includes('kredi')) { kart += o.toplam; kartAdet += o.adet; }
+                    faturaBekleyenAdet += Number(o.fatura_bekleyen_adet || 0);
                 });
                 document.getElementById('statNakit').textContent = formatTL(nakit);
                 document.getElementById('statNakitAdet').textContent = `${nakitAdet} işlem`;
@@ -594,6 +610,7 @@
                 const statParts = [];
                 if (digerToplam > 0.01) statParts.push(`+ ${formatTL(digerToplam)} diğer`);
                 if (genelIkram > 0.01) statParts.push(`İkram: ${formatTL(genelIkram)}`);
+                if (faturaBekleyenAdet > 0) statParts.push(`Fatura bekleyen: ${faturaBekleyenAdet}`);
                 document.getElementById('statOtherPayments').textContent = statParts.join(' • ');
 
                 // Özet tablosu
@@ -665,7 +682,7 @@
 
                 if (!detay.length) {
                     document.getElementById('detayBody').innerHTML =
-                        `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">🧾</div><p>Satış kaydı yok</p><span>${tarih} tarihinde satış bulunamadı</span></div></td></tr>`;
+                        `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">🧾</div><p>Satış kaydı yok</p><span>${tarih} tarihinde satış bulunamadı</span></div></td></tr>`;
                     return;
                 }
 
@@ -681,6 +698,7 @@
                     <td>${formatTL(s.fiyat)}</td>
                     <td class="tutar-cell">${isIkram ? `0,00 TL<br><span style="font-size:11px;color:var(--muted)">İkram ${formatTL(listeToplam)}</span>` : formatTL(toplam)}</td>
                     <td><span class="odeme-badge ${getOdemeCls(s.odeme)}">${getOdemeEmoji(s.odeme)} ${escHtml(s.odeme)}</span></td>
+                    <td>${renderInvoiceCell(s)}</td>
                     <td style="color:var(--muted);font-size:12px;font-family:monospace;">${saat}</td>
                 </tr>`;
                 }).join('');
@@ -696,7 +714,7 @@
         }
         function showDetayError(msg) {
             document.getElementById('detayBody').innerHTML =
-                `<tr><td colspan="7" style="padding:20px;text-align:center;color:#fca5a5;">⚠️ ${escHtml(msg)}</td></tr>`;
+                `<tr><td colspan="8" style="padding:20px;text-align:center;color:#fca5a5;">⚠️ ${escHtml(msg)}</td></tr>`;
         }
 
         // ── Yardımcılar ──
@@ -715,6 +733,15 @@
                 const d = new Date(str);
                 return d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             } catch { return str.split('T')[1]?.substring(0, 8) || str; }
+        }
+        function renderInvoiceCell(s) {
+            if (!s.invoice_pending) {
+                return '<span style="color:var(--muted);font-size:12px;">-</span>';
+            }
+            const note = s.invoice_note
+                ? `<div style="margin-top:4px;color:var(--muted);font-size:11px;max-width:180px;">${escHtml(s.invoice_note)}</div>`
+                : '';
+            return `<span class="fatura-badge">Fatura bekliyor</span>${note}`;
         }
         function getOdemeCls(odeme) {
             const o = (odeme || '').toLowerCase();

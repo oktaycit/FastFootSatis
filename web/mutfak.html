@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mutfak Ekranı - FastFootSatıs</title>
+    <title>Mutfak Ekranı - Restoran</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
@@ -68,7 +68,7 @@
         }
 
         .aggregate-source-items {
-            display: none;
+            display: flex;
         }
 
         .portion-panel {
@@ -368,7 +368,7 @@
 
         function renderPanelChrome() {
             const panel = currentPanel();
-            document.title = `${panel.name} Ekranı - FastFootSatıs`;
+            document.title = `${panel.name} Ekranı - Restoran`;
             document.getElementById('panelTitle').textContent = `${panel.emoji || ''} ${panel.title || panel.name}`;
             const nav = document.getElementById('panelNav');
             nav.innerHTML = prepPanels.map(panelItem => `
@@ -392,6 +392,186 @@
 
         function escapeJs(value) {
             return String(value ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        }
+
+        const FIFO_UNKNOWN_SORT_KEY = Number.MAX_SAFE_INTEGER;
+        let fifoSequence = 0;
+
+        function getOrderSortKey(data) {
+            const createdAt = data?.created_at || data?.createdAt || data?.tarih_saat || data?.Tarih_Saat || '';
+            const createdTimestamp = Date.parse(createdAt);
+            if (Number.isFinite(createdTimestamp)) return createdTimestamp;
+
+            const match = String(data?.saat || '').trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+            if (match) {
+                const hour = Number(match[1]);
+                const minute = Number(match[2]);
+                const second = Number(match[3] || 0);
+                if ([hour, minute, second].every(Number.isFinite)) {
+                    return ((hour * 60 + minute) * 60 + second) * 1000;
+                }
+            }
+            return FIFO_UNKNOWN_SORT_KEY;
+        }
+
+        function ensureOrderFifoMetadata(data) {
+            if (!Number.isFinite(Number(data.__fifoSortKey))) {
+                data.__fifoSortKey = getOrderSortKey(data);
+            }
+            if (!Number.isFinite(Number(data.__fifoSeq))) {
+                data.__fifoSeq = ++fifoSequence;
+            }
+            return data;
+        }
+
+        function sortOrdersFifo(orderList) {
+            return (orderList || [])
+                .map((order, index) => ({ order: ensureOrderFifoMetadata(order), index }))
+                .sort((a, b) => (
+                    a.order.__fifoSortKey - b.order.__fifoSortKey ||
+                    a.order.__fifoSeq - b.order.__fifoSeq ||
+                    a.index - b.index
+                ))
+                .map(entry => entry.order);
+        }
+
+        function readFifoNumber(value, fallback) {
+            const number = Number(value);
+            return Number.isFinite(number) ? number : fallback;
+        }
+
+        function compareFifoValues(aKey, aSeq, bKey, bSeq) {
+            return aKey - bKey || aSeq - bSeq;
+        }
+
+        function insertCardFifo(card) {
+            const cardSortKey = readFifoNumber(card.dataset.sortKey, FIFO_UNKNOWN_SORT_KEY);
+            const cardSeq = readFifoNumber(card.dataset.fifoSeq, FIFO_UNKNOWN_SORT_KEY);
+            const beforeCard = Array.from(kitchenGrid.querySelectorAll('.order-card')).find(existingCard => {
+                if (existingCard === card) return false;
+                const existingSortKey = readFifoNumber(existingCard.dataset.sortKey, FIFO_UNKNOWN_SORT_KEY);
+                const existingSeq = readFifoNumber(existingCard.dataset.fifoSeq, FIFO_UNKNOWN_SORT_KEY);
+                return compareFifoValues(cardSortKey, cardSeq, existingSortKey, existingSeq) < 0;
+            });
+            kitchenGrid.insertBefore(card, beforeCard || null);
+        }
+
+        function syncCardFifoMetadata(card) {
+            if (!card) return;
+            const items = Array.from(card.querySelectorAll('.order-card-item'));
+            if (!items.length) return;
+
+            const firstItem = items.reduce((oldest, item) => {
+                const current = {
+                    element: item,
+                    sortKey: readFifoNumber(item.dataset.sortKey, FIFO_UNKNOWN_SORT_KEY),
+                    seq: readFifoNumber(item.dataset.fifoSeq, FIFO_UNKNOWN_SORT_KEY)
+                };
+                if (!oldest) return current;
+                return compareFifoValues(current.sortKey, current.seq, oldest.sortKey, oldest.seq) < 0 ? current : oldest;
+            }, null);
+
+            card.dataset.sortKey = String(firstItem.sortKey);
+            card.dataset.fifoSeq = String(firstItem.seq);
+            const timeEl = card.querySelector('.order-card-time');
+            if (timeEl && firstItem.element.dataset.saat) {
+                timeEl.textContent = firstItem.element.dataset.saat;
+            }
+            insertCardFifo(card);
+        }
+
+        function formatOrderQuantity(value) {
+            const quantity = Number(value || 0);
+            if (!Number.isFinite(quantity)) return '0';
+            if (Number.isInteger(quantity)) return String(quantity);
+            return quantity.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+        }
+
+        function parseOrderQuantity(value, fallback = 0) {
+            const quantity = Number(String(value ?? '').replace(',', '.'));
+            return Number.isFinite(quantity) ? quantity : fallback;
+        }
+
+        function getPortionLabelForAmount(value) {
+            const amount = parseOrderQuantity(value, 0);
+            if (Math.abs(amount - 0.5) < 0.001) {
+                return { label: 'Yarım Porsiyon', sort: 0 };
+            }
+            if (Math.abs(amount - 1) < 0.001) {
+                return { label: 'Tam Porsiyon', sort: 1 };
+            }
+            if (Math.abs(amount - 1.5) < 0.001) {
+                return { label: 'Bir Buçuk Porsiyon', sort: 2 };
+            }
+            return null;
+        }
+
+        function parseExplicitPortionName(name) {
+            const rawName = String(name ?? '').trim();
+            let match = rawName.match(/^(tam|yarım|yarim)\s+porsiyon\s+(.+)$/i);
+            if (match) {
+                const isHalf = normalizeTextForMatch(match[1]) === 'yarim';
+                return {
+                    label: isHalf ? 'Yarım Porsiyon' : 'Tam Porsiyon',
+                    sort: isHalf ? 0 : 1,
+                    baseName: match[2].trim()
+                };
+            }
+
+            match = rawName.match(/\(\s*(\d+(?:[,.]\d+)?)\s*porsiyon\s*\)\s*$/i);
+            if (match) {
+                const portion = getPortionLabelForAmount(match[1]);
+                if (portion) {
+                    return {
+                        ...portion,
+                        baseName: rawName.replace(/\(\s*\d+(?:[,.]\d+)?\s*porsiyon\s*\)\s*$/i, '').trim()
+                    };
+                }
+            }
+            return null;
+        }
+
+        function getOrderPortionInfo(data) {
+            const explicit = parseExplicitPortionName(data?.urun);
+            if (explicit && explicit.baseName) {
+                return {
+                    ...explicit,
+                    quantity: Math.max(parseOrderQuantity(data?.adet, 1), 1),
+                    dynamic: false
+                };
+            }
+
+            const portion = getPortionLabelForAmount(data?.adet);
+            if (!portion || getOrderPanelId(data) !== 'izgara') return null;
+            const baseName = String(data?.urun ?? '').trim();
+            if (!baseName) return null;
+            return {
+                ...portion,
+                baseName,
+                quantity: 1,
+                dynamic: true
+            };
+        }
+
+        function getOrderDisplayInfo(data) {
+            const portion = getOrderPortionInfo(data);
+            if (portion) {
+                return {
+                    quantity: portion.quantity,
+                    productName: `${portion.label} ${portion.baseName}`.trim(),
+                    aggregateProductName: portion.baseName,
+                    portionLabel: portion.label,
+                    portionSort: portion.sort
+                };
+            }
+
+            return {
+                quantity: parseOrderQuantity(data?.adet, 1) || 1,
+                productName: String(data?.urun ?? '').trim(),
+                aggregateProductName: String(data?.urun ?? '').trim(),
+                portionLabel: '',
+                portionSort: 99
+            };
         }
 
         function getPortionStockName(name) {
@@ -506,6 +686,9 @@
                             card.remove();
                         } else if (card.dataset.aggregate === '1') {
                             updateAggregateCard(card);
+                            syncCardFifoMetadata(card);
+                        } else {
+                            syncCardFifoMetadata(card);
                         }
                     }, 1000);
                 }
@@ -522,12 +705,13 @@
             renderPanelChrome();
             renderPortionStock();
             kitchenGrid.innerHTML = ''; // Temizle
+            fifoSequence = 0;
             const adisyonlar = data.adisyonlar || {};
+            const pendingOrders = [];
 
             for (const masa in adisyonlar) {
                 const items = adisyonlar[masa];
                 if (items && items.length > 0) {
-                    // Masadaki her ürün için karta ekle
                     items.forEach(item => {
                         if (isWaitingForKitchen(item)) {
                             const orderData = {
@@ -539,15 +723,18 @@
                                 adet: item.adet,
                                 garson: item.garson,
                                 not: item.not || '',
-                                saat: item.saat || '--:--:--'
+                                saat: item.saat || '--:--:--',
+                                created_at: item.created_at || item.createdAt || item.tarih_saat || item.Tarih_Saat || ''
                             };
                             if (shouldShowOrder(orderData)) {
-                                addOrderToGrid(orderData, false);
+                                pendingOrders.push(orderData);
                             }
                         }
                     });
                 }
             }
+
+            sortOrdersFifo(pendingOrders).forEach(orderData => addOrderToGrid(orderData, false));
         });
 
         socket.on('portion_stock_update', (data) => {
@@ -610,36 +797,7 @@
                 `);
             });
 
-            Object.entries(menuData).forEach(([category, items]) => {
-                if (getPanelIdForCategory(category) !== currentPanelId) {
-                    return;
-                }
-                (items || []).forEach(item => {
-                    const name = String(item[0] || '').trim();
-                    if (!name) return;
-                    const stockName = getPortionStockName(name);
-                    if (query && !name.toLocaleLowerCase('tr-TR').includes(query) && !stockName.toLocaleLowerCase('tr-TR').includes(query) && !category.toLocaleLowerCase('tr-TR').includes(query)) {
-                        return;
-                    }
-                    if (seen.has(stockName)) return;
-                    seen.add(stockName);
-                    const value = getPortionValue(stockName);
-                    const safeJsName = escapeHtml(escapeJs(stockName));
-                    rows.push(`
-                        <div class="portion-row" data-urun="${escapeHtml(stockName)}">
-                            <div class="portion-name">
-                                <strong title="${escapeHtml(stockName)}">${escapeHtml(stockName)}</strong>
-                                <span>${escapeHtml(category)}</span>
-                            </div>
-                            <input class="portion-input" type="number" min="0" step="0.5" value="${escapeHtml(value)}"
-                                oninput="updatePortionDraft('${safeJsName}', this.value)">
-                            <button class="portion-zero" onclick="markPortionSoldOut('${safeJsName}')">Tükendi</button>
-                        </div>
-                    `);
-                });
-            });
-
-            grid.innerHTML = rows.length ? rows.join('') : '<div style="color:#94a3b8;padding:12px;">Ürün bulunamadı.</div>';
+            grid.innerHTML = rows.length ? rows.join('') : '<div style="color:#94a3b8;padding:12px;">Bu reyonda günlük yemek bulunamadı.</div>';
         }
 
         async function savePortionStock() {
@@ -666,7 +824,8 @@
         }
 
         function getAggregateKey(data) {
-            return `${normalizeProductKey(data.urun)}|${normalizeProductKey(data.not || '')}`;
+            const displayInfo = getOrderDisplayInfo(data);
+            return `${normalizeProductKey(displayInfo.aggregateProductName)}|${normalizeProductKey(data.not || '')}`;
         }
 
         function findAggregateCard(groupKey) {
@@ -674,48 +833,217 @@
                 .find(card => card.dataset.groupKey === groupKey);
         }
 
+        function sortPortionEntries(entries) {
+            return entries.sort((first, second) => {
+                const firstSort = parseInt(first[2] || '99', 10);
+                const secondSort = parseInt(second[2] || '99', 10);
+                if (firstSort !== secondSort) return firstSort - secondSort;
+                return first[0].localeCompare(second[0], 'tr-TR');
+            });
+        }
+
+        function portionEntriesFromBucket(bucket) {
+            return sortPortionEntries(Object.entries(bucket.portions || {}).map(([label, info]) => [
+                label,
+                info.adet,
+                info.sort
+            ]));
+        }
+
+        function formatPortionEntries(bucket) {
+            return portionEntriesFromBucket(bucket)
+                .map(([label, adet]) => `${label} ${formatOrderQuantity(adet)}`)
+                .join(' • ');
+        }
+
+        function formatAggregateTotal(productName, note, bucket) {
+            const noteText = note ? ` (${note})` : '';
+            const portionText = formatPortionEntries(bucket);
+            const normalTotal = bucket.normal || 0;
+            const portionEntries = portionEntriesFromBucket(bucket);
+
+            if (portionEntries.length && normalTotal <= 0) {
+                if (portionEntries.length === 1) {
+                    const [label, adet] = portionEntries[0];
+                    return `${formatOrderQuantity(adet)}x ${label} ${productName}${noteText}`;
+                }
+                return `${productName}${noteText}: ${portionText}`;
+            }
+
+            if (portionEntries.length) {
+                const normalText = normalTotal > 0 ? `${formatOrderQuantity(normalTotal)}x ${productName}${noteText}` : `${productName}${noteText}`;
+                return `${normalText} • ${portionText}`;
+            }
+
+            return `${formatOrderQuantity(normalTotal)}x ${productName}${noteText}`;
+        }
+
+        function formatAggregateBreakdownBucket(bucket) {
+            const parts = [];
+            if ((bucket.normal || 0) > 0) {
+                parts.push(formatOrderQuantity(bucket.normal));
+            }
+            const portionText = formatPortionEntries(bucket);
+            if (portionText) parts.push(portionText);
+            return parts.join(' • ') || '0';
+        }
+
         function updateAggregateCard(card) {
             const sourceItems = Array.from(card.querySelectorAll('.order-card-item'));
-            const total = sourceItems.reduce((sum, el) => sum + (parseInt(el.dataset.adet || '1', 10) || 1), 0);
             const productName = card.dataset.urun || '';
             const note = card.dataset.note || '';
             const byMasa = {};
             const waiters = new Set();
+            const totalBucket = { normal: 0, portions: {} };
 
             sourceItems.forEach(el => {
                 const masa = el.dataset.masa || 'Genel';
-                const adet = parseInt(el.dataset.adet || '1', 10) || 1;
-                byMasa[masa] = (byMasa[masa] || 0) + adet;
+                const adet = parseOrderQuantity(el.dataset.displayAdet || el.dataset.adet, 1) || 1;
+                const portionLabel = el.dataset.portionLabel || '';
+                const portionSort = parseInt(el.dataset.portionSort || '99', 10);
+                if (!byMasa[masa]) byMasa[masa] = { normal: 0, portions: {} };
+
+                if (portionLabel) {
+                    if (!totalBucket.portions[portionLabel]) {
+                        totalBucket.portions[portionLabel] = { adet: 0, sort: portionSort };
+                    }
+                    if (!byMasa[masa].portions[portionLabel]) {
+                        byMasa[masa].portions[portionLabel] = { adet: 0, sort: portionSort };
+                    }
+                    totalBucket.portions[portionLabel].adet += adet;
+                    byMasa[masa].portions[portionLabel].adet += adet;
+                } else {
+                    totalBucket.normal += adet;
+                    byMasa[masa].normal += adet;
+                }
                 if (el.dataset.garson) waiters.add(el.dataset.garson);
             });
 
             card.dataset.waiters = JSON.stringify(Array.from(waiters));
-            card.dataset.totalAdet = String(total);
-            card.querySelector('.aggregate-total').textContent = `${total}x ${productName}${note ? ' (' + note + ')' : ''}`;
+            card.dataset.totalAdet = String(totalBucket.normal + portionEntriesFromBucket(totalBucket).reduce((sum, [, adet]) => sum + adet, 0));
+            card.querySelector('.aggregate-total').textContent = formatAggregateTotal(productName, note, totalBucket);
             card.querySelector('.aggregate-breakdown').textContent = Object.entries(byMasa)
-                .map(([masa, adet]) => `${masa}: ${adet}`)
+                .map(([masa, bucket]) => `${masa}: ${formatAggregateBreakdownBucket(bucket)}`)
                 .join(' • ');
+            updateCardPartialControls(card);
+        }
+
+        function buildOrderItemHtml(data, options = {}) {
+            ensureOrderFifoMetadata(data);
+            const displayInfo = getOrderDisplayInfo(data);
+            const mealName = extractMealNameFromNote(data.not, data.urun);
+            const ticketProductName = mealName || displayInfo.productName;
+            const remainingNote = mealName ? '' : (data.not || '');
+            const safeUid = escapeHtml(data.uid);
+            const safeAdet = escapeHtml(formatOrderQuantity(data.adet));
+            const safeDisplayAdet = escapeHtml(formatOrderQuantity(displayInfo.quantity));
+            const safeUrun = escapeHtml(ticketProductName);
+            const safePortionLabel = escapeHtml(displayInfo.portionLabel);
+            const safePortionSort = escapeHtml(String(displayInfo.portionSort));
+            const safeNote = remainingNote ? ` (${escapeHtml(remainingNote)})` : '';
+            const safeGarson = escapeHtml(data.garson || '?');
+            const safeMasa = escapeHtml(data.masa || '');
+            const safeSaat = escapeHtml(data.saat || '');
+            const safeSortKey = escapeHtml(data.__fifoSortKey);
+            const safeFifoSeq = escapeHtml(data.__fifoSeq);
+            const label = options.showMasa
+                ? `${safeDisplayAdet}x ${safeUrun}${safeNote} - ${safeMasa}`
+                : `${safeDisplayAdet}x ${safeUrun}${safeNote} (${safeGarson})`;
+            return `
+                <div class="order-card-item" data-uid="${safeUid}" data-adet="${safeAdet}" data-display-adet="${safeDisplayAdet}"
+                    data-portion-label="${safePortionLabel}" data-portion-sort="${safePortionSort}"
+                    data-masa="${safeMasa}" data-garson="${safeGarson}"
+                    data-saat="${safeSaat}" data-sort-key="${safeSortKey}" data-fifo-seq="${safeFifoSeq}"
+                    onclick="toggleOrderItemSelection(this, event)">
+                    <div class="order-card-item-main">
+                        <span class="order-card-check">□</span>
+                        <span>${label}</span>
+                    </div>
+                    <button class="btn-item-ready" type="button" onclick="completeItem(this, event)">Hazır</button>
+                </div>
+            `;
+        }
+
+        function getOrderActionsHtml(cardId, allLabel = 'TÜMÜ HAZIR') {
+            return `
+                <button class="btn btn-kitchen-selected" onclick="completeSelectedItems('${cardId}')" disabled>SEÇİLENLER HAZIR</button>
+                <button class="btn btn-kitchen-done" onclick="completeOrder('${cardId}')">${allLabel}</button>
+            `;
+        }
+
+        function toggleOrderItemSelection(itemEl, event) {
+            if (!itemEl || event?.target?.closest('button')) return;
+            itemEl.classList.toggle('selected');
+            const check = itemEl.querySelector('.order-card-check');
+            if (check) check.textContent = itemEl.classList.contains('selected') ? '✓' : '□';
+            updateCardPartialControls(itemEl.closest('.order-card'));
+        }
+
+        function updateCardPartialControls(card) {
+            if (!card) return;
+            const selectedCount = card.querySelectorAll('.order-card-item.selected').length;
+            const selectedBtn = card.querySelector('.btn-kitchen-selected');
+            if (!selectedBtn) return;
+            selectedBtn.disabled = selectedCount === 0;
+            selectedBtn.textContent = selectedCount > 0 ? `SEÇİLENLER HAZIR (${selectedCount})` : 'SEÇİLENLER HAZIR';
+        }
+
+        function completeItem(button, event) {
+            if (event) event.stopPropagation();
+            const itemEl = button?.closest('.order-card-item');
+            const card = itemEl?.closest('.order-card');
+            const uid = itemEl?.dataset.uid;
+            if (!card || !uid) return;
+            completeOrder(card.id, [uid]);
+        }
+
+        function completeSelectedItems(id) {
+            const card = document.getElementById(id);
+            if (!card) return;
+            const itemUids = Array.from(card.querySelectorAll('.order-card-item.selected'))
+                .map(el => el.dataset.uid)
+                .filter(Boolean);
+            if (!itemUids.length) return;
+            completeOrder(id, itemUids);
+        }
+
+        function removeCompletedItemsFromCard(card, itemUids) {
+            if (!card) return;
+            const uidSet = new Set(itemUids || []);
+            const allItems = Array.from(card.querySelectorAll('.order-card-item'));
+            const completedItems = allItems.filter(el => uidSet.has(el.dataset.uid));
+            completedItems.forEach(el => {
+                el.classList.add('completed');
+                setTimeout(() => {
+                    el.remove();
+                    if (card.querySelectorAll('.order-card-item').length === 0) {
+                        card.style.transform = 'scale(0.8)';
+                        card.style.opacity = '0';
+                        setTimeout(() => card.remove(), 250);
+                    } else {
+                        if (card.dataset.aggregate === '1') {
+                            updateAggregateCard(card);
+                        }
+                        updateCardPartialControls(card);
+                        syncCardFifoMetadata(card);
+                    }
+                }, 220);
+            });
         }
 
         function addAggregateOrderToGrid(data, showNewEffect = true) {
+            ensureOrderFifoMetadata(data);
             const groupKey = getAggregateKey(data);
             let card = findAggregateCard(groupKey);
             const addHiddenItem = (targetCard) => {
                 const itemsContainer = targetCard.querySelector('.order-card-items');
-                const item = document.createElement('div');
-                item.className = 'order-card-item';
-                item.dataset.uid = data.uid;
-                item.dataset.adet = data.adet;
-                item.dataset.masa = data.masa;
-                item.dataset.garson = data.garson || '';
-                item.textContent = `${data.adet}x ${data.urun} - ${data.masa}`;
-                itemsContainer.appendChild(item);
+                itemsContainer.insertAdjacentHTML('beforeend', buildOrderItemHtml(data, { showMasa: true }));
             };
 
             if (card) {
                 addHiddenItem(card);
-                card.querySelector('.order-card-time').textContent = data.saat;
                 updateAggregateCard(card);
+                syncCardFifoMetadata(card);
                 if (showNewEffect) {
                     card.classList.add('new');
                     setTimeout(() => card.classList.remove('new'), 5000);
@@ -727,7 +1055,7 @@
             card.className = showNewEffect ? 'order-card new' : 'order-card';
             card.dataset.aggregate = '1';
             card.dataset.groupKey = groupKey;
-            card.dataset.urun = data.urun;
+            card.dataset.urun = getOrderDisplayInfo(data).aggregateProductName;
             card.dataset.note = data.not || '';
             card.dataset.panel = currentPanelId;
             const cardId = `order-agg-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -742,19 +1070,20 @@
                 <div class="aggregate-breakdown"></div>
                 <div class="order-card-items aggregate-source-items"></div>
                 <div class="order-card-actions">
-                    <button class="btn btn-kitchen-done" onclick="completeOrder('${cardId}')">TÜMÜ HAZIR</button>
+                    ${getOrderActionsHtml(cardId)}
                 </div>
             `;
 
             addHiddenItem(card);
             updateAggregateCard(card);
-            kitchenGrid.prepend(card);
+            syncCardFifoMetadata(card);
             if (showNewEffect) {
                 setTimeout(() => card.classList.remove('new'), 5000);
             }
         }
 
         function addOrderToGrid(data, showNewEffect = true) {
+            ensureOrderFifoMetadata(data);
             if (currentPanel().aggregate) {
                 addAggregateOrderToGrid(data, showNewEffect);
                 return;
@@ -766,11 +1095,7 @@
             if (card) {
                 // Kart bulundu, içine yeni ürünü ekle
                 const itemsContainer = card.querySelector('.order-card-items');
-                const newItem = document.createElement('div');
-                newItem.className = 'order-card-item';
-                newItem.dataset.uid = data.uid;
-                newItem.textContent = `${data.adet}x ${data.urun}${data.not ? ' (' + data.not + ')' : ''} (${data.garson || '?'})`;
-                itemsContainer.appendChild(newItem);
+                itemsContainer.insertAdjacentHTML('beforeend', buildOrderItemHtml(data));
 
                 // Garsonları güncelle
                 if (data.garson) {
@@ -781,8 +1106,7 @@
                     }
                 }
 
-                // Zamanı güncelle
-                card.querySelector('.order-card-time').textContent = data.saat;
+                syncCardFifoMetadata(card);
 
                 if (showNewEffect) {
                     card.classList.add('new');
@@ -800,10 +1124,6 @@
                 card.id = cardId;
                 const safeMasa = escapeHtml(data.masa);
                 const safeSaat = escapeHtml(data.saat);
-                const safeUrun = escapeHtml(data.urun);
-                const safeAdet = escapeHtml(data.adet);
-                const safeGarson = escapeHtml(data.garson || '?');
-                const safeNote = data.not ? ` (${escapeHtml(data.not)})` : '';
 
                 card.innerHTML = `
                     <div class="order-card-header">
@@ -811,29 +1131,35 @@
                         <span class="order-card-time">${safeSaat}</span>
                     </div>
                     <div class="order-card-items">
-                        <div class="order-card-item" data-uid="${escapeHtml(data.uid)}">${safeAdet}x ${safeUrun}${safeNote} (${safeGarson})</div>
+                        ${buildOrderItemHtml(data)}
                     </div>
                     <div class="order-card-actions">
-                        <button class="btn btn-kitchen-done" onclick="completeOrder('${cardId}')">TAMAMLANDI</button>
+                        ${getOrderActionsHtml(cardId)}
                     </div>
                 `;
 
-                kitchenGrid.prepend(card);
+                syncCardFifoMetadata(card);
                 if (showNewEffect) {
                     setTimeout(() => card.classList.remove('new'), 5000);
                 }
             }
         }
 
-        function completeOrder(id) {
+        function completeOrder(id, explicitItemUids = null) {
             const card = document.getElementById(id);
             if (card) {
                 const isAggregate = card.dataset.aggregate === '1';
                 const masa = isAggregate ? null : card.dataset.masa;
-                const waiters = JSON.parse(card.dataset.waiters || '[]');
-                const itemsUids = Array.from(card.querySelectorAll('.order-card-item'))
-                    .map(el => el.dataset.uid)
+                const itemsUids = explicitItemUids || Array.from(card.querySelectorAll('.order-card-item'))
+                        .map(el => el.dataset.uid)
+                        .filter(Boolean);
+                if (!itemsUids.length) return;
+                const uidSet = new Set(itemsUids);
+                const selectedWaiters = Array.from(card.querySelectorAll('.order-card-item'))
+                    .filter(el => uidSet.has(el.dataset.uid))
+                    .map(el => el.dataset.garson)
                     .filter(Boolean);
+                const waiters = Array.from(new Set(selectedWaiters.length ? selectedWaiters : JSON.parse(card.dataset.waiters || '[]')));
 
                 // Sunucuya bildir
                 socket.emit('kitchen_order_ready', {
@@ -843,22 +1169,39 @@
                     items_uids: itemsUids
                 });
 
-                card.style.transform = 'scale(0.8)';
-                card.style.opacity = '0';
-                setTimeout(() => card.remove(), 300);
+                removeCompletedItemsFromCard(card, itemsUids);
             }
+        }
+
+        function extractMealNameFromNote(note, urun) {
+            if (!note) return null;
+            const match = String(note).match(/^Yemek:\s*(.+)$/i);
+            if (!match) return null;
+            const mealName = match[1].trim();
+            // Ürün adındaki porsiyon bilgisini koru (ör. "Tam Porsiyon Dana Etli Yemekler" → "Tam Porsiyon")
+            if (urun) {
+                const portionMatch = String(urun).match(/^((?:tam|yarım|yarim)\s+porsiyon)\s+/i);
+                if (portionMatch) {
+                    return portionMatch[1] + ' ' + mealName;
+                }
+            }
+            return mealName;
         }
 
         function printOrder(data) {
             const printArea = document.getElementById('printArea');
-            const safeNote = data.not ? '<br><small>(' + escapeHtml(data.not) + ')</small>' : '';
+            const displayInfo = getOrderDisplayInfo(data);
+            const mealName = extractMealNameFromNote(data.not, data.urun);
+            const ticketProductName = mealName || displayInfo.productName;
+            const remainingNote = mealName ? '' : (data.not || '');
+            const safeNote = remainingNote ? '<br><small>(' + escapeHtml(remainingNote) + ')</small>' : '';
             printArea.innerHTML = `
                 <div style="text-align: center; font-family: 'Courier New', monospace; width: 80mm; padding: 10px; color: black; background: white;">
                     <h2 style="margin: 0;">${escapeHtml(currentPanel().ticket_title || 'SİPARİŞ FİŞİ')}</h2>
                     <hr>
                     <h1 style="margin: 10px 0;">${escapeHtml(data.masa)}</h1>
                     <div style="text-align: left; font-size: 20px; font-weight: bold;">
-                        ${escapeHtml(data.adet)} x ${escapeHtml(data.urun)}${safeNote}
+                        ${escapeHtml(formatOrderQuantity(displayInfo.quantity))} x ${escapeHtml(ticketProductName)}${safeNote}
                     </div>
                     <hr>
                     <div style="font-size: 12px;">${escapeHtml(data.saat)}</div>

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastFoot - Giriş</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            min-height: 100vh;
+            margin: 0;
+            display: grid;
+            place-items: center;
+            background: #f4f7f6;
+            color: #1f2933;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .login-shell {
+            width: min(420px, calc(100vw - 32px));
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            box-shadow: 0 18px 55px rgba(15, 23, 42, 0.16);
+            padding: 26px;
+        }
+
+        h1 {
+            margin: 0 0 6px;
+            font-size: 26px;
+            color: #2c3e50;
+        }
+
+        .muted {
+            color: #667085;
+            font-size: 14px;
+            margin: 0 0 22px;
+            line-height: 1.45;
+        }
+
+        label {
+            display: block;
+            margin: 0 0 6px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #475467;
+        }
+
+        select,
+        input[type="password"] {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 13px 14px;
+            border: 1px solid #d0d5dd;
+            border-radius: 8px;
+            font-size: 16px;
+            margin-bottom: 16px;
+            background: #fff;
+        }
+
+        .remember-row {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            color: #475467;
+            font-size: 14px;
+            margin: 2px 0 18px;
+        }
+
+        .remember-row input {
+            width: 18px;
+            height: 18px;
+        }
+
+        button {
+            width: 100%;
+            border: 0;
+            border-radius: 8px;
+            padding: 13px 16px;
+            background: #e67e22;
+            color: #fff;
+            font-size: 16px;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+        }
+
+        .message {
+            display: none;
+            margin-top: 14px;
+            padding: 11px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .message.show {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <main class="login-shell">
+        <h1>FastFoot Giriş</h1>
+        <p class="muted">Kullanıcı, yetki ve çalışma saati kontrolünden sonra devam edebilirsiniz.</p>
+
+        <form id="loginForm">
+            <label for="userSelect">Kullanıcı</label>
+            <select id="userSelect" required>
+                <option value="">Yükleniyor...</option>
+            </select>
+
+            <label for="pinInput">PIN</label>
+            <input id="pinInput" type="password" inputmode="numeric" autocomplete="current-password" placeholder="PIN kodu"
+                required>
+
+            <label class="remember-row">
+                <input id="rememberInput" type="checkbox" checked>
+                Bu cihazda hatırla
+            </label>
+
+            <button id="loginButton" type="submit">Giriş Yap</button>
+            <div id="message" class="message"></div>
+        </form>
+    </main>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const nextPath = params.get('next') || '/';
+        const userSelect = document.getElementById('userSelect');
+        const pinInput = document.getElementById('pinInput');
+        const rememberInput = document.getElementById('rememberInput');
+        const loginButton = document.getElementById('loginButton');
+        const messageBox = document.getElementById('message');
+
+        function showMessage(message) {
+            messageBox.textContent = message;
+            messageBox.classList.add('show');
+        }
+
+        async function loadUsers() {
+            try {
+                const me = await fetch(`/api/auth/me?path=${encodeURIComponent(nextPath)}`).then(r => r.json());
+                if (me.success && me.can_access_path) {
+                    window.location.replace(nextPath);
+                    return;
+                }
+
+                const data = await fetch('/api/auth/options').then(r => r.json());
+                const users = data.users || [];
+                userSelect.innerHTML = '<option value="">Kullanıcı seçin</option>' + users.map(user => {
+                    const role = user.role_label ? ` - ${user.role_label}` : '';
+                    return `<option value="${user.name}">${user.name}${role}</option>`;
+                }).join('');
+                if (!users.length) {
+                    userSelect.innerHTML = '<option value="">Kullanıcı bulunamadı</option>';
+                    loginButton.disabled = true;
+                }
+            } catch (error) {
+                showMessage('Kullanıcı listesi alınamadı.');
+                userSelect.innerHTML = '<option value="">Bağlantı hatası</option>';
+                loginButton.disabled = true;
+            }
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            messageBox.classList.remove('show');
+            loginButton.disabled = true;
+            loginButton.textContent = 'Kontrol ediliyor...';
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: userSelect.value,
+                        pin: pinInput.value,
+                        next: nextPath,
+                        remember: rememberInput.checked,
+                        device_name: navigator.userAgent.slice(0, 80)
+                    })
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.error || 'Giriş yapılamadı.');
+                }
+                window.location.replace(data.next || nextPath || '/');
+            } catch (error) {
+                showMessage(error.message || 'Giriş yapılamadı.');
+                loginButton.disabled = false;
+                loginButton.textContent = 'Giriş Yap';
+            }
+        });
+
+        loadUsers();
+    </script>
+</body>
+
+</html>

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FastFootSatış - Personel Ayarları</title>
+    <title>Restoran - Personel Ayarları</title>
     <link rel="stylesheet" href="styles.css">
     <style>
         :root {
@@ -101,10 +101,78 @@
             font-size: 14px;
         }
 
-        input {
+        input,
+        select {
             padding: 10px;
             border: 1px solid #ddd;
             border-radius: 5px;
+            background: #fff;
+        }
+
+        .hint-text {
+            color: var(--text-secondary);
+            font-size: 13px;
+            line-height: 1.4;
+            margin: -4px 0 18px;
+        }
+
+        .permissions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 8px;
+            margin: 6px 0 18px;
+        }
+
+        .perm-check,
+        .day-check,
+        .inline-check {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--text-main);
+        }
+
+        .perm-check input,
+        .day-check input,
+        .inline-check input {
+            width: auto;
+        }
+
+        .days-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 6px;
+        }
+
+        .role-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 9px;
+            border-radius: 999px;
+            background: #eef2ff;
+            color: #3730a3;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            padding: 3px 8px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .status-pill.active {
+            color: #166534;
+            background: #dcfce7;
+        }
+
+        .status-pill.passive {
+            color: #991b1b;
+            background: #fee2e2;
         }
 
         .btn {
@@ -182,19 +250,87 @@
             <a href="settings.html" class="back-link">← Ayarlar</a>
             <h2 style="margin:0;">👤 Personel Yönetimi</h2>
         </div>
+        <a href="/logout" class="logout-link">Çıkış</a>
     </header>
 
     <div class="container">
         <div class="tabs">
-            <button class="tab-btn active" onclick="showTab('waiters')">🤵 Garsonlar</button>
-            <button class="tab-btn" onclick="showTab('cashiers')">💰 Kasiyerler</button>
-            <button class="tab-btn" onclick="showTab('couriers')">🛵 Kuryeler</button>
-            <button class="tab-btn" onclick="showTab('kitchen')">🍳 Mutfak</button>
+            <button class="tab-btn active" onclick="showTab('users', event)">🔐 Kullanıcılar</button>
+            <button class="tab-btn" onclick="showTab('waiters', event)">🤵 Garsonlar</button>
+            <button class="tab-btn" onclick="showTab('cashiers', event)">💰 Kasiyerler</button>
+            <button class="tab-btn" onclick="showTab('couriers', event)">🛵 Kuryeler</button>
+            <button class="tab-btn" onclick="showTab('kitchen', event)">🍳 Mutfak</button>
         </div>
 
         <div class="card">
+            <!-- Kullanıcılar -->
+            <div id="users" class="tab-content active">
+                <h3 style="margin-top:0;">🔐 Kullanıcı, Yetki ve Zaman Tanımları</h3>
+                <p class="hint-text">Rol seviyesi varsayılan sayfa izinlerini getirir. İsterseniz kullanıcı bazında sayfa
+                    izinlerini ve giriş saatlerini daraltabilirsiniz.</p>
+                <input type="hidden" id="u_id">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Kullanıcı Adı</label>
+                        <input type="text" id="u_name" placeholder="Örn: Ahmet Y.">
+                    </div>
+                    <div class="form-group">
+                        <label>Rol</label>
+                        <select id="u_role" onchange="applyRoleDefaults()"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>PIN</label>
+                        <input type="password" id="u_pin" placeholder="Yeni kullanıcıda zorunlu">
+                    </div>
+                    <div class="form-group" style="flex:0; min-width:150px; justify-content:flex-end;">
+                        <label class="inline-check" style="margin-bottom:12px;">
+                            <input type="checkbox" id="u_active" checked> Aktif
+                        </label>
+                    </div>
+                </div>
+
+                <label>Sayfa Yetkileri</label>
+                <div id="permissionsGrid" class="permissions-grid"></div>
+
+                <label class="inline-check" style="margin-bottom:12px;">
+                    <input type="checkbox" id="u_schedule_enabled" onchange="toggleScheduleInputs()"> Zaman kısıtı uygula
+                </label>
+                <div class="form-row" id="scheduleInputs">
+                    <div class="form-group">
+                        <label>Başlangıç</label>
+                        <input type="time" id="u_start" value="00:00">
+                    </div>
+                    <div class="form-group">
+                        <label>Bitiş</label>
+                        <input type="time" id="u_end" value="23:59">
+                    </div>
+                    <div class="form-group" style="min-width:300px;">
+                        <label>Günler</label>
+                        <div class="days-row" id="daysRow"></div>
+                    </div>
+                </div>
+
+                <div class="form-row" style="align-items:center;">
+                    <button class="btn btn-add" onclick="saveUser()">Kaydet</button>
+                    <button class="btn" onclick="resetUserForm()" style="background:#64748b; color:#fff;">Temizle</button>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Kullanıcı</th>
+                            <th>Rol</th>
+                            <th>Durum</th>
+                            <th>Zaman</th>
+                            <th style="width:120px;">İşlem</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersTable"></tbody>
+                </table>
+            </div>
+
             <!-- Garsonlar -->
-            <div id="waiters" class="tab-content active">
+            <div id="waiters" class="tab-content">
                 <h3 style="margin-top:0;">🤵 Garson Tanımları</h3>
                 <div class="form-row">
                     <div class="form-group">
@@ -228,6 +364,10 @@
                     <div class="form-group">
                         <label>Kasiyer Adı</label>
                         <input type="text" id="c_name" placeholder="Örn: Mehmet S.">
+                    </div>
+                    <div class="form-group">
+                        <label>Giriş PIN</label>
+                        <input type="password" id="c_pin" placeholder="****" maxlength="6">
                     </div>
                     <div class="form-group" style="flex:0; min-width:auto; justify-content:flex-end;">
                         <button class="btn btn-add" onclick="addCashier()">➕ Ekle</button>
@@ -285,6 +425,10 @@
                         <label>Personel Adı</label>
                         <input type="text" id="kit_name" placeholder="Örn: Fatma U.">
                     </div>
+                    <div class="form-group">
+                        <label>Giriş PIN</label>
+                        <input type="password" id="kit_pin" placeholder="****" maxlength="6">
+                    </div>
                     <div class="form-group" style="flex:0; min-width:auto; justify-content:flex-end;">
                         <button class="btn btn-add" onclick="addKitchen()">➕ Ekle</button>
                     </div>
@@ -305,13 +449,29 @@
     <div id="toast"></div>
 
     <script>
-        function showTab(tabId) {
+        let authRoles = {};
+        let authPages = {};
+        let currentUsers = [];
+        const dayLabels = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[char]));
+        }
+
+        function showTab(tabId, event) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
 
             document.getElementById(tabId).classList.add('active');
-            event.currentTarget.classList.add('active');
+            if (event && event.currentTarget) event.currentTarget.classList.add('active');
 
+            if (tabId === 'users') loadAuthUsers();
             if (tabId === 'waiters') loadWaiters();
             if (tabId === 'cashiers') loadCashiers();
             if (tabId === 'couriers') loadCouriers();
@@ -326,13 +486,180 @@
             setTimeout(() => t.style.display = 'none', 3000);
         }
 
+        async function loadAuthUsers() {
+            const res = await fetch('/api/auth/users');
+            const data = await res.json();
+            if (!data.success) {
+                showToast(data.error || 'Kullanıcılar yüklenemedi', 'error');
+                return;
+            }
+            authRoles = data.roles || {};
+            authPages = data.pages || {};
+            currentUsers = data.users || [];
+            renderRoleSelect();
+            renderPermissionChecks();
+            renderDays();
+            renderUsersTable();
+            toggleScheduleInputs();
+        }
+
+        function renderRoleSelect() {
+            const roleSelect = document.getElementById('u_role');
+            if (!roleSelect || roleSelect.options.length) return;
+            roleSelect.innerHTML = Object.values(authRoles)
+                .sort((a, b) => b.level - a.level)
+                .map(role => `<option value="${role.key}">${escapeHtml(role.label)} (${role.level})</option>`)
+                .join('');
+            if (authRoles.waiter) roleSelect.value = 'waiter';
+        }
+
+        function renderPermissionChecks(selected = null) {
+            const grid = document.getElementById('permissionsGrid');
+            if (!grid) return;
+            const role = document.getElementById('u_role').value || 'waiter';
+            const rolePermissions = (authRoles[role]?.permissions || []);
+            const selectedSet = new Set(selected || (rolePermissions.includes('*') ? Object.keys(authPages) : rolePermissions));
+            grid.innerHTML = Object.values(authPages).map(page => `
+                <label class="perm-check">
+                    <input type="checkbox" value="${page.key}" ${selectedSet.has(page.key) ? 'checked' : ''}>
+                    ${escapeHtml(page.label)}
+                </label>
+            `).join('');
+        }
+
+        function renderDays(selected = null) {
+            const row = document.getElementById('daysRow');
+            if (!row || row.children.length) return;
+            const selectedSet = new Set(selected || [0, 1, 2, 3, 4, 5, 6]);
+            row.innerHTML = dayLabels.map((label, idx) => `
+                <label class="day-check">
+                    <input type="checkbox" value="${idx}" ${selectedSet.has(idx) ? 'checked' : ''}>
+                    ${label}
+                </label>
+            `).join('');
+        }
+
+        function applyRoleDefaults() {
+            renderPermissionChecks();
+        }
+
+        function toggleScheduleInputs() {
+            const enabled = document.getElementById('u_schedule_enabled').checked;
+            const block = document.getElementById('scheduleInputs');
+            if (block) block.style.opacity = enabled ? '1' : '0.45';
+        }
+
+        function resetUserForm() {
+            document.getElementById('u_id').value = '';
+            document.getElementById('u_name').value = '';
+            document.getElementById('u_pin').value = '';
+            document.getElementById('u_role').value = 'waiter';
+            document.getElementById('u_active').checked = true;
+            document.getElementById('u_schedule_enabled').checked = false;
+            document.getElementById('u_start').value = '00:00';
+            document.getElementById('u_end').value = '23:59';
+            renderPermissionChecks();
+            document.querySelectorAll('#daysRow input').forEach(input => input.checked = true);
+            toggleScheduleInputs();
+        }
+
+        function collectPermissions() {
+            return Array.from(document.querySelectorAll('#permissionsGrid input:checked')).map(input => input.value);
+        }
+
+        function collectSchedule() {
+            return {
+                enabled: document.getElementById('u_schedule_enabled').checked,
+                start: document.getElementById('u_start').value || '00:00',
+                end: document.getElementById('u_end').value || '23:59',
+                days: Array.from(document.querySelectorAll('#daysRow input:checked')).map(input => Number(input.value))
+            };
+        }
+
+        async function saveUser() {
+            const payload = {
+                id: document.getElementById('u_id').value,
+                name: document.getElementById('u_name').value.trim(),
+                pin: document.getElementById('u_pin').value.trim(),
+                role: document.getElementById('u_role').value,
+                active: document.getElementById('u_active').checked,
+                permissions: collectPermissions(),
+                schedule: collectSchedule()
+            };
+            if (!payload.name) return showToast('Kullanıcı adı gerekli', 'error');
+            if (!payload.id && !payload.pin) return showToast('Yeni kullanıcı için PIN gerekli', 'error');
+
+            const res = await fetch('/api/auth/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (!data.success) return showToast(data.error || 'Kullanıcı kaydedilemedi', 'error');
+            resetUserForm();
+            loadAuthUsers();
+            showToast('Kullanıcı kaydedildi');
+        }
+
+        function editUser(id) {
+            const user = currentUsers.find(u => u.id === id);
+            if (!user) return;
+            document.getElementById('u_id').value = user.id;
+            document.getElementById('u_name').value = user.name || '';
+            document.getElementById('u_pin').value = '';
+            document.getElementById('u_role').value = user.role || 'waiter';
+            document.getElementById('u_active').checked = !!user.active;
+            renderPermissionChecks(user.permissions || []);
+            const schedule = user.schedule || {};
+            document.getElementById('u_schedule_enabled').checked = !!schedule.enabled;
+            document.getElementById('u_start').value = schedule.start || '00:00';
+            document.getElementById('u_end').value = schedule.end || '23:59';
+            document.querySelectorAll('#daysRow input').forEach(input => {
+                input.checked = (schedule.days || [0, 1, 2, 3, 4, 5, 6]).includes(Number(input.value));
+            });
+            toggleScheduleInputs();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        async function deleteUser(id) {
+            const user = currentUsers.find(u => u.id === id);
+            if (!user || !confirm(`${user.name} kullanıcısını silmek istiyor musunuz?`)) return;
+            const res = await fetch('/api/auth/users/' + encodeURIComponent(id), { method: 'DELETE' });
+            const data = await res.json();
+            if (!data.success) return showToast(data.error || 'Kullanıcı silinemedi', 'error');
+            loadAuthUsers();
+            showToast('Kullanıcı silindi');
+        }
+
+        function scheduleSummary(schedule = {}) {
+            if (!schedule.enabled) return 'Sınırsız';
+            const days = (schedule.days || []).map(day => dayLabels[day]).filter(Boolean).join(', ');
+            return `${days || 'Gün yok'} / ${schedule.start || '00:00'}-${schedule.end || '23:59'}`;
+        }
+
+        function renderUsersTable() {
+            const tbody = document.getElementById('usersTable');
+            tbody.innerHTML = currentUsers.map(user => `
+                <tr>
+                    <td><strong>${escapeHtml(user.name)}</strong></td>
+                    <td><span class="role-badge">${escapeHtml(user.role_label || user.role)}</span></td>
+                    <td><span class="status-pill ${user.active ? 'active' : 'passive'}">${user.active ? 'Aktif' : 'Pasif'}</span></td>
+                    <td>${escapeHtml(scheduleSummary(user.schedule))}</td>
+                    <td>
+                        <button class="btn-delete" style="background:#2563eb;" onclick="editUser('${user.id}')">Düzenle</button>
+                        <button class="btn-delete" onclick="deleteUser('${user.id}')">Sil</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
         async function loadWaiters() {
             const res = await fetch('/api/waiters');
             const data = await res.json();
             const tbody = document.getElementById('waiterTable');
             tbody.innerHTML = data.map((w, idx) => `
             <tr>
-                <td>${w.name}</td>
+                <td>${escapeHtml(w.name)}</td>
                 <td>****</td>
                 <td><button class="btn-delete" onclick="deleteWaiter(${idx})">Sil</button></td>
             </tr>
@@ -354,7 +681,10 @@
                 document.getElementById('w_name').value = '';
                 document.getElementById('w_pin').value = '';
                 loadWaiters();
+                loadAuthUsers();
                 showToast('Garson eklendi');
+            } else {
+                showToast(data.error || 'Garson eklenemedi', 'error');
             }
         }
 
@@ -362,7 +692,10 @@
             if (!confirm('Emin misiniz?')) return;
             const res = await fetch('/api/waiters/' + idx, { method: 'DELETE' });
             const data = await res.json();
-            if (data.success) loadWaiters();
+            if (data.success) {
+                loadWaiters();
+                loadAuthUsers();
+            }
         }
 
         async function loadCashiers() {
@@ -371,7 +704,7 @@
             const tbody = document.getElementById('cashierTable');
             tbody.innerHTML = data.map((c, idx) => `
             <tr>
-                <td>${c.name}</td>
+                <td>${escapeHtml(c.name)}</td>
                 <td><button class="btn-delete" onclick="deleteCashier(${idx})">Sil</button></td>
             </tr>
         `).join('');
@@ -379,22 +712,31 @@
 
         async function addCashier() {
             const name = document.getElementById('c_name').value.trim();
-            if (!name) return;
+            const pin = document.getElementById('c_pin').value.trim();
+            if (!name || !pin) return showToast('İsim ve PIN gerekli', 'error');
             const res = await fetch('/api/cashiers', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name })
+                body: JSON.stringify({ name, pin })
             });
-            if ((await res.json()).success) {
+            const data = await res.json();
+            if (data.success) {
                 document.getElementById('c_name').value = '';
+                document.getElementById('c_pin').value = '';
                 loadCashiers();
+                loadAuthUsers();
+            } else {
+                showToast(data.error || 'Kasiyer eklenemedi', 'error');
             }
         }
 
         async function deleteCashier(idx) {
             if (!confirm('Emin misiniz?')) return;
             const res = await fetch('/api/cashiers/' + idx, { method: 'DELETE' });
-            if ((await res.json()).success) loadCashiers();
+            if ((await res.json()).success) {
+                loadCashiers();
+                loadAuthUsers();
+            }
         }
 
         async function loadCouriers() {
@@ -403,9 +745,9 @@
             const tbody = document.getElementById('courierTable');
             tbody.innerHTML = data.map(k => `
             <tr>
-                <td>${k.ad}</td>
-                <td>${k.telefon || '-'}</td>
-                <td>${k.plaka || '-'}</td>
+                <td>${escapeHtml(k.ad)}</td>
+                <td>${escapeHtml(k.telefon || '-')}</td>
+                <td>${escapeHtml(k.plaka || '-')}</td>
                 <td><button class="btn-delete" onclick="deleteCourier(${k.id})">Sil</button></td>
             </tr>
         `).join('');
@@ -442,7 +784,7 @@
             const tbody = document.getElementById('kitchenTable');
             tbody.innerHTML = data.map((k, idx) => `
             <tr>
-                <td>${k.name}</td>
+                <td>${escapeHtml(k.name)}</td>
                 <td><button class="btn-delete" onclick="deleteKitchen(${idx})">Sil</button></td>
             </tr>
         `).join('');
@@ -450,26 +792,35 @@
 
         async function addKitchen() {
             const name = document.getElementById('kit_name').value.trim();
-            if (!name) return;
+            const pin = document.getElementById('kit_pin').value.trim();
+            if (!name || !pin) return showToast('İsim ve PIN gerekli', 'error');
             const res = await fetch('/api/kitchen', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name })
+                body: JSON.stringify({ name, pin })
             });
-            if ((await res.json()).success) {
+            const data = await res.json();
+            if (data.success) {
                 document.getElementById('kit_name').value = '';
+                document.getElementById('kit_pin').value = '';
                 loadKitchen();
+                loadAuthUsers();
                 showToast('Mutfak personeli eklendi');
+            } else {
+                showToast(data.error || 'Mutfak personeli eklenemedi', 'error');
             }
         }
 
         async function deleteKitchen(idx) {
             if (!confirm('Emin misiniz?')) return;
             const res = await fetch('/api/kitchen/' + idx, { method: 'DELETE' });
-            if ((await res.json()).success) loadKitchen();
+            if ((await res.json()).success) {
+                loadKitchen();
+                loadAuthUsers();
+            }
         }
 
-        window.onload = loadWaiters;
+        window.onload = loadAuthUsers;
     </script>
 
 </body>
