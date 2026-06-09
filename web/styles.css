@@ -209,6 +209,66 @@ body.cashier-terminal .panel-header {
     background: #223142;
 }
 
+body.cashier-terminal .order-list-container {
+    flex-basis: 180px;
+    min-height: 80px;
+}
+
+body.cashier-terminal .controls-container {
+    flex-shrink: 0;
+    max-height: 62vh;
+    padding: 8px;
+}
+
+body.cashier-terminal .total-display,
+body.cashier-terminal .cashier-quick-sale {
+    margin-bottom: 8px;
+}
+
+body.cashier-terminal .total-display {
+    min-height: 52px;
+    padding: 8px 12px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 4px 10px;
+    text-align: left;
+}
+
+body.cashier-terminal .total-label {
+    display: inline;
+    font-size: 12px;
+}
+
+body.cashier-terminal .total-amount {
+    font-size: 22px;
+    line-height: 1;
+    text-align: right;
+}
+
+body.cashier-terminal .complimentary-amount {
+    grid-column: 1 / -1;
+    min-height: 0;
+    margin-top: 0;
+    text-align: right;
+}
+
+body.cashier-terminal .complimentary-amount:empty {
+    display: none;
+}
+
+body.cashier-terminal .cashier-quick-sale {
+    padding: 8px;
+}
+
+body.cashier-terminal .quick-sale-header {
+    margin-bottom: 6px;
+}
+
+body.cashier-terminal .quick-sale-btn {
+    min-height: 42px;
+}
+
 body.cashier-terminal .table-btn {
     background: #dbeafe;
     border: 1px solid #bfdbfe;
@@ -1072,6 +1132,25 @@ body.order-terminal .cashier-quick-sale {
     background: #64748b;
 }
 
+body.cashier-terminal .action-btn {
+    min-height: 42px;
+    padding: 8px 10px;
+}
+
+body.cashier-terminal .shortcut-section {
+    margin-top: 8px;
+    padding-top: 8px;
+}
+
+body.cashier-terminal .module-shortcut {
+    min-height: 52px;
+    padding: 6px;
+}
+
+body.cashier-terminal .shortcut-icon {
+    font-size: 17px;
+}
+
 .invoice-option {
     display: flex;
     align-items: center;
@@ -1900,6 +1979,10 @@ body.order-terminal .cashier-quick-sale {
         padding: 15px 10px;
     }
 
+    .module-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     /* Courier Assignment - Tablet Fix */
     #courierAssignmentArea {
         padding: 12px !important;
@@ -2041,6 +2124,10 @@ body.order-terminal .cashier-quick-sale {
         min-height: 430px !important;
     }
 
+    body.cashier-terminal .controls-container {
+        max-height: none;
+    }
+
     /* Grid Resizing */
     .tables-grid,
     .categories-grid {
@@ -2073,9 +2160,7 @@ body.order-terminal .cashier-quick-sale {
         flex-direction: column;
     }
 
-    /* Buttons Grid Wrap */
-    .management-buttons>div,
-    .extra-modules {
+    .module-grid {
         grid-template-columns: repeat(2, 1fr) !important;
     }
 }
