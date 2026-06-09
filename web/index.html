@@ -17,7 +17,6 @@
                 <span class="status-indicator" id="connectionStatus">●</span>
                 <span id="vardiyaStatus" style="margin-right: 10px;"></span>
                 <span id="terminalId">Terminal 1</span>
-                <span class="ip-address" id="ipAddress">IP: ---</span>
                 <a href="/logout" class="logout-link">Çıkış</a>
             </div>
         </div>
@@ -164,7 +163,7 @@
 
 
                 <!-- Main Actions -->
-                <div class="main-actions action-grid action-grid-two">
+                <div class="main-actions action-grid action-grid-three">
                     <a class="action-link" href="/cari">
                         <button class="btn action-btn action-btn-ledger" id="btnCari" type="button">
                             <span class="action-icon">💰</span>
@@ -175,6 +174,12 @@
                         <button class="btn action-btn action-btn-register" type="button">
                             <span class="action-icon">🏦</span>
                             <span>Kasa</span>
+                        </button>
+                    </a>
+                    <a class="action-link" href="/settings">
+                        <button class="btn action-btn action-btn-settings" id="btnSettings" type="button">
+                            <span class="action-icon">⚙️</span>
+                            <span>Ayarlar</span>
                         </button>
                     </a>
                 </div>
@@ -221,11 +226,6 @@
                             <strong>Personel</strong>
                             <small>Yönetim</small>
                         </a>
-                        <a class="module-shortcut module-settings" href="/settings" title="Ayarlar">
-                            <span class="shortcut-icon">⚙️</span>
-                            <strong>Ayarlar</strong>
-                            <small>Sistem</small>
-                        </a>
                     </div>
                 </div>
             </div>
@@ -253,7 +253,6 @@
 
             <!-- Footer Info -->
             <div class="footer-info">
-                <div class="footer-ip" id="footerIp">📡 IP: ---</div>
                 <div class="footer-terminal" id="footerTerminal">🆔 Terminal 1</div>
             </div>
         </div>

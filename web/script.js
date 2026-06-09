@@ -125,7 +125,6 @@ function canEnterOrders() {
 const elements = {
     companyName: null,
     terminalId: null,
-    ipAddress: null,
     connectionStatus: null,
     menuContainer: null,
     paketSection: null,
@@ -136,7 +135,6 @@ const elements = {
     orderList: null,
     totalAmount: null,
     complimentaryAmount: null,
-    footerIp: null,
     footerTerminal: null,
 
     // Buttons
@@ -930,14 +928,6 @@ function updateSystemInfo() {
         elements.terminalId.textContent = role === 'terminal'
             ? `Terminal ${systemInfo.terminal_id} (Sipariş)`
             : `Kasa ${systemInfo.terminal_id}`;
-    }
-
-    if (elements.ipAddress && systemInfo.ip) {
-        elements.ipAddress.textContent = `IP: ${systemInfo.ip}`;
-    }
-
-    if (elements.footerIp && systemInfo.ip) {
-        elements.footerIp.textContent = `📡 IP: ${systemInfo.ip}`;
     }
 
     if (elements.footerTerminal && systemInfo.terminal_id) {
@@ -1836,7 +1826,7 @@ function setupEventListeners() {
 
     if (elements.btnAbout) {
         elements.btnAbout.onclick = () => {
-            alert(`Restoran\nRestoran Yönetim Sistemi\n\nVersiyon: 1.0\nIP: ${systemInfo.ip || '---'}\nTerminal: ${systemInfo.terminal_id || '1'}`);
+            alert(`Restoran\nRestoran Yönetim Sistemi\n\nVersiyon: 1.0\nTerminal: ${systemInfo.terminal_id || '1'}`);
         };
     }
 
