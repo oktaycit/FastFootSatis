@@ -1026,6 +1026,7 @@
                         <option value="none">❌ Yok</option>
                         <option value="parasut">🚀 Paraşüt</option>
                         <option value="kolaybi">🚀 KolayBi</option>
+                        <option value="mysoft">🚀 Mysoft</option>
                     </select>
                 </div>
 
@@ -1069,6 +1070,59 @@
                         <div class="form-group">
                             <label>API Secret</label>
                             <input type="password" id="acc_kolaybi_api_secret" placeholder="KolayBi API Secret">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mysoft Fields -->
+                <div id="acc_mysoft_fields"
+                    style="display:none; margin-top:15px; padding:15px; background:#fff7ed; border-radius: var(--radius-md);">
+                    <div class="toggle-row" style="margin-bottom:12px;">
+                        <div>
+                            <div class="toggle-label">Mysoft Taslak Fatura</div>
+                            <div class="toggle-desc">Fatura bekleyen satışları Mysoft portalında taslak olarak oluşturur</div>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="acc_mysoft_draft" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Base URL</label>
+                            <input type="text" id="acc_mysoft_base_url" placeholder="https://...">
+                        </div>
+                        <div class="form-group">
+                            <label>Fatura Endpoint</label>
+                            <input type="text" id="acc_mysoft_invoice_endpoint" placeholder="/api/invoice/create">
+                        </div>
+                        <div class="form-group">
+                            <label>Auth Endpoint</label>
+                            <input type="text" id="acc_mysoft_auth_endpoint" placeholder="/api/auth/token">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Kullanıcı Adı</label>
+                            <input type="text" id="acc_mysoft_username" placeholder="Mysoft API kullanıcı adı">
+                        </div>
+                        <div class="form-group">
+                            <label>Şifre</label>
+                            <input type="password" id="acc_mysoft_password" placeholder="Mysoft API şifresi">
+                        </div>
+                        <div class="form-group">
+                            <label>API Key</label>
+                            <input type="password" id="acc_mysoft_api_key" placeholder="Varsa API Key">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Bearer Token</label>
+                            <input type="password" id="acc_mysoft_bearer_token" placeholder="Varsa sabit token">
+                        </div>
+                        <div class="form-group">
+                            <label>Firma VKN</label>
+                            <input type="text" id="acc_mysoft_company_tax_id" placeholder="Satıcı VKN">
                         </div>
                     </div>
                 </div>
@@ -1377,6 +1431,18 @@
                 if (acc.kolaybi) {
                     document.getElementById('acc_kolaybi_api_key').value = acc.kolaybi.api_key || '';
                     document.getElementById('acc_kolaybi_api_secret').value = acc.kolaybi.api_secret || '';
+                }
+
+                if (acc.mysoft) {
+                    document.getElementById('acc_mysoft_draft').checked = acc.mysoft.draft !== false;
+                    document.getElementById('acc_mysoft_base_url').value = acc.mysoft.base_url || '';
+                    document.getElementById('acc_mysoft_auth_endpoint').value = acc.mysoft.auth_endpoint || '';
+                    document.getElementById('acc_mysoft_invoice_endpoint').value = acc.mysoft.invoice_endpoint || '';
+                    document.getElementById('acc_mysoft_username').value = acc.mysoft.username || '';
+                    document.getElementById('acc_mysoft_password').value = acc.mysoft.password || '';
+                    document.getElementById('acc_mysoft_api_key').value = acc.mysoft.api_key || '';
+                    document.getElementById('acc_mysoft_bearer_token').value = acc.mysoft.bearer_token || '';
+                    document.getElementById('acc_mysoft_company_tax_id').value = acc.mysoft.company_tax_id || '';
                 }
 
                 toggleAccountingUI();
@@ -1804,6 +1870,18 @@
                     kolaybi: {
                         api_key: document.getElementById('acc_kolaybi_api_key').value.trim(),
                         api_secret: document.getElementById('acc_kolaybi_api_secret').value.trim()
+                    },
+                    mysoft: {
+                        enabled: document.getElementById('int_acc_platform').value === 'mysoft',
+                        draft: document.getElementById('acc_mysoft_draft').checked,
+                        base_url: document.getElementById('acc_mysoft_base_url').value.trim(),
+                        auth_endpoint: document.getElementById('acc_mysoft_auth_endpoint').value.trim(),
+                        invoice_endpoint: document.getElementById('acc_mysoft_invoice_endpoint').value.trim(),
+                        username: document.getElementById('acc_mysoft_username').value.trim(),
+                        password: document.getElementById('acc_mysoft_password').value.trim(),
+                        api_key: document.getElementById('acc_mysoft_api_key').value.trim(),
+                        bearer_token: document.getElementById('acc_mysoft_bearer_token').value.trim(),
+                        company_tax_id: document.getElementById('acc_mysoft_company_tax_id').value.trim()
                     }
                 }
             };
@@ -1862,6 +1940,7 @@
             const platform = document.getElementById('int_acc_platform').value;
             document.getElementById('acc_parasut_fields').style.display = platform === 'parasut' ? 'block' : 'none';
             document.getElementById('acc_kolaybi_fields').style.display = platform === 'kolaybi' ? 'block' : 'none';
+            document.getElementById('acc_mysoft_fields').style.display = platform === 'mysoft' ? 'block' : 'none';
         }
 
         async function saveQrMenuPolicy(adminPassword) {

@@ -9,6 +9,11 @@ import os
 import datetime
 import logging
 
+try:
+    import requests
+except ImportError:
+    requests = None
+
 logger = logging.getLogger(__name__)
 
 class IntegrationManager:
@@ -25,14 +30,20 @@ class IntegrationManager:
             return ParasutProvider(acc_settings.get("parasut", {}))
         elif platform == "kolaybi":
             return KolayBiProvider(acc_settings.get("kolaybi", {}))
+        elif platform == "mysoft":
+            return MysoftProvider(acc_settings.get("mysoft", {}))
         return None
+
     def load_settings(self):
         if os.path.exists(self.config_path):
             try:
                 with open(self.config_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    return self._merge_default_settings(json.load(f))
             except Exception as e:
                 logger.error(f"Error loading integration settings: {e}")
+        return self._default_settings()
+
+    def _default_settings(self):
         return {
             "yemeksepeti": {"enabled": False, "api_key": "", "store_id": ""},
             "trendyol": {"enabled": False, "api_key": "", "api_secret": "", "supplier_id": ""},
@@ -40,14 +51,44 @@ class IntegrationManager:
             "migros": {"enabled": False, "api_key": "", "store_id": ""},
             "whatsapp": {"enabled": False, "api_key": "", "service_name": ""},
             "accounting": {
-                "active_platform": "none", # "none", "parasut", "kolaybi"
+                "active_platform": "none", # "none", "parasut", "kolaybi", "mysoft"
                 "parasut": {"client_id": "", "client_secret": "", "username": "", "password": "", "company_id": ""},
-                "kolaybi": {"api_key": "", "api_secret": ""}
+                "kolaybi": {"api_key": "", "api_secret": ""},
+                "mysoft": {
+                    "enabled": False,
+                    "base_url": "",
+                    "auth_endpoint": "",
+                    "invoice_endpoint": "",
+                    "username": "",
+                    "password": "",
+                    "api_key": "",
+                    "bearer_token": "",
+                    "company_tax_id": "",
+                    "draft": True
+                }
             }
         }
 
+    def _merge_default_settings(self, raw):
+        defaults = self._default_settings()
+        merged = defaults
+        for key, value in (raw or {}).items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                merged[key].update(value)
+            else:
+                merged[key] = value
+        acc = merged.setdefault("accounting", defaults["accounting"])
+        default_acc = defaults["accounting"]
+        for key, value in default_acc.items():
+            if isinstance(value, dict):
+                acc.setdefault(key, {})
+                acc[key] = {**value, **acc.get(key, {})}
+            else:
+                acc.setdefault(key, value)
+        return merged
+
     def save_settings(self, new_settings):
-        self.settings = new_settings
+        self.settings = self._merge_default_settings(new_settings)
         self.accounting_provider = self._init_accounting_provider() # Re-init on save
         try:
             with open(self.config_path, 'w', encoding='utf-8') as f:
@@ -335,3 +376,140 @@ class KolayBiProvider(BaseAccountingProvider):
 
     def check_stock(self, item_name):
         pass
+
+
+class MysoftProvider(BaseAccountingProvider):
+    DOCUMENT_TYPE_MAP = {
+        9005: "MATBU",
+        9006: "EFATURA",
+        9007: "EARSIV",
+    }
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.session = requests.Session() if requests else None
+
+    def authenticate(self):
+        if not self.config.get("enabled", True):
+            raise ValueError("Mysoft entegrasyonu kapalı")
+        if not requests:
+            raise RuntimeError("requests modülü yüklü değil")
+
+        bearer_token = (self.config.get("bearer_token") or "").strip()
+        api_key = (self.config.get("api_key") or "").strip()
+        if bearer_token:
+            self.access_token = bearer_token
+            return
+        if api_key:
+            self.access_token = None
+            return
+
+        auth_endpoint = (self.config.get("auth_endpoint") or "").strip()
+        username = (self.config.get("username") or "").strip()
+        password = (self.config.get("password") or "").strip()
+        if not auth_endpoint:
+            raise ValueError("Mysoft auth endpoint veya token/API key girilmeli")
+        if not username or not password:
+            raise ValueError("Mysoft kullanıcı adı ve şifre girilmeli")
+
+        url = self._build_url(auth_endpoint)
+        response = self.session.post(url, json={
+            "username": username,
+            "password": password
+        }, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        token = data.get("access_token") or data.get("token") or data.get("Token")
+        if not token:
+            raise ValueError("Mysoft auth yanıtında token bulunamadı")
+        self.access_token = token
+
+    def send_invoice(self, order_data):
+        if not order_data.get("invoice_pending"):
+            logger.info("Mysoft: fatura beklemeyen satış atlandı")
+            return {"skipped": True}
+
+        invoice_endpoint = (self.config.get("invoice_endpoint") or "").strip()
+        if not invoice_endpoint:
+            raise ValueError("Mysoft fatura endpoint'i girilmeli")
+
+        payload = self.build_invoice_payload(order_data)
+        headers = self._headers()
+        url = self._build_url(invoice_endpoint)
+        response = self.session.post(url, json=payload, headers=headers, timeout=45)
+        response.raise_for_status()
+        try:
+            result = response.json()
+        except ValueError:
+            result = {"raw": response.text[:500]}
+        logger.info(f"Mysoft fatura gönderildi: {payload.get('external_id')}")
+        return result
+
+    def build_invoice_payload(self, order_data):
+        document_type = int(order_data.get("invoice_document_type") or 9006)
+        invoice_kind = self.DOCUMENT_TYPE_MAP.get(document_type, "EFATURA")
+        tax_id = str(order_data.get("invoice_tax_id") or "").strip()
+        serial_no = str(order_data.get("invoice_serial_no") or "").strip()
+        if len(tax_id) not in (10, 11):
+            raise ValueError("Mysoft faturası için VKN/TCKN gerekli")
+        if not serial_no:
+            raise ValueError("Mysoft faturası için fatura seri no gerekli")
+
+        items = []
+        for item in order_data.get("items", []):
+            quantity = float(item.get("adet") or 1)
+            unit_price = float(item.get("fiyat") or 0)
+            items.append({
+                "name": item.get("urun") or "Ürün",
+                "quantity": quantity,
+                "unit_price": unit_price,
+                "vat_rate": int(item.get("tax_percent") or item.get("kdv") or 10),
+                "line_total": round(quantity * unit_price, 2)
+            })
+
+        return {
+            "source": "FastFootSatis",
+            "draft": bool(self.config.get("draft", True)),
+            "external_id": f"{order_data.get('masa', 'SATIS')}-{order_data.get('timestamp')}",
+            "invoice_kind": invoice_kind,
+            "document_type": document_type,
+            "serial_no": serial_no,
+            "issue_datetime": str(order_data.get("timestamp") or datetime.datetime.now()),
+            "seller_tax_id": self.config.get("company_tax_id", ""),
+            "customer": {
+                "name": order_data.get("customer") or "Genel Müşteri",
+                "tax_id": tax_id,
+                "note": order_data.get("invoice_note") or ""
+            },
+            "payment": {
+                "type": order_data.get("payment_type") or "",
+                "total": float(order_data.get("total") or 0)
+            },
+            "items": items,
+            "totals": {
+                "payable": float(order_data.get("total") or 0),
+                "complimentary": float(order_data.get("ikram_total") or 0)
+            }
+        }
+
+    def _headers(self):
+        headers = {"Content-Type": "application/json"}
+        api_key = (self.config.get("api_key") or "").strip()
+        bearer_token = self.access_token or (self.config.get("bearer_token") or "").strip()
+        if bearer_token:
+            headers["Authorization"] = f"Bearer {bearer_token}"
+        if api_key:
+            headers["X-API-Key"] = api_key
+        return headers
+
+    def _build_url(self, endpoint):
+        endpoint = endpoint.strip()
+        if endpoint.startswith("http://") or endpoint.startswith("https://"):
+            return endpoint
+        base_url = (self.config.get("base_url") or "").strip().rstrip("/")
+        if not base_url:
+            raise ValueError("Mysoft base URL girilmeli")
+        return f"{base_url}/{endpoint.lstrip('/')}"
+
+    def check_stock(self, item_name):
+        return None

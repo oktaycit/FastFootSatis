@@ -42,7 +42,8 @@ class POSManager:
         self.pos_type = pos_type # "demo", "beko-json", "hugin", "generic", "token-bridge"
         self._sale_lock = threading.Lock()
         
-    def sale(self, amount, table_name="", items=None, payments=None, order_id=None):
+    def sale(self, amount, table_name="", items=None, payments=None, order_id=None,
+             invoice_pending=False, invoice_info=None):
         """
         Send a sale request to the POS device.
         :param amount: Float amount in TL
@@ -50,6 +51,8 @@ class POSManager:
         :param items: Optional adisyon items for fiscal OKC basket payloads
         :param payments: Optional payment list for fiscal OKC basket payloads
         :param order_id: Optional stable basket id
+        :param invoice_pending: Send Token bridge basket as invoice info receipt
+        :param invoice_info: Dict with document_type, tax_id, serial_no and note
         :return: (bool success, str message)
         """
         if not self.enabled:
@@ -77,9 +80,11 @@ class POSManager:
                     items=items or [],
                     payments=payments or [{"type": "Kredi Kartı", "amount": amount}],
                     order_id=order_id,
+                    invoice_pending=invoice_pending,
+                    invoice_info=invoice_info,
                 )
                 response = self._send_token_bridge_request(payload)
-                return self._parse_token_bridge_response(response)
+                return self._parse_token_bridge_response(response, invoice_pending=invoice_pending)
 
             payload = self._create_payload(amount, table_name)
             response = self._send_request(payload)
@@ -118,7 +123,8 @@ class POSManager:
             "table": table_name
         }).encode('utf-8')
 
-    def _create_token_bridge_payload(self, table_name, items, payments, order_id=None):
+    def _create_token_bridge_payload(self, table_name, items, payments, order_id=None,
+                                     invoice_pending=False, invoice_info=None):
         """Build the Token IntegrationHub basket JSON sent to the Windows bridge."""
         token_items = [self._create_token_item(item) for item in items]
         token_items = [item for item in token_items if item is not None]
@@ -138,7 +144,7 @@ class POSManager:
                 f"({items_total / 100000:.2f} TL / {payments_total / 100000:.2f} TL)"
             )
 
-        return {
+        payload = {
             "basketID": order_id or str(uuid.uuid4()),
             "createInvoice": False,
             "documentType": 0,
@@ -151,6 +157,26 @@ class POSManager:
             "isWayBill": False,
             "note": table_name[:64] if table_name else None,
         }
+
+        if invoice_pending:
+            invoice_info = invoice_info or {}
+            document_type = int(invoice_info.get("document_type") or 9006)
+            tax_id = str(invoice_info.get("tax_id") or "").strip()
+            serial_no = str(invoice_info.get("serial_no") or "").strip()
+            if document_type not in (9005, 9006, 9007):
+                document_type = 9006
+            if len(tax_id) not in (10, 11):
+                raise ValueError("Fatura bilgi fişi için geçerli VKN/TCKN gerekli")
+            if not serial_no:
+                raise ValueError("Fatura bilgi fişi için seri no gerekli")
+
+            payload["documentType"] = document_type
+            payload["customerInfo"] = {"taxID": tax_id}
+            payload["infoReceiptInfo"] = {"serialNo": serial_no[:32]}
+            note_parts = [table_name[:32] if table_name else "", invoice_info.get("note") or ""]
+            payload["note"] = " | ".join(part for part in note_parts if part)[:64] or None
+
+        return payload
 
     def _create_token_item(self, item):
         name = str(item.get("urun") or item.get("name") or "").strip()
@@ -263,11 +289,14 @@ class POSManager:
             data = s.recv(1024)
             return data.decode('utf-8')
 
-    def _parse_token_bridge_response(self, response):
+    def _parse_token_bridge_response(self, response, invoice_pending=False):
         """Parse response from the Windows OKC bridge."""
         if response.get("success") is True or response.get("status") in (0, "success"):
             receipt_no = response.get("receiptNo") or response.get("receipt_no")
             z_no = response.get("zNo") or response.get("z_no")
+            document_type = response.get("documentType") or response.get("document_type")
+            if invoice_pending or document_type in (9005, 9006, 9007, "9005", "9006", "9007"):
+                return True, f"ÖKC fatura bilgi fişi tamamlandı (Fiş: {receipt_no or '-'}, Z: {z_no or '-'})"
             if receipt_no or z_no:
                 return True, f"ÖKC fişi tamamlandı (Fiş: {receipt_no or '-'}, Z: {z_no or '-'})"
             return True, response.get("message") or "ÖKC fişi tamamlandı"

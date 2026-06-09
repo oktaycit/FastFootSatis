@@ -4641,6 +4641,9 @@ def get_gunsonu_detay():
                 'odeme': r['odeme'],
                 'tip': r.get('tip', 'normal'),
                 'invoice_pending': bool(r.get('invoice_pending', False)),
+                'invoice_document_type': r.get('invoice_document_type'),
+                'invoice_tax_id': r.get('invoice_tax_id') or '',
+                'invoice_serial_no': r.get('invoice_serial_no') or '',
                 'invoice_note': r.get('invoice_note') or '',
                 'tarih_saat': str(r['tarih_saat']) if r['tarih_saat'] else ''
             })
@@ -6232,6 +6235,42 @@ def require_socket_permission(required_pages=None):
     return user
 
 
+INVOICE_DOCUMENT_TYPES = {
+    9005: "Matbu Fatura Bilgi Fişi",
+    9006: "E-Fatura Bilgi Fişi",
+    9007: "E-Arşiv Bilgi Fişi",
+}
+
+
+def normalize_invoice_info(data):
+    """ÖKC bilgi fişi için gerekli fatura alanlarını normalize et."""
+    try:
+        document_type = int(data.get('invoice_document_type') or 9006)
+    except (TypeError, ValueError):
+        document_type = 9006
+    if document_type not in INVOICE_DOCUMENT_TYPES:
+        document_type = 9006
+
+    tax_id = re.sub(r"\D", "", str(data.get('invoice_tax_id') or ""))[:11]
+    serial_no = re.sub(r"[^0-9A-Za-z]", "", str(data.get('invoice_serial_no') or ""))[:32]
+    note = str(data.get('invoice_note') or '').strip()[:160]
+    return {
+        'document_type': document_type,
+        'document_label': INVOICE_DOCUMENT_TYPES[document_type],
+        'tax_id': tax_id,
+        'serial_no': serial_no,
+        'note': note
+    }
+
+
+def validate_okc_invoice_info(invoice_info):
+    if len(invoice_info.get('tax_id') or '') not in (10, 11):
+        return "Fatura bilgi fişi için 10 haneli VKN veya 11 haneli TCKN girin."
+    if not invoice_info.get('serial_no'):
+        return "Fatura bilgi fişi için fatura/bilgi fişi seri no girin."
+    return None
+
+
 @socketio.on('connect')
 def handle_connect():
     """Client bağlandı"""
@@ -6740,7 +6779,8 @@ def handle_payment(data):
     payment_type = data.get('type', 'Nakit') # Eski format desteği
     item_indices = data.get('item_indices', []) # YENİ: Seçili ürünlerin indexleri
     invoice_pending = bool(data.get('invoice_pending', False))
-    invoice_note = (data.get('invoice_note') or '').strip()
+    invoice_info = normalize_invoice_info(data)
+    invoice_note = invoice_info['note']
 
     # Hangi kalemlerin ödendiğini belirle
     normalized_item_indices = []
@@ -6788,6 +6828,27 @@ def handle_payment(data):
     if not payments:
         emit('error', {'message': 'Geçerli ödeme tutarı bulunamadı'})
         return
+
+    if invoice_pending and server.pos_enabled:
+        token_bridge_enabled_for_invoice = server.pos_type in POSManager.TOKEN_BRIDGE_TYPES
+        card_amount_for_invoice = sum(p['amount'] for p in payments if p.get('type') == 'Kredi Kartı')
+        if token_bridge_enabled_for_invoice:
+            invoice_error = validate_okc_invoice_info(invoice_info)
+            if invoice_error:
+                emit('error', {
+                    'message': (
+                        f"{invoice_error} Normal mali fiş basılmaması için ÖKC işlemi durduruldu."
+                    )
+                })
+                return
+        elif card_amount_for_invoice > 0:
+            emit('error', {
+                'message': (
+                    "Bu POS/ÖKC tipi fatura bilgi fişi desteklemiyor. "
+                    "Normal mali fiş basılmaması için işlem durduruldu."
+                )
+            })
+            return
     
     # Aktif vardiya bilgisini al
     active_shift = server.get_sid_active_shift(sid)
@@ -6809,7 +6870,9 @@ def handle_payment(data):
                     masa_adi,
                     items=payable_items,
                     payments=payments,
-                    order_id=str(uuid.uuid4())
+                    order_id=str(uuid.uuid4()),
+                    invoice_pending=invoice_pending,
+                    invoice_info=invoice_info if invoice_pending else None
                 )
                 if not success:
                     raise Exception(msg)
@@ -6842,6 +6905,9 @@ def handle_payment(data):
                 'terminal_id': server.terminal_id,
                 'vardiya_id': vardiya_id,
                 'invoice_pending': invoice_pending,
+                'invoice_document_type': invoice_info['document_type'] if invoice_pending else None,
+                'invoice_tax_id': invoice_info['tax_id'] if invoice_pending else None,
+                'invoice_serial_no': invoice_info['serial_no'] if invoice_pending else None,
                 'invoice_note': invoice_note if invoice_pending else None
             })
         
@@ -6873,6 +6939,9 @@ def handle_payment(data):
             'type': final_payment_label,
             'payments': payments,
             'invoice_pending': invoice_pending,
+            'invoice_document_type': invoice_info['document_type'] if invoice_pending else None,
+            'invoice_tax_id': invoice_info['tax_id'] if invoice_pending else '',
+            'invoice_serial_no': invoice_info['serial_no'] if invoice_pending else '',
             'invoice_note': invoice_note if invoice_pending else '',
             'is_partial': is_partial
         })
@@ -6911,6 +6980,10 @@ def handle_payment(data):
                 'ikram_total': ikram_total,
                 'payment_type': final_payment_label,
                 'invoice_pending': invoice_pending,
+                'invoice_document_type': invoice_info['document_type'] if invoice_pending else None,
+                'invoice_document_label': invoice_info['document_label'] if invoice_pending else '',
+                'invoice_tax_id': invoice_info['tax_id'] if invoice_pending else '',
+                'invoice_serial_no': invoice_info['serial_no'] if invoice_pending else '',
                 'invoice_note': invoice_note if invoice_pending else '',
                 'timestamp': timestamp
             }

@@ -738,10 +738,21 @@
             if (!s.invoice_pending) {
                 return '<span style="color:var(--muted);font-size:12px;">-</span>';
             }
-            const note = s.invoice_note
-                ? `<div style="margin-top:4px;color:var(--muted);font-size:11px;max-width:180px;">${escHtml(s.invoice_note)}</div>`
+            const typeMap = {
+                9005: 'Matbu',
+                9006: 'E-Fatura',
+                9007: 'E-Arşiv'
+            };
+            const typeLabel = typeMap[Number(s.invoice_document_type)] || 'Fatura';
+            const details = [
+                s.invoice_tax_id ? `VKN/TCKN: ${escHtml(s.invoice_tax_id)}` : '',
+                s.invoice_serial_no ? `No: ${escHtml(s.invoice_serial_no)}` : '',
+                s.invoice_note ? escHtml(s.invoice_note) : ''
+            ].filter(Boolean).join('<br>');
+            const note = details
+                ? `<div style="margin-top:4px;color:var(--muted);font-size:11px;max-width:200px;">${details}</div>`
                 : '';
-            return `<span class="fatura-badge">Fatura bekliyor</span>${note}`;
+            return `<span class="fatura-badge">${typeLabel} bilgi fişi</span>${note}`;
         }
         function getOdemeCls(odeme) {
             const o = (odeme || '').toLowerCase();

@@ -155,6 +155,9 @@ const elements = {
     paymentKart: null,
     paymentCari: null,
     invoicePending: null,
+    invoiceDocumentType: null,
+    invoiceTaxId: null,
+    invoiceSerialNo: null,
     invoiceNote: null,
     customerSelectionDiv: null,
     customerSearch: null,
@@ -1527,6 +1530,18 @@ function openPaymentModal(prefillType = null, isSelective = false) {
         elements.invoiceNote.value = '';
         elements.invoiceNote.disabled = true;
     }
+    if (elements.invoiceDocumentType) {
+        elements.invoiceDocumentType.value = '9006';
+        elements.invoiceDocumentType.disabled = true;
+    }
+    if (elements.invoiceTaxId) {
+        elements.invoiceTaxId.value = '';
+        elements.invoiceTaxId.disabled = true;
+    }
+    if (elements.invoiceSerialNo) {
+        elements.invoiceSerialNo.value = '';
+        elements.invoiceSerialNo.disabled = true;
+    }
 
     // Show modal
     elements.paymentModal.style.display = 'block';
@@ -1723,11 +1738,34 @@ function finalizeSplitPayment() {
         payments.push({ type: 'Açık Hesap', amount: cari, customer: customer });
     }
 
+    const invoicePending = Boolean(elements.invoicePending && elements.invoicePending.checked);
+    const invoiceTaxId = elements.invoiceTaxId ? elements.invoiceTaxId.value.replace(/\D/g, '') : '';
+    const invoiceSerialNo = elements.invoiceSerialNo ? elements.invoiceSerialNo.value.trim() : '';
+    const tokenBridgeTypes = ['token-bridge', 'beko-token', 'beko-yn-okc'];
+    if (invoicePending && systemInfo.pos_enabled) {
+        if (tokenBridgeTypes.includes(systemInfo.pos_type || '')) {
+            if (![10, 11].includes(invoiceTaxId.length)) {
+                showNotification('Fatura bilgi fişi için 10 haneli VKN veya 11 haneli TCKN giriniz.', 'warning');
+                return;
+            }
+            if (!invoiceSerialNo) {
+                showNotification('Fatura bilgi fişi için fatura/bilgi fişi seri no giriniz.', 'warning');
+                return;
+            }
+        } else if (kart > 0) {
+            showNotification('Bu POS/ÖKC tipi fatura bilgi fişi desteklemiyor; normal mali fiş basılmaması için işlem durduruldu.', 'error');
+            return;
+        }
+    }
+
     const currentRole = getTerminalRole();
     const payload = {
         payments: payments,
         role: currentRole,
-        invoice_pending: Boolean(elements.invoicePending && elements.invoicePending.checked),
+        invoice_pending: invoicePending,
+        invoice_document_type: elements.invoiceDocumentType ? elements.invoiceDocumentType.value : '9006',
+        invoice_tax_id: invoiceTaxId,
+        invoice_serial_no: invoiceSerialNo,
         invoice_note: elements.invoiceNote ? elements.invoiceNote.value.trim() : ''
     };
     if (isSelectivePayment) {
@@ -1735,9 +1773,8 @@ function finalizeSplitPayment() {
     }
 
     const posType = systemInfo.pos_type || '';
-    const okcBridgeTypes = ['token-bridge', 'beko-token', 'beko-yn-okc'];
     const shouldWaitForPos = systemInfo.pos_enabled && (
-        kart > 0 || okcBridgeTypes.includes(posType)
+        kart > 0 || tokenBridgeTypes.includes(posType)
     );
 
     if (shouldWaitForPos) {
@@ -1845,13 +1882,23 @@ function setupEventListeners() {
         elements.btnFinalizePayment.onclick = () => finalizeSplitPayment();
     }
 
-    if (elements.invoicePending && elements.invoiceNote) {
+    if (elements.invoicePending) {
         elements.invoicePending.onchange = () => {
-            elements.invoiceNote.disabled = !elements.invoicePending.checked;
+            const enabled = elements.invoicePending.checked;
+            [
+                elements.invoiceDocumentType,
+                elements.invoiceTaxId,
+                elements.invoiceSerialNo,
+                elements.invoiceNote
+            ].forEach(el => {
+                if (el) el.disabled = !enabled;
+            });
             if (elements.invoicePending.checked) {
-                elements.invoiceNote.focus();
+                if (elements.invoiceTaxId) elements.invoiceTaxId.focus();
             } else {
-                elements.invoiceNote.value = '';
+                if (elements.invoiceTaxId) elements.invoiceTaxId.value = '';
+                if (elements.invoiceSerialNo) elements.invoiceSerialNo.value = '';
+                if (elements.invoiceNote) elements.invoiceNote.value = '';
             }
         };
     }

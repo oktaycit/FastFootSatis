@@ -106,11 +106,17 @@ class Database:
                     terminal_id TEXT,
                     vardiya_id INTEGER,
                     invoice_pending BOOLEAN DEFAULT FALSE,
+                    invoice_document_type INTEGER,
+                    invoice_tax_id TEXT,
+                    invoice_serial_no TEXT,
                     invoice_note TEXT
                 )
             """)
             cursor.execute("ALTER TABLE satislar ADD COLUMN IF NOT EXISTS vardiya_id INTEGER")
             cursor.execute("ALTER TABLE satislar ADD COLUMN IF NOT EXISTS invoice_pending BOOLEAN DEFAULT FALSE")
+            cursor.execute("ALTER TABLE satislar ADD COLUMN IF NOT EXISTS invoice_document_type INTEGER")
+            cursor.execute("ALTER TABLE satislar ADD COLUMN IF NOT EXISTS invoice_tax_id TEXT")
+            cursor.execute("ALTER TABLE satislar ADD COLUMN IF NOT EXISTS invoice_serial_no TEXT")
             cursor.execute("ALTER TABLE satislar ADD COLUMN IF NOT EXISTS invoice_note TEXT")
             cursor.execute("""
                 ALTER TABLE satislar
@@ -368,14 +374,22 @@ class Database:
     
     # ==================== SATIŞ İŞLEMLERİ ====================
     
-    def save_sale(self, urun, adet, fiyat, odeme, tip='normal', masa=None, terminal_id=None, vardiya_id=None, invoice_pending=False, invoice_note=None):
+    def save_sale(self, urun, adet, fiyat, odeme, tip='normal', masa=None, terminal_id=None, vardiya_id=None,
+                  invoice_pending=False, invoice_note=None, invoice_document_type=None, invoice_tax_id=None,
+                  invoice_serial_no=None):
         """Satış kaydı ekle"""
         with self.get_cursor() as cursor:
             cursor.execute("""
-                INSERT INTO satislar (urun, adet, fiyat, odeme, tip, masa, terminal_id, vardiya_id, invoice_pending, invoice_note)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO satislar (
+                    urun, adet, fiyat, odeme, tip, masa, terminal_id, vardiya_id,
+                    invoice_pending, invoice_document_type, invoice_tax_id, invoice_serial_no, invoice_note
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
-            """, (urun, adet, fiyat, odeme, tip, masa, terminal_id, vardiya_id, bool(invoice_pending), invoice_note))
+            """, (
+                urun, adet, fiyat, odeme, tip, masa, terminal_id, vardiya_id,
+                bool(invoice_pending), invoice_document_type, invoice_tax_id, invoice_serial_no, invoice_note
+            ))
             return cursor.fetchone()['id']
     
     def save_sales_batch(self, sales_list):
@@ -383,8 +397,11 @@ class Database:
         with self.get_cursor() as cursor:
             for sale in sales_list:
                 cursor.execute("""
-                    INSERT INTO satislar (urun, adet, fiyat, odeme, tip, tarih_saat, masa, terminal_id, vardiya_id, invoice_pending, invoice_note)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO satislar (
+                        urun, adet, fiyat, odeme, tip, tarih_saat, masa, terminal_id, vardiya_id,
+                        invoice_pending, invoice_document_type, invoice_tax_id, invoice_serial_no, invoice_note
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     sale.get('urun'),
                     sale.get('adet', 1),
@@ -396,6 +413,9 @@ class Database:
                     sale.get('terminal_id'),
                     sale.get('vardiya_id'),
                     bool(sale.get('invoice_pending', False)),
+                    sale.get('invoice_document_type'),
+                    sale.get('invoice_tax_id'),
+                    sale.get('invoice_serial_no'),
                     sale.get('invoice_note')
                 ))
     

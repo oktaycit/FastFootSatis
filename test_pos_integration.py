@@ -56,6 +56,42 @@ class TokenBridgePayloadTests(unittest.TestCase):
                 payments=[{"type": "Kredi Kartı", "amount": 174.00}],
             )
 
+    def test_token_bridge_payload_uses_e_invoice_info_receipt(self):
+        manager = POSManager(True, "192.168.1.50", 8787, "token-bridge")
+
+        payload = manager._create_token_bridge_payload(
+            table_name="Masa 3",
+            order_id="invoice-basket-1",
+            items=[{"urun": "Yemek", "adet": 1, "fiyat": 250.00}],
+            payments=[{"type": "Kredi Kartı", "amount": 250.00}],
+            invoice_pending=True,
+            invoice_info={
+                "document_type": 9006,
+                "tax_id": "1234567890",
+                "serial_no": "GIB2026000000001",
+                "note": "ABC Ltd",
+            },
+        )
+
+        self.assertEqual(payload["basketID"], "invoice-basket-1")
+        self.assertEqual(payload["documentType"], 9006)
+        self.assertFalse(payload["createInvoice"])
+        self.assertEqual(payload["customerInfo"]["taxID"], "1234567890")
+        self.assertEqual(payload["infoReceiptInfo"]["serialNo"], "GIB2026000000001")
+        self.assertIn("ABC Ltd", payload["note"])
+
+    def test_token_bridge_invoice_info_receipt_requires_tax_id_and_serial(self):
+        manager = POSManager(True, "192.168.1.50", 8787, "token-bridge")
+
+        with self.assertRaises(ValueError):
+            manager._create_token_bridge_payload(
+                table_name="Masa 3",
+                items=[{"urun": "Yemek", "adet": 1, "fiyat": 250.00}],
+                payments=[{"type": "Kredi Kartı", "amount": 250.00}],
+                invoice_pending=True,
+                invoice_info={"document_type": 9006, "tax_id": "", "serial_no": ""},
+            )
+
     @patch("pos_integration.requests.post")
     def test_token_bridge_sale_posts_basket_to_windows_bridge(self, mock_post):
         mock_post.return_value = FakeResponse({

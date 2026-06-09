@@ -1221,10 +1221,14 @@ body.cashier-terminal .shortcut-icon {
 }
 
 .invoice-note {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 10px;
+    row-gap: 10px;
     margin: -6px 0 16px;
 }
 
-.invoice-note label {
+.invoice-field label {
     display: block;
     margin-bottom: 6px;
     color: #475569;
@@ -1233,7 +1237,8 @@ body.cashier-terminal .shortcut-icon {
     text-transform: uppercase;
 }
 
-.invoice-note input {
+.invoice-field input,
+.invoice-field select {
     width: 100%;
     padding: 10px 12px;
     border: 1px solid #cbd5e1;
@@ -1241,9 +1246,16 @@ body.cashier-terminal .shortcut-icon {
     font-size: 14px;
 }
 
-.invoice-note input:disabled {
+.invoice-field input:disabled,
+.invoice-field select:disabled {
     background: #f1f5f9;
     color: #94a3b8;
+}
+
+@media (max-width: 640px) {
+    .invoice-note {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* Footer Info */

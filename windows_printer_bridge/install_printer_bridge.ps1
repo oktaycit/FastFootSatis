@@ -6,11 +6,13 @@ param(
     [int]$KasaPort = 9201,
     [int]$IzgaraPort = 9202,
     [int]$MutfakPort = 9203,
-    [int]$PrinterPort = 9100
+    [int]$PrinterPort = 9100,
+    [bool]$RegisterStartupTask = $true
 )
 
 $ErrorActionPreference = "Stop"
 $firewallRuleName = "FastFoot Thermal Printer Bridge"
+$taskName = "FastFoot Thermal Printer Bridge"
 
 $bridgeRules = @(
     [pscustomobject]@{
@@ -65,8 +67,41 @@ New-NetFirewallRule `
     -LocalPort $KasaPort,$IzgaraPort,$MutfakPort `
     -RemoteAddress $AllowedRemoteAddress | Out-Null
 
+if ($RegisterStartupTask) {
+    $scriptPath = $PSCommandPath
+    $taskArgs = @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", "`"$scriptPath`"",
+        "-ListenAddress", $ListenAddress,
+        "-AllowedRemoteAddress", $AllowedRemoteAddress,
+        "-KasaPort", $KasaPort,
+        "-IzgaraPort", $IzgaraPort,
+        "-MutfakPort", $MutfakPort,
+        "-PrinterPort", $PrinterPort,
+        "-RegisterStartupTask:`$false"
+    ) -join " "
+
+    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $taskArgs
+    $triggerStartup = New-ScheduledTaskTrigger -AtStartup
+    $triggerLogon = New-ScheduledTaskTrigger -AtLogOn
+    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -RunLevel Highest
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew
+
+    Register-ScheduledTask `
+        -TaskName $taskName `
+        -Action $action `
+        -Trigger $triggerStartup,$triggerLogon `
+        -Principal $principal `
+        -Settings $settings `
+        -Force | Out-Null
+}
+
 Write-Host ""
 Write-Host "Kurulum tamamlandi." -ForegroundColor Green
+if ($RegisterStartupTask) {
+    Write-Host "Baslangic gorevi kuruldu: $taskName" -ForegroundColor Green
+}
 Write-Host "Aktif portproxy kurallari:"
 netsh interface portproxy show v4tov4
 

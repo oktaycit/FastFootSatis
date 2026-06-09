@@ -323,8 +323,26 @@
                 </label>
 
                 <div class="invoice-note">
-                    <label for="invoiceNote">Fatura bilgisi / not</label>
-                    <input type="text" id="invoiceNote" placeholder="Firma, VKN/TCKN, telefon veya kısa not" disabled>
+                    <div class="invoice-field">
+                        <label for="invoiceDocumentType">Fatura türü</label>
+                        <select id="invoiceDocumentType" disabled>
+                            <option value="9006">E-Fatura Bilgi Fişi</option>
+                            <option value="9007">E-Arşiv Bilgi Fişi</option>
+                            <option value="9005">Matbu Fatura Bilgi Fişi</option>
+                        </select>
+                    </div>
+                    <div class="invoice-field">
+                        <label for="invoiceTaxId">VKN/TCKN</label>
+                        <input type="text" id="invoiceTaxId" placeholder="10 haneli VKN veya 11 haneli TCKN" disabled>
+                    </div>
+                    <div class="invoice-field">
+                        <label for="invoiceSerialNo">Fatura / bilgi fişi seri no</label>
+                        <input type="text" id="invoiceSerialNo" placeholder="Örn. GIB2026000000001" disabled>
+                    </div>
+                    <div class="invoice-field">
+                        <label for="invoiceNote">Fatura bilgisi / not</label>
+                        <input type="text" id="invoiceNote" placeholder="Firma, telefon veya kısa not" disabled>
+                    </div>
                 </div>
 
                 <div class="modal-actions">
