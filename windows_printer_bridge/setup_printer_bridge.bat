@@ -29,6 +29,8 @@ echo Scriptler sunucudan cekiliyor...
 scp "%SERVER_USER%@%SERVER_HOST%:%REMOTE_DIR%/install_printer_bridge.ps1" "%LOCAL_DIR%\install_printer_bridge.ps1" || exit /b 1
 scp "%SERVER_USER%@%SERVER_HOST%:%REMOTE_DIR%/test_printer_bridge.ps1" "%LOCAL_DIR%\test_printer_bridge.ps1" || exit /b 1
 scp "%SERVER_USER%@%SERVER_HOST%:%REMOTE_DIR%/remove_printer_bridge.ps1" "%LOCAL_DIR%\remove_printer_bridge.ps1" || exit /b 1
+scp "%SERVER_USER%@%SERVER_HOST%:%REMOTE_DIR%/start_printer_bridge.bat" "%LOCAL_DIR%\start_printer_bridge.bat" || exit /b 1
+scp "%SERVER_USER%@%SERVER_HOST%:%REMOTE_DIR%/create_desktop_shortcut.ps1" "%LOCAL_DIR%\create_desktop_shortcut.ps1" || exit /b 1
 scp "%SERVER_USER%@%SERVER_HOST%:%REMOTE_DIR%/README.md" "%LOCAL_DIR%\README.md" >nul 2>&1
 
 net session >nul 2>&1
@@ -45,8 +47,20 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%LOCAL_DIR%\install_pri
 if errorlevel 1 exit /b 3
 
 echo.
+echo Masaustu kisayolu hazirlaniyor...
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%LOCAL_DIR%\create_desktop_shortcut.ps1" -InstallDir "%LOCAL_DIR%"
+if errorlevel 1 (
+    echo UYARI: Masaustu kisayolu olusturulamadi.
+    echo Manuel komut:
+    echo powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%LOCAL_DIR%\create_desktop_shortcut.ps1" -InstallDir "%LOCAL_DIR%" -CurrentUser
+)
+
+echo.
 echo Test komutu:
 echo powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%LOCAL_DIR%\test_printer_bridge.ps1"
+echo.
+echo Masaustu kisayolu:
+echo FastFootPrinterBridge
 echo.
 
 endlocal

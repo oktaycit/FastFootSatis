@@ -451,6 +451,127 @@ class Database:
                 GROUP BY odeme, tip
             """, (tarih,))
             return cursor.fetchall()
+
+    def get_item_totals_by_date(self, tarih=None):
+        """Gün sonu için ürün bazlı kalem toplamlarını getir."""
+        if tarih is None:
+            tarih = datetime.now().strftime("%Y-%m-%d")
+
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                SELECT
+                    COALESCE(NULLIF(TRIM(urun), ''), 'Ürün') AS urun,
+                    SUM(adet) AS adet,
+                    SUM(CASE WHEN COALESCE(tip, 'normal') = 'ikram' THEN 0 ELSE adet END) AS satis_adet,
+                    SUM(CASE WHEN COALESCE(tip, 'normal') = 'ikram' THEN adet ELSE 0 END) AS ikram_adet,
+                    SUM(CASE WHEN COALESCE(tip, 'normal') = 'ikram' THEN 0 ELSE fiyat * adet END) AS toplam,
+                    SUM(CASE WHEN COALESCE(tip, 'normal') = 'ikram' THEN fiyat * adet ELSE 0 END) AS ikram_toplam,
+                    CASE
+                        WHEN SUM(adet) > 0 THEN SUM(fiyat * adet) / NULLIF(SUM(adet), 0)
+                        ELSE 0
+                    END AS ortalama_fiyat
+                FROM satislar
+                WHERE DATE(tarih_saat) = %s
+                GROUP BY COALESCE(NULLIF(TRIM(urun), ''), 'Ürün')
+                ORDER BY toplam DESC, satis_adet DESC, urun ASC
+            """, (tarih,))
+            return cursor.fetchall()
+
+    def get_operational_reports(self, baslangic=None, bitis=None):
+        """Talep, yoğunluk ve zaman odaklı operasyon raporlarını getir."""
+        today = datetime.now().strftime("%Y-%m-%d")
+        baslangic = baslangic or today
+        bitis = bitis or baslangic
+
+        revenue_expr = "CASE WHEN COALESCE(tip, 'normal') = 'ikram' THEN 0 ELSE fiyat * adet END"
+        comp_value_expr = "CASE WHEN COALESCE(tip, 'normal') = 'ikram' THEN fiyat * adet ELSE 0 END"
+        channel_expr = """
+            CASE
+                WHEN COALESCE(masa, '') ILIKE 'Paket%%' THEN 'Paket'
+                WHEN COALESCE(masa, '') ILIKE 'Online%%' THEN 'Online'
+                WHEN COALESCE(masa, '') ILIKE 'Masa%%' THEN 'Salon'
+                WHEN COALESCE(masa, '') = '' THEN 'Kasa'
+                ELSE 'Diğer'
+            END
+        """
+
+        with self.get_cursor() as cursor:
+            cursor.execute(f"""
+                SELECT
+                    COALESCE(SUM({revenue_expr}), 0) AS ciro,
+                    COALESCE(SUM(adet), 0) AS adet,
+                    COALESCE(SUM(CASE WHEN COALESCE(tip, 'normal') = 'ikram' THEN adet ELSE 0 END), 0) AS ikram_adet,
+                    COALESCE(SUM({comp_value_expr}), 0) AS ikram_toplam,
+                    COUNT(*) AS satir_sayisi,
+                    COUNT(DISTINCT DATE(tarih_saat)) AS gun_sayisi,
+                    COUNT(DISTINCT DATE_TRUNC('hour', tarih_saat)) AS aktif_saat_sayisi
+                FROM satislar
+                WHERE DATE(tarih_saat) BETWEEN %s AND %s
+            """, (baslangic, bitis))
+            totals = cursor.fetchone()
+
+            cursor.execute(f"""
+                SELECT
+                    COALESCE(NULLIF(TRIM(urun), ''), 'Ürün') AS urun,
+                    COALESCE(SUM(adet), 0) AS adet,
+                    COALESCE(SUM(CASE WHEN COALESCE(tip, 'normal') = 'ikram' THEN 0 ELSE adet END), 0) AS satis_adet,
+                    COALESCE(SUM(CASE WHEN COALESCE(tip, 'normal') = 'ikram' THEN adet ELSE 0 END), 0) AS ikram_adet,
+                    COALESCE(SUM({revenue_expr}), 0) AS ciro,
+                    COALESCE(SUM({comp_value_expr}), 0) AS ikram_toplam
+                FROM satislar
+                WHERE DATE(tarih_saat) BETWEEN %s AND %s
+                GROUP BY COALESCE(NULLIF(TRIM(urun), ''), 'Ürün')
+                ORDER BY adet DESC, ciro DESC, urun ASC
+                LIMIT 20
+            """, (baslangic, bitis))
+            product_demand = cursor.fetchall()
+
+            cursor.execute(f"""
+                SELECT
+                    EXTRACT(HOUR FROM tarih_saat)::int AS saat,
+                    COALESCE(SUM(adet), 0) AS adet,
+                    COALESCE(SUM({revenue_expr}), 0) AS ciro,
+                    COUNT(*) AS satir_sayisi
+                FROM satislar
+                WHERE DATE(tarih_saat) BETWEEN %s AND %s
+                GROUP BY EXTRACT(HOUR FROM tarih_saat)::int
+                ORDER BY saat ASC
+            """, (baslangic, bitis))
+            hourly_load = cursor.fetchall()
+
+            cursor.execute(f"""
+                SELECT
+                    {channel_expr} AS kanal,
+                    COALESCE(SUM(adet), 0) AS adet,
+                    COALESCE(SUM({revenue_expr}), 0) AS ciro,
+                    COUNT(*) AS satir_sayisi
+                FROM satislar
+                WHERE DATE(tarih_saat) BETWEEN %s AND %s
+                GROUP BY {channel_expr}
+                ORDER BY ciro DESC, adet DESC
+            """, (baslangic, bitis))
+            channel_mix = cursor.fetchall()
+
+            cursor.execute(f"""
+                SELECT
+                    DATE(tarih_saat) AS tarih,
+                    COALESCE(SUM(adet), 0) AS adet,
+                    COALESCE(SUM({revenue_expr}), 0) AS ciro,
+                    COUNT(*) AS satir_sayisi
+                FROM satislar
+                WHERE DATE(tarih_saat) BETWEEN %s AND %s
+                GROUP BY DATE(tarih_saat)
+                ORDER BY tarih ASC
+            """, (baslangic, bitis))
+            day_trend = cursor.fetchall()
+
+        return {
+            "totals": totals,
+            "product_demand": product_demand,
+            "hourly_load": hourly_load,
+            "channel_mix": channel_mix,
+            "day_trend": day_trend,
+        }
     
     # ==================== CARİ İŞLEMLERİ ====================
     

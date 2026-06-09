@@ -56,6 +56,25 @@ class TokenBridgePayloadTests(unittest.TestCase):
                 payments=[{"type": "Kredi Kartı", "amount": 174.00}],
             )
 
+    def test_token_bridge_payload_keeps_multiple_card_payments(self):
+        manager = POSManager(True, "192.168.1.50", 8787, "token-bridge")
+
+        payload = manager._create_token_bridge_payload(
+            table_name="Masa 3",
+            order_id="basket-card-split",
+            items=[{"urun": "Yemek", "adet": 1, "fiyat": 300.00}],
+            payments=[
+                {"type": "Kredi Kartı", "amount": 100.00, "description": "Kredi Kartı 1"},
+                {"type": "Kredi Kartı", "amount": 80.00, "description": "Kredi Kartı 2"},
+                {"type": "Kredi Kartı", "amount": 120.00, "description": "Kredi Kartı 3"},
+            ],
+        )
+
+        self.assertEqual(len(payload["paymentItems"]), 3)
+        self.assertEqual([p["type"] for p in payload["paymentItems"]], [3, 3, 3])
+        self.assertEqual([p["amount"] for p in payload["paymentItems"]], [10000, 8000, 12000])
+        self.assertEqual(payload["paymentItems"][1]["description"], "Kredi Kartı 2")
+
     def test_token_bridge_payload_uses_e_invoice_info_receipt(self):
         manager = POSManager(True, "192.168.1.50", 8787, "token-bridge")
 

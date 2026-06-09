@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restoran - Raporlar</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #f5f7fb;
+            --surface: #ffffff;
+            --surface-soft: #f8fafc;
+            --border: #dbe3ee;
+            --text: #172033;
+            --muted: #64748b;
+            --green: #0f9f6e;
+            --blue: #2563eb;
+            --amber: #d97706;
+            --cyan: #0891b2;
+            --red: #dc2626;
+            --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+            --radius: 8px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+        }
+
+        .header {
+            background: #111827;
+            color: white;
+            padding: 14px 22px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+            flex-wrap: wrap;
+        }
+
+        .header-left,
+        .header-right,
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .page-title {
+            margin: 0;
+            font-size: 21px;
+            font-weight: 800;
+            letter-spacing: 0;
+        }
+
+        .nav-btn,
+        .refresh-btn {
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            border-radius: var(--radius);
+            color: white;
+            text-decoration: none;
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 700;
+            padding: 8px 12px;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0.09);
+        }
+
+        .refresh-btn {
+            background: var(--green);
+            border-color: var(--green);
+        }
+
+        .date-field {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #cbd5e1;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .date-field input {
+            height: 34px;
+            border-radius: var(--radius);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.08);
+            color: white;
+            color-scheme: dark;
+            padding: 0 9px;
+            font-family: inherit;
+            font-weight: 700;
+        }
+
+        .company-badge {
+            color: #fde68a;
+            background: rgba(217, 119, 6, 0.18);
+            border: 1px solid rgba(251, 191, 36, 0.25);
+            padding: 7px 12px;
+            border-radius: var(--radius);
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .main {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .metric-card,
+        .panel-card,
+        .signal-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        .metric-card {
+            padding: 16px;
+            min-width: 0;
+        }
+
+        .metric-label {
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .metric-value {
+            margin-top: 8px;
+            font-size: 27px;
+            font-weight: 800;
+            line-height: 1;
+            color: var(--text);
+            word-break: break-word;
+        }
+
+        .metric-card:nth-child(1) .metric-value {
+            color: var(--green);
+        }
+
+        .metric-card:nth-child(2) .metric-value {
+            color: var(--blue);
+        }
+
+        .metric-card:nth-child(3) .metric-value {
+            color: var(--amber);
+        }
+
+        .metric-card:nth-child(4) .metric-value {
+            color: var(--cyan);
+        }
+
+        .metric-sub {
+            margin-top: 7px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 600;
+            min-height: 16px;
+        }
+
+        .signals {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .signal-card {
+            padding: 13px 14px;
+            min-width: 0;
+        }
+
+        .signal-label {
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+
+        .signal-value {
+            margin-top: 6px;
+            font-size: 15px;
+            font-weight: 800;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+            gap: 14px;
+        }
+
+        .panel-card {
+            min-width: 0;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            min-height: 50px;
+            padding: 13px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface-soft);
+        }
+
+        .panel-header h2 {
+            margin: 0;
+            font-size: 15px;
+            font-weight: 800;
+        }
+
+        .badge {
+            flex: 0 0 auto;
+            padding: 4px 9px;
+            border-radius: 999px;
+            background: #e0f2fe;
+            color: #0369a1;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            padding: 10px 14px;
+            text-align: left;
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--border);
+        }
+
+        td {
+            padding: 12px 14px;
+            font-size: 13px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .num {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            font-weight: 700;
+        }
+
+        .item-name {
+            font-weight: 800;
+            margin-bottom: 7px;
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .bar-track {
+            height: 8px;
+            border-radius: 999px;
+            background: #e5eaf1;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            display: block;
+            height: 100%;
+            width: 0%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, var(--green), var(--cyan));
+        }
+
+        .hour-list,
+        .channel-list,
+        .trend-list {
+            padding: 8px 12px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .hour-row,
+        .channel-row,
+        .trend-row {
+            display: grid;
+            align-items: center;
+            gap: 10px;
+            min-height: 34px;
+            font-size: 12px;
+        }
+
+        .hour-row {
+            grid-template-columns: 52px minmax(90px, 1fr) 70px 96px;
+        }
+
+        .channel-row,
+        .trend-row {
+            grid-template-columns: 92px minmax(90px, 1fr) 70px 96px;
+        }
+
+        .row-label {
+            color: var(--text);
+            font-weight: 800;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .row-count {
+            color: var(--blue);
+            font-weight: 800;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .row-money {
+            color: var(--muted);
+            font-weight: 700;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .empty-state {
+            padding: 42px 16px;
+            color: var(--muted);
+            text-align: center;
+            font-weight: 700;
+        }
+
+        .error-box {
+            border: 1px solid #fecaca;
+            background: #fff1f2;
+            color: var(--red);
+            border-radius: var(--radius);
+            padding: 14px 16px;
+            font-weight: 800;
+        }
+
+        @media (max-width: 1100px) {
+            .metric-grid,
+            .signals {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .header,
+            .main {
+                padding-left: 14px;
+                padding-right: 14px;
+            }
+
+            .metric-grid,
+            .signals {
+                grid-template-columns: 1fr;
+            }
+
+            .header-right {
+                width: 100%;
+                align-items: stretch;
+            }
+
+            .date-field {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .date-field input,
+            .refresh-btn {
+                flex: 1;
+            }
+
+            .hour-row,
+            .channel-row,
+            .trend-row {
+                grid-template-columns: 58px minmax(80px, 1fr) 58px;
+            }
+
+            .row-money {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header class="header">
+        <div class="header-left">
+            <div class="nav-actions">
+                <a class="nav-btn" href="/">← Ana Sayfa</a>
+                <a class="nav-btn" href="/gunsonu">Gün Sonu</a>
+            </div>
+            <h1 class="page-title">Raporlar</h1>
+        </div>
+        <div class="header-right">
+            <label class="date-field">
+                <span>Başlangıç</span>
+                <input type="date" id="startDate">
+            </label>
+            <label class="date-field">
+                <span>Bitiş</span>
+                <input type="date" id="endDate">
+            </label>
+            <button class="refresh-btn" type="button" onclick="loadReports()">Yenile</button>
+            <div class="company-badge" id="companyBadge">RESTORAN</div>
+        </div>
+    </header>
+
+    <main class="main">
+        <div id="errorBox" class="error-box" style="display:none;"></div>
+
+        <section class="metric-grid">
+            <div class="metric-card">
+                <div class="metric-label">Ciro</div>
+                <div class="metric-value" id="metricRevenue">0,00 TL</div>
+                <div class="metric-sub" id="metricRange">—</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Talep Adedi</div>
+                <div class="metric-value" id="metricQuantity">0</div>
+                <div class="metric-sub" id="metricComp">—</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Satış Satırı</div>
+                <div class="metric-value" id="metricLines">0</div>
+                <div class="metric-sub" id="metricDays">—</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Aktif Saat</div>
+                <div class="metric-value" id="metricHours">0</div>
+                <div class="metric-sub" id="metricHourAvg">—</div>
+            </div>
+        </section>
+
+        <section class="signals">
+            <div class="signal-card">
+                <div class="signal-label">En Yoğun Saat</div>
+                <div class="signal-value" id="signalPeakHour">—</div>
+            </div>
+            <div class="signal-card">
+                <div class="signal-label">En Yüksek Talep</div>
+                <div class="signal-value" id="signalTopProduct">—</div>
+            </div>
+            <div class="signal-card">
+                <div class="signal-label">Güçlü Kanal</div>
+                <div class="signal-value" id="signalTopChannel">—</div>
+            </div>
+            <div class="signal-card">
+                <div class="signal-label">Düşük Saat</div>
+                <div class="signal-value" id="signalLowHour">—</div>
+            </div>
+        </section>
+
+        <div class="dashboard-grid">
+            <section class="panel-card">
+                <div class="panel-header">
+                    <h2>Talep Liderleri</h2>
+                    <span class="badge" id="productBadge">0 ürün</span>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Ürün</th>
+                                <th class="num">Adet</th>
+                                <th class="num">Ciro</th>
+                            </tr>
+                        </thead>
+                        <tbody id="productBody">
+                            <tr>
+                                <td colspan="3" class="empty-state">Yükleniyor...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="panel-card">
+                <div class="panel-header">
+                    <h2>Saatlik Yoğunluk</h2>
+                    <span class="badge" id="hourBadge">24 saat</span>
+                </div>
+                <div class="hour-list" id="hourBody">
+                    <div class="empty-state">Yükleniyor...</div>
+                </div>
+            </section>
+
+            <section class="panel-card">
+                <div class="panel-header">
+                    <h2>Kanal Dağılımı</h2>
+                    <span class="badge" id="channelBadge">0 kanal</span>
+                </div>
+                <div class="channel-list" id="channelBody">
+                    <div class="empty-state">Yükleniyor...</div>
+                </div>
+            </section>
+
+            <section class="panel-card">
+                <div class="panel-header">
+                    <h2>Gün Trendi</h2>
+                    <span class="badge" id="trendBadge">0 gün</span>
+                </div>
+                <div class="trend-list" id="trendBody">
+                    <div class="empty-state">Yükleniyor...</div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script>
+        const els = {
+            startDate: document.getElementById('startDate'),
+            endDate: document.getElementById('endDate'),
+            errorBox: document.getElementById('errorBox'),
+            companyBadge: document.getElementById('companyBadge'),
+            metricRevenue: document.getElementById('metricRevenue'),
+            metricRange: document.getElementById('metricRange'),
+            metricQuantity: document.getElementById('metricQuantity'),
+            metricComp: document.getElementById('metricComp'),
+            metricLines: document.getElementById('metricLines'),
+            metricDays: document.getElementById('metricDays'),
+            metricHours: document.getElementById('metricHours'),
+            metricHourAvg: document.getElementById('metricHourAvg'),
+            signalPeakHour: document.getElementById('signalPeakHour'),
+            signalTopProduct: document.getElementById('signalTopProduct'),
+            signalTopChannel: document.getElementById('signalTopChannel'),
+            signalLowHour: document.getElementById('signalLowHour'),
+            productBadge: document.getElementById('productBadge'),
+            productBody: document.getElementById('productBody'),
+            hourBadge: document.getElementById('hourBadge'),
+            hourBody: document.getElementById('hourBody'),
+            channelBadge: document.getElementById('channelBadge'),
+            channelBody: document.getElementById('channelBody'),
+            trendBadge: document.getElementById('trendBadge'),
+            trendBody: document.getElementById('trendBody')
+        };
+
+        function dateInputValue(date) {
+            const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+            return local.toISOString().slice(0, 10);
+        }
+
+        function setDefaultDates() {
+            const today = new Date();
+            const start = new Date();
+            start.setDate(today.getDate() - 6);
+            els.startDate.value = dateInputValue(start);
+            els.endDate.value = dateInputValue(today);
+        }
+
+        async function loadSystemInfo() {
+            try {
+                const response = await fetch('/api/system/info');
+                const data = await response.json();
+                els.companyBadge.textContent = data.company_name || 'RESTORAN';
+            } catch (error) { }
+        }
+
+        async function loadReports() {
+            const baslangic = els.startDate.value;
+            const bitis = els.endDate.value;
+            els.errorBox.style.display = 'none';
+
+            try {
+                const response = await fetch(`/api/raporlar/operasyon?baslangic=${baslangic}&bitis=${bitis}`);
+                const data = await response.json();
+                if (!data.success) {
+                    showError(data.error || 'Rapor alınamadı');
+                    return;
+                }
+                renderAll(data);
+            } catch (error) {
+                showError('Bağlantı hatası');
+            }
+        }
+
+        function renderAll(data) {
+            renderMetrics(data);
+            renderSignals(data);
+            renderProducts(data.product_demand || []);
+            renderHours(data.hourly_load || []);
+            renderChannels(data.channel_mix || []);
+            renderTrend(data.day_trend || []);
+        }
+
+        function renderMetrics(data) {
+            const totals = data.totals || {};
+            const days = Number(totals.gun_sayisi || 0);
+            const activeHours = Number(totals.aktif_saat_sayisi || 0);
+            const hourAvg = activeHours > 0 ? Number(totals.ciro || 0) / activeHours : 0;
+
+            els.metricRevenue.textContent = formatTL(totals.ciro || 0);
+            els.metricRange.textContent = `${formatDate(data.baslangic)} - ${formatDate(data.bitis)}`;
+            els.metricQuantity.textContent = formatQty(totals.adet || 0);
+            els.metricComp.textContent = `İkram ${formatQty(totals.ikram_adet || 0)} adet`;
+            els.metricLines.textContent = formatInt(totals.satir_sayisi || 0);
+            els.metricDays.textContent = `${days || 0} gün`;
+            els.metricHours.textContent = formatInt(activeHours);
+            els.metricHourAvg.textContent = `${formatTL(hourAvg)} / saat`;
+        }
+
+        function renderSignals(data) {
+            const products = data.product_demand || [];
+            const channels = data.channel_mix || [];
+            const hours = data.hourly_load || [];
+            const activeHours = hours.filter(h => Number(h.adet || 0) > 0);
+            const peak = maxBy(activeHours, h => Number(h.adet || 0));
+            const low = minBy(activeHours, h => Number(h.adet || 0));
+            const topProduct = products[0];
+            const topChannel = maxBy(channels, c => Number(c.ciro || 0));
+
+            els.signalPeakHour.textContent = peak ? `${formatHour(peak.saat)} • ${formatQty(peak.adet)} adet` : '—';
+            els.signalTopProduct.textContent = topProduct ? `${topProduct.urun} • ${formatQty(topProduct.adet)}` : '—';
+            els.signalTopChannel.textContent = topChannel ? `${topChannel.kanal} • ${formatTL(topChannel.ciro)}` : '—';
+            els.signalLowHour.textContent = low ? `${formatHour(low.saat)} • ${formatQty(low.adet)} adet` : '—';
+        }
+
+        function renderProducts(rows) {
+            els.productBadge.textContent = `${rows.length} ürün`;
+            if (!rows.length) {
+                els.productBody.innerHTML = '<tr><td colspan="3" class="empty-state">Kayıt yok</td></tr>';
+                return;
+            }
+
+            const maxQty = Math.max(...rows.map(row => Number(row.adet || 0)), 1);
+            els.productBody.innerHTML = rows.map(row => {
+                const width = barWidth(row.adet, maxQty);
+                const ikram = Number(row.ikram_adet || 0) > 0
+                    ? `<div style="margin-top:5px;color:var(--muted);font-size:11px;">İkram ${formatQty(row.ikram_adet)}</div>`
+                    : '';
+                return `<tr>
+                    <td>
+                        <div class="item-name" title="${escHtml(row.urun)}">${escHtml(row.urun)}</div>
+                        <div class="bar-track"><span class="bar-fill" style="width:${width}%;"></span></div>
+                        ${ikram}
+                    </td>
+                    <td class="num">${formatQty(row.adet)}</td>
+                    <td class="num">${formatTL(row.ciro)}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function renderHours(rows) {
+            els.hourBadge.textContent = `${rows.length} saat`;
+            if (!rows.length) {
+                els.hourBody.innerHTML = '<div class="empty-state">Kayıt yok</div>';
+                return;
+            }
+
+            const maxQty = Math.max(...rows.map(row => Number(row.adet || 0)), 1);
+            els.hourBody.innerHTML = rows.map(row => `
+                <div class="hour-row">
+                    <div class="row-label">${formatHour(row.saat)}</div>
+                    <div class="bar-track"><span class="bar-fill" style="width:${barWidth(row.adet, maxQty)}%;"></span></div>
+                    <div class="row-count">${formatQty(row.adet)}</div>
+                    <div class="row-money">${formatTL(row.ciro)}</div>
+                </div>
+            `).join('');
+        }
+
+        function renderChannels(rows) {
+            els.channelBadge.textContent = `${rows.length} kanal`;
+            if (!rows.length) {
+                els.channelBody.innerHTML = '<div class="empty-state">Kayıt yok</div>';
+                return;
+            }
+
+            const maxRevenue = Math.max(...rows.map(row => Number(row.ciro || 0)), 1);
+            els.channelBody.innerHTML = rows.map(row => `
+                <div class="channel-row">
+                    <div class="row-label">${escHtml(row.kanal)}</div>
+                    <div class="bar-track"><span class="bar-fill" style="width:${barWidth(row.ciro, maxRevenue)}%;"></span></div>
+                    <div class="row-count">${formatQty(row.adet)}</div>
+                    <div class="row-money">${formatTL(row.ciro)}</div>
+                </div>
+            `).join('');
+        }
+
+        function renderTrend(rows) {
+            els.trendBadge.textContent = `${rows.length} gün`;
+            if (!rows.length) {
+                els.trendBody.innerHTML = '<div class="empty-state">Kayıt yok</div>';
+                return;
+            }
+
+            const maxRevenue = Math.max(...rows.map(row => Number(row.ciro || 0)), 1);
+            els.trendBody.innerHTML = rows.map(row => `
+                <div class="trend-row">
+                    <div class="row-label">${formatDate(row.tarih)}</div>
+                    <div class="bar-track"><span class="bar-fill" style="width:${barWidth(row.ciro, maxRevenue)}%;"></span></div>
+                    <div class="row-count">${formatQty(row.adet)}</div>
+                    <div class="row-money">${formatTL(row.ciro)}</div>
+                </div>
+            `).join('');
+        }
+
+        function showError(message) {
+            const cleanMessage = escHtml(message);
+            els.errorBox.textContent = message;
+            els.errorBox.style.display = 'block';
+            els.productBadge.textContent = '0 ürün';
+            els.channelBadge.textContent = '0 kanal';
+            els.trendBadge.textContent = '0 gün';
+            els.productBody.innerHTML = `<tr><td colspan="3" class="empty-state">${cleanMessage}</td></tr>`;
+            els.hourBody.innerHTML = `<div class="empty-state">${cleanMessage}</div>`;
+            els.channelBody.innerHTML = `<div class="empty-state">${cleanMessage}</div>`;
+            els.trendBody.innerHTML = `<div class="empty-state">${cleanMessage}</div>`;
+        }
+
+        function barWidth(value, maxValue) {
+            const raw = maxValue > 0 ? Number(value || 0) / maxValue * 100 : 0;
+            return raw <= 0 ? 0 : Math.max(4, Math.min(100, raw));
+        }
+
+        function maxBy(rows, getter) {
+            return rows.reduce((best, row) => !best || getter(row) > getter(best) ? row : best, null);
+        }
+
+        function minBy(rows, getter) {
+            return rows.reduce((best, row) => !best || getter(row) < getter(best) ? row : best, null);
+        }
+
+        function formatTL(value) {
+            return Number(value || 0).toLocaleString('tr-TR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }) + ' TL';
+        }
+
+        function formatQty(value) {
+            return Number(value || 0).toLocaleString('tr-TR', {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 3
+            });
+        }
+
+        function formatInt(value) {
+            return Number(value || 0).toLocaleString('tr-TR', {
+                maximumFractionDigits: 0
+            });
+        }
+
+        function formatHour(hour) {
+            return String(Number(hour || 0)).padStart(2, '0') + ':00';
+        }
+
+        function formatDate(value) {
+            if (!value) return '—';
+            const parts = String(value).split('-');
+            return parts.length === 3 ? `${parts[2]}.${parts[1]}.${parts[0]}` : value;
+        }
+
+        function escHtml(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        els.startDate.addEventListener('change', loadReports);
+        els.endDate.addEventListener('change', loadReports);
+        setDefaultDates();
+        loadSystemInfo();
+        loadReports();
+    </script>
+</body>
+
+</html>

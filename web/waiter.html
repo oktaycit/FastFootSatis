@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Restoran - Garson Arayüzü</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="/styles.css">
     <style>
         :root {
             --primary: #3498db;
@@ -315,7 +315,24 @@
             color: #999;
         }
 
-        .portion-stepper {
+        .basket-control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            align-items: stretch;
+        }
+
+        .basket-control-label {
+            color: #94a3b8;
+            font-size: 9px;
+            font-weight: 900;
+            line-height: 1;
+            text-transform: uppercase;
+            text-align: center;
+        }
+
+        .portion-stepper,
+        .quantity-stepper {
             display: grid;
             grid-template-columns: 30px minmax(54px, 1fr) 30px;
             gap: 5px;
@@ -324,7 +341,8 @@
             margin-top: 2px;
         }
 
-        .portion-stepper button {
+        .portion-stepper button,
+        .quantity-stepper button {
             width: 30px;
             height: 30px;
             border: none;
@@ -337,12 +355,14 @@
             cursor: pointer;
         }
 
-        .portion-stepper button:disabled {
+        .portion-stepper button:disabled,
+        .quantity-stepper button:disabled {
             opacity: 0.45;
             cursor: not-allowed;
         }
 
-        .portion-stepper span {
+        .portion-stepper span,
+        .quantity-stepper span {
             min-height: 30px;
             border-radius: 8px;
             background: #101820;
@@ -542,7 +562,9 @@
 
         .basket-item-actions {
             display: flex;
-            align-items: center;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 6px;
             min-height: 28px;
         }
 
@@ -1443,6 +1465,7 @@
         function getPortionVariantOrder(type) {
             if (type === 'full') return 0;
             if (type === 'half') return 1;
+            if (type === 'onehalf') return 2;
             return 2;
         }
 
@@ -1450,6 +1473,48 @@
             return variants.slice().sort((first, second) => {
                 return getPortionVariantOrder(first.type) - getPortionVariantOrder(second.type);
             });
+        }
+
+        function getPortionVariantLabel(variant) {
+            if (variant?.type === 'half') return 'Yarım Porsiyon';
+            if (variant?.type === 'onehalf') return '1.5 Porsiyon';
+            return 'Tam Porsiyon';
+        }
+
+        function getPortionVariantShortLabel(variant) {
+            if (variant?.type === 'half') return 'Yarım';
+            if (variant?.type === 'onehalf') return '1.5';
+            return 'Tam';
+        }
+
+        function getPortionVariantUnitMultiplier(variant) {
+            if (!variant) return 1;
+            if (variant.type === 'half') return 0.5;
+            if (variant.type === 'onehalf') return 1.5;
+            return 1;
+        }
+
+        function buildPortionChoiceVariants(name, variants) {
+            const ordered = sortPortionVariants(variants || []);
+            const hasOneHalf = ordered.some(variant => Math.abs(getPortionVariantUnitMultiplier(variant) - 1.5) < 0.001);
+            const fullVariant = ordered.find(variant => variant.type === 'full');
+            if (!hasOneHalf && fullVariant?.item) {
+                const sourceItem = Array.isArray(fullVariant.item) ? fullVariant.item.slice() : [];
+                const fullPrice = Number(sourceItem[1] || 0);
+                if (Number.isFinite(fullPrice) && fullPrice > 0) {
+                    const syntheticBaseName = fullVariant.baseName || name;
+                    sourceItem[0] = `${syntheticBaseName} (1.5 porsiyon)`;
+                    sourceItem[1] = roundMoney(fullPrice * 1.5);
+                    ordered.push({
+                        type: 'onehalf',
+                        baseName: syntheticBaseName,
+                        label: '1.5 Porsiyon',
+                        synthetic: true,
+                        item: sourceItem
+                    });
+                }
+            }
+            return sortPortionVariants(ordered);
         }
 
         function buildWaiterMenuCards(items) {
@@ -1517,12 +1582,6 @@
             return `${formatPortionAmount(amount)} Porsiyon`;
         }
 
-        function getPortionVariantUnitMultiplier(variant) {
-            if (!variant) return 1;
-            if (variant.type === 'half') return 0.5;
-            return 1;
-        }
-
         function isFixedGrillServingName(name) {
             const normalized = normalizeMenuText(name);
             return normalized.includes('kişilik') || normalized.includes('kisilik');
@@ -1568,9 +1627,8 @@
         }
 
         function getPortionPriceHtml(variants) {
-            return `<span class="portion-price-list">${sortPortionVariants(variants).map(variant => {
-                const shortLabel = variant.type === 'full' ? 'Tam' : 'Yarım';
-                return `<span>${shortLabel}: ${formatMenuPrice(variant.item[1])} TL</span>`;
+            return `<span class="portion-price-list">${buildPortionChoiceVariants('', variants).map(variant => {
+                return `<span>${getPortionVariantShortLabel(variant)}: ${formatMenuPrice(variant.item[1])} TL</span>`;
             }).join('')}</span>`;
         }
 
@@ -1606,7 +1664,7 @@
         }
 
         function choosePortionVariant(name, variants) {
-            const ordered = sortPortionVariants(variants || []);
+            const ordered = buildPortionChoiceVariants(name, variants || []);
             if (!ordered.length) return null;
             if (ordered.length === 1) return ordered[0];
 
@@ -1633,7 +1691,7 @@
                     btn.type = 'button';
                     btn.className = 'portion-select-btn';
                     btn.innerHTML = `
-                        <span class="portion-select-label">${escapeHtml(variant.label)}</span>
+                        <span class="portion-select-label">${escapeHtml(getPortionVariantLabel(variant))}</span>
                         <span class="portion-select-price">${formatMenuPrice(variant.item[1])} TL</span>
                     `;
                     btn.onclick = () => finish(variant);
@@ -2115,7 +2173,9 @@
         function addGrillToBasket(grillOrderInfo, category = '') {
             if (!grillOrderInfo || !grillOrderInfo.name) return;
             addToBasket(grillOrderInfo.name, grillOrderInfo.basePrice, category, {
-                adet: 1,
+                quantity: 1,
+                portionAmount: 1,
+                basePrice: grillOrderInfo.basePrice,
                 portionSelectable: true
             });
         }
@@ -2123,7 +2183,7 @@
         function addToBasket(name, price, category = '', options = {}) {
             let note = options.note || '';
             let stockNameOverride = options.stockNameOverride || '';
-            const adet = normalizeBasketQuantity(options.adet || 1);
+            const quantity = normalizeBasketQuantity(options.quantity ?? options.adet ?? 1);
             if (!options.skipDailyMealChoice && isDailyMealCategory(category)) {
                 const selectedMeal = chooseDailyMeal(category);
                 if (selectedMeal === false) return;
@@ -2135,39 +2195,60 @@
                 stockNameOverride = selectedMeal.manual ? '' : selectedMeal.yemek;
             }
 
-            const shouldCheckStock = !!stockNameOverride || isDailyMealCategory(category);
-            const stock = shouldCheckStock ? (stockNameOverride ? getPortionStock(stockNameOverride) : getPortionStock(name)) : null;
-            if (stock && stock.tracked) {
-                const remaining = Number(stock.kalan || 0);
-                const stockName = stockNameOverride || getPortionStockName(name);
-                const alreadyInBasket = basket.reduce((sum, item) => {
-                    if (!item.stockName && !isDailyMealCategory(item.category)) return sum;
-                    const itemStockName = item.stockName || getPortionStockName(item.name);
-                    return itemStockName === stockName ? sum + getPortionUnits(item.name, item.adet || 1) : sum;
-                }, 0);
-                const requestedUnits = getPortionUnits(name, adet);
-                if (remaining <= 0) {
-                    alert(`${stock.urun || stockName} tükendi`);
-                    return;
-                }
-                if (alreadyInBasket + requestedUnits > remaining + 0.001) {
-                    alert(`${stock.urun || stockName} için sadece ${formatPortionAmount(remaining)} porsiyon kaldı`);
-                    return;
-                }
-            }
-            basket.push({
+            const portionAmount = normalizeBasketQuantity(options.portionAmount || 1);
+            const basePrice = Number(options.basePrice ?? price ?? 0);
+            const nextItem = {
                 name,
                 price: roundMoney(price),
-                adet,
+                basePrice: roundMoney(Number.isFinite(basePrice) ? basePrice : price),
+                quantity,
+                adet: quantity,
+                portionAmount,
                 baseNote: note,
                 note: options.customNote || '',
                 stockName: stockNameOverride,
                 category,
                 panelId: options.panelId || getPrepPanelForOrderItem(name, category),
                 portionSelectable: !!options.portionSelectable
-            });
+            };
+
+            const mergeIndex = findMergeableBasketItem(nextItem);
+            if (mergeIndex >= 0) {
+                const mergedItem = {
+                    ...basket[mergeIndex],
+                    quantity: getBasketQuantity(basket[mergeIndex]) + getBasketQuantity(nextItem)
+                };
+                mergedItem.adet = mergedItem.quantity;
+                const stockError = getBasketStockError(mergedItem, mergeIndex);
+                if (stockError) {
+                    alert(stockError);
+                    return;
+                }
+                basket[mergeIndex] = mergedItem;
+            } else {
+                const stockError = getBasketStockError(nextItem);
+                if (stockError) {
+                    alert(stockError);
+                    return;
+                }
+                basket.push(nextItem);
+            }
             if (window.navigator.vibrate) window.navigator.vibrate(50);
             updateBasketDisplay();
+        }
+
+        function findMergeableBasketItem(nextItem) {
+            return basket.findIndex(item => {
+                if ((item.note || '') || (nextItem.note || '')) return false;
+                if ((item.baseNote || '') !== (nextItem.baseNote || '')) return false;
+                if ((item.stockName || '') !== (nextItem.stockName || '')) return false;
+                if ((item.category || '') !== (nextItem.category || '')) return false;
+                if ((item.panelId || '') !== (nextItem.panelId || '')) return false;
+                if (!!item.portionSelectable !== !!nextItem.portionSelectable) return false;
+                if ((item.name || '') !== (nextItem.name || '')) return false;
+                if (Math.abs(getBasketPortionAmount(item) - getBasketPortionAmount(nextItem)) > 0.001) return false;
+                return Math.abs(getBasketUnitPrice(item) - getBasketUnitPrice(nextItem)) < 0.001;
+            });
         }
 
         function updateBasketNote(index, value) {
@@ -2186,10 +2267,30 @@
             return roundMoney(parsed);
         }
 
+        function getBasketQuantity(item) {
+            return normalizeBasketQuantity(item?.quantity ?? item?.adet ?? 1);
+        }
+
+        function setBasketQuantity(item, quantity) {
+            const nextQuantity = normalizeBasketQuantity(quantity);
+            item.quantity = nextQuantity;
+            item.adet = nextQuantity;
+        }
+
+        function getBasketPortionAmount(item) {
+            return normalizeBasketQuantity(item?.portionAmount ?? 1);
+        }
+
+        function getBasketUnitPrice(item) {
+            if (item?.portionSelectable) {
+                const basePrice = Number(item.basePrice ?? item.price ?? 0);
+                return roundMoney(Math.max(0, basePrice) * getBasketPortionAmount(item));
+            }
+            return roundMoney(Number(item?.price || 0));
+        }
+
         function getBasketLineTotal(item) {
-            const adet = normalizeBasketQuantity(item?.adet || 1);
-            const price = Number(item?.price || 0);
-            return roundMoney(Math.max(0, adet) * Math.max(0, price));
+            return roundMoney(getBasketQuantity(item) * getBasketUnitPrice(item));
         }
 
         function getGrillPortionIndex(value) {
@@ -2203,18 +2304,80 @@
             return 1;
         }
 
-        function adjustBasketPortion(index, direction) {
+        function adjustBasketQuantity(index, direction) {
             const item = basket[index];
-            if (!item || !item.portionSelectable) return;
-            const currentIndex = getGrillPortionIndex(item.adet || 1);
-            const nextIndex = Math.max(0, Math.min(GRILL_PORTION_VALUES.length - 1, currentIndex + direction));
-            item.adet = GRILL_PORTION_VALUES[nextIndex];
+            if (!item) return;
+            const currentQuantity = getBasketQuantity(item);
+            const nextQuantity = Math.max(1, currentQuantity + direction);
+            if (Math.abs(nextQuantity - currentQuantity) < 0.001) return;
+            const candidate = { ...item, quantity: nextQuantity, adet: nextQuantity };
+            const stockError = getBasketStockError(candidate, index);
+            if (stockError) {
+                alert(stockError);
+                return;
+            }
+            setBasketQuantity(item, nextQuantity);
             updateBasketDisplay();
         }
 
+        function adjustBasketPortion(index, direction) {
+            const item = basket[index];
+            if (!item || !item.portionSelectable) return;
+            const currentIndex = getGrillPortionIndex(getBasketPortionAmount(item));
+            const nextIndex = Math.max(0, Math.min(GRILL_PORTION_VALUES.length - 1, currentIndex + direction));
+            const candidate = { ...item, portionAmount: GRILL_PORTION_VALUES[nextIndex] };
+            const stockError = getBasketStockError(candidate, index);
+            if (stockError) {
+                alert(stockError);
+                return;
+            }
+            item.portionAmount = GRILL_PORTION_VALUES[nextIndex];
+            item.price = getBasketUnitPrice(item);
+            updateBasketDisplay();
+        }
+
+        function getBasketSendName(item) {
+            if (!item?.portionSelectable) return item?.name || '';
+            const amount = getBasketPortionAmount(item);
+            const baseName = String(item.name || '').trim();
+            if (Math.abs(amount - 0.5) < 0.001) return `Yarım Porsiyon ${baseName}`;
+            if (Math.abs(amount - 1) < 0.001) return `Tam Porsiyon ${baseName}`;
+            return `${baseName} (${formatPortionAmount(amount)} porsiyon)`;
+        }
+
+        function getMealNameFromBaseNote(note) {
+            const firstLine = String(note || '').split(/\r?\n/)[0].trim();
+            if (!firstLine.startsWith('Yemek:')) return '';
+            return firstLine.replace(/^Yemek:\s*/i, '').trim();
+        }
+
+        function getPortionLabelFromName(name) {
+            const rawName = String(name || '').trim();
+            const prefixMatch = rawName.match(/^(tam|yarım|yarim)\s+porsiyon\s+/i);
+            if (prefixMatch) {
+                return normalizeMenuText(prefixMatch[1]).startsWith('yar') ? 'Yarım Porsiyon' : 'Tam Porsiyon';
+            }
+            const trailing = rawName.match(/\(\s*(\d+(?:[,.]\d+)?)\s*porsiyon\s*\)\s*$/i);
+            if (trailing) {
+                const parsed = Number(trailing[1].replace(',', '.'));
+                if (Number.isFinite(parsed) && parsed > 0) return formatPortionChoiceLabel(parsed);
+            }
+            return '';
+        }
+
+        function getBasketDisplayName(item) {
+            if (item?.portionSelectable) return getBasketSendName(item);
+            const mealName = getMealNameFromBaseNote(item?.baseNote);
+            if (mealName) {
+                const portionLabel = getPortionLabelFromName(item?.name);
+                return portionLabel ? `${portionLabel} ${mealName}` : mealName;
+            }
+            return item?.name || '';
+        }
+
         function getBasketPriceMeta(item) {
-            const adet = normalizeBasketQuantity(item?.adet || 1);
-            const unitPrice = Number(item?.price || 0);
+            const adet = getBasketQuantity(item);
+            const unitPrice = getBasketUnitPrice(item);
             const total = getBasketLineTotal(item);
             if (Math.abs(adet - 1) < 0.001) return `${formatMenuPrice(unitPrice)} TL`;
             return `${formatMenuPrice(unitPrice)} TL x ${formatPortionAmount(adet)} = ${formatMenuPrice(total)} TL`;
@@ -2243,13 +2406,34 @@
         }
 
         function getPortionStockName(name) {
-            return String(name || '').trim().replace(/^(tam|yarım|yarim)\s+porsiyon\s+/i, '').trim();
+            return String(name || '')
+                .trim()
+                .replace(/^(tam|yarım|yarim)\s+porsiyon\s+/i, '')
+                .replace(/\(\s*\d+(?:[,.]\d+)?\s*porsiyon\s*\)\s*$/i, '')
+                .trim();
+        }
+
+        function getPortionMultiplierFromName(name) {
+            const normalized = String(name || '').trim().toLocaleLowerCase('tr-TR');
+            if (/^(yarım|yarim)\s+porsiyon\s+/.test(normalized)) return 0.5;
+            const trailing = String(name || '').trim().match(/\(\s*(\d+(?:[,.]\d+)?)\s*porsiyon\s*\)\s*$/i);
+            if (trailing) {
+                const parsed = Number(trailing[1].replace(',', '.'));
+                if (Number.isFinite(parsed) && parsed > 0) return parsed;
+            }
+            return 1;
         }
 
         function getPortionUnits(name, adet = 1) {
-            const normalized = String(name || '').trim().toLocaleLowerCase('tr-TR');
-            const multiplier = /^(yarım|yarim)\s+porsiyon\s+/.test(normalized) ? 0.5 : 1;
-            return Number(adet || 1) * multiplier;
+            return Number(adet || 1) * getPortionMultiplierFromName(name);
+        }
+
+        function getBasketPortionUnits(item) {
+            const quantity = getBasketQuantity(item);
+            if (item?.portionSelectable) {
+                return quantity * getBasketPortionAmount(item);
+            }
+            return getPortionUnits(item?.name, quantity);
         }
 
         function formatPortionAmount(value) {
@@ -2257,12 +2441,42 @@
             return Number.isInteger(amount) ? String(amount) : String(amount).replace('.', ',');
         }
 
+        function shouldCheckBasketItemStock(item) {
+            return !!item?.stockName || isDailyMealCategory(item?.category);
+        }
+
+        function getBasketItemStockName(item) {
+            if (!shouldCheckBasketItemStock(item)) return '';
+            return item.stockName || getPortionStockName(item.name);
+        }
+
+        function getBasketStockError(candidate, candidateIndex = -1) {
+            const stockName = getBasketItemStockName(candidate);
+            if (!stockName) return '';
+            const stock = getPortionStock(stockName);
+            if (!stock || !stock.tracked) return '';
+
+            const remaining = Number(stock.kalan || 0);
+            if (remaining <= 0) return `${stock.urun || stockName} tükendi`;
+
+            const alreadyInBasket = basket.reduce((sum, item, index) => {
+                if (index === candidateIndex) return sum;
+                if (getBasketItemStockName(item) !== stockName) return sum;
+                return sum + getBasketPortionUnits(item);
+            }, 0);
+            const requestedUnits = getBasketPortionUnits(candidate);
+            if (alreadyInBasket + requestedUnits > remaining + 0.001) {
+                return `${stock.urun || stockName} için sadece ${formatPortionAmount(remaining)} porsiyon kaldı`;
+            }
+            return '';
+        }
+
         function canSendBasket() {
             const counts = {};
             basket.forEach(item => {
-                if (!item.stockName && !isDailyMealCategory(item.category)) return;
-                const stockName = item.stockName || getPortionStockName(item.name);
-                counts[stockName] = (counts[stockName] || 0) + getPortionUnits(item.name, item.adet || 1);
+                const stockName = getBasketItemStockName(item);
+                if (!stockName) return;
+                counts[stockName] = (counts[stockName] || 0) + getBasketPortionUnits(item);
             });
             for (const [name, adet] of Object.entries(counts)) {
                 const stock = getPortionStock(name);
@@ -2337,19 +2551,31 @@
                 const div = document.createElement('div');
                 div.className = 'basket-item';
                 div.style.borderLeft = '3px solid #3498db';
-                const portionIndex = getGrillPortionIndex(item.adet || 1);
+                const quantity = getBasketQuantity(item);
+                const portionIndex = getGrillPortionIndex(getBasketPortionAmount(item));
                 const baseNoteLabel = formatOrderNote(item.baseNote || '');
+                const quantityControls = `<div class="basket-control-group">
+                            <span class="basket-control-label">Adet</span>
+                            <div class="quantity-stepper">
+                                <button type="button" onclick="adjustBasketQuantity(${index}, -1)" ${quantity <= 1 ? 'disabled' : ''}>-</button>
+                                <span>${formatPortionAmount(quantity)}x</span>
+                                <button type="button" onclick="adjustBasketQuantity(${index}, 1)">+</button>
+                            </div>
+                        </div>`;
                 const portionControls = item.portionSelectable
-                    ? `<div class="portion-stepper">
-                            <button type="button" onclick="adjustBasketPortion(${index}, -1)" ${portionIndex === 0 ? 'disabled' : ''}>-</button>
-                            <span>${formatPortionChoiceLabel(GRILL_PORTION_VALUES[portionIndex])}</span>
-                            <button type="button" onclick="adjustBasketPortion(${index}, 1)" ${portionIndex === GRILL_PORTION_VALUES.length - 1 ? 'disabled' : ''}>+</button>
+                    ? `<div class="basket-control-group">
+                            <span class="basket-control-label">Porsiyon</span>
+                            <div class="portion-stepper">
+                                <button type="button" onclick="adjustBasketPortion(${index}, -1)" ${portionIndex === 0 ? 'disabled' : ''}>-</button>
+                                <span>${formatPortionChoiceLabel(GRILL_PORTION_VALUES[portionIndex])}</span>
+                                <button type="button" onclick="adjustBasketPortion(${index}, 1)" ${portionIndex === GRILL_PORTION_VALUES.length - 1 ? 'disabled' : ''}>+</button>
+                            </div>
                         </div>`
                     : '';
                 div.innerHTML = `
                     <div style="flex-grow: 1;">
                         <span style="color: #3498db; font-size: 10px; font-weight: bold;">[YENİ]</span>
-                        <span class="basket-item-name">${escapeHtml(item.name)}</span>
+                        <span class="basket-item-name">${escapeHtml(getBasketDisplayName(item))}</span>
                         <br/><span class="basket-line-meta">${getBasketPriceMeta(item)}</span>
                         ${baseNoteLabel ? `<br/><span class="basket-item-note">${escapeHtml(baseNoteLabel)}</span>` : ''}
                         <input
@@ -2363,6 +2589,7 @@
                         <div class="ready-note-buttons"></div>
                     </div>
                     <div class="basket-item-actions">
+                        ${quantityControls}
                         ${portionControls}
                         <span class="remove" onclick="removeFromBasket(${index})">×</span>
                     </div>
@@ -2399,9 +2626,9 @@
             basket.forEach(item => {
                 socket.emit('add_item', {
                     masa: currentTable, // Masayı açıkça gönder
-                    urun: item.name,
-                    fiyat: item.price,
-                    adet: item.adet || 1,
+                    urun: getBasketSendName(item),
+                    fiyat: getBasketUnitPrice(item),
+                    adet: getBasketQuantity(item),
                     garson: loggedWaiter,
                     not: composeBasketItemNote(item)
                 });

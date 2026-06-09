@@ -128,6 +128,10 @@ AUTH_PAGE_DEFINITIONS = {
         "label": "Gün sonu",
         "paths": ["/gunsonu", "/gunsonu.html"],
     },
+    "raporlar": {
+        "label": "Raporlar",
+        "paths": ["/raporlar", "/raporlar.html"],
+    },
     "cari": {
         "label": "Cari hesaplar",
         "paths": ["/cari", "/cari.html"],
@@ -173,14 +177,15 @@ AUTH_ROLE_DEFINITIONS = {
         "label": "Müdür",
         "level": 80,
         "permissions": [
-            "dashboard", "settings", "personel", "menu", "kasa", "gunsonu", "cari",
-            "kurye", "terminals", "waiter", "table_session", "kitchen", "porsiyon", "puantaj"
+            "dashboard", "settings", "personel", "menu", "kasa", "cari",
+            "kurye", "terminals", "waiter", "table_session", "kitchen", "porsiyon", "puantaj",
+            "raporlar"
         ],
     },
     "cashier": {
         "label": "Kasiyer",
         "level": 60,
-        "permissions": ["dashboard", "kasa", "gunsonu", "cari", "kurye", "waiter", "kitchen", "porsiyon"],
+        "permissions": ["dashboard", "kasa", "cari", "kurye", "waiter", "kitchen", "porsiyon"],
     },
     "waiter": {
         "label": "Garson",
@@ -198,6 +203,8 @@ AUTH_ROLE_DEFINITIONS = {
         "permissions": ["kurye"],
     },
 }
+
+ADMIN_ONLY_PAGE_KEYS = {"gunsonu"}
 
 AUTH_PATH_TO_PAGE = {}
 AUTH_PREFIX_TO_PAGE = []
@@ -225,6 +232,7 @@ AUTH_API_PREFIX_PERMISSIONS = [
     ("/api/kasa", "kasa"),
     ("/api/vardiya", "kasa"),
     ("/api/gunsonu", "gunsonu"),
+    ("/api/raporlar", "raporlar"),
     ("/api/cari", "cari"),
     ("/api/courier-firms", "kurye"),
     ("/api/online/orders", "dashboard"),
@@ -323,6 +331,8 @@ PREP_PANEL_QUICK_NOTES = {
     "icecek": ("Buzsuz", "Az buzlu", "Şekersiz"),
     "tatli": ("Dondurmalı", "Kaymaksız")
 }
+
+DEFAULT_PREP_TICKET_SKIP_PRODUCTS = ("su",)
 
 PAYMENT_METHODS = ("Nakit", "Kredi Kartı", "Açık Hesap")
 
@@ -453,6 +463,7 @@ class RestaurantServer:
         self.prep_panel_settings = self.get_default_prep_panel_settings()
         self.prep_category_overrides = {}
         self.prep_printers = self.get_default_prep_printer_settings()
+        self.prep_ticket_skip_products = list(DEFAULT_PREP_TICKET_SKIP_PRODUCTS)
         self.receipt_printer = self.get_default_receipt_printer_settings()
         self.salons = []
         
@@ -1037,6 +1048,54 @@ class RestaurantServer:
                 clean[category_name] = target_panel
         return clean
 
+    def sanitize_prep_ticket_skip_products(self, products=None):
+        parsed = self.coerce_json_setting(products, None)
+        if isinstance(parsed, list):
+            raw_items = parsed
+        elif isinstance(products, str):
+            raw_items = re.split(r"[\n,]+", products)
+        elif products is None:
+            raw_items = DEFAULT_PREP_TICKET_SKIP_PRODUCTS
+        else:
+            raw_items = []
+
+        clean = []
+        seen = set()
+        for item in raw_items:
+            name = re.sub(r"\s+", " ", str(item or "")).strip()
+            key = self._prep_ticket_match_text(name)
+            if not name or not key or key in seen:
+                continue
+            clean.append(name[:80])
+            seen.add(key)
+            if len(clean) >= 200:
+                break
+        return clean
+
+    def _prep_ticket_match_text(self, value):
+        normalized = self._normalize_text_for_match(value)
+        return re.sub(r"[^0-9a-z]+", " ", normalized).strip()
+
+    def _prep_ticket_term_matches(self, text, term):
+        haystack = self._prep_ticket_match_text(text)
+        needle = self._prep_ticket_match_text(term)
+        if not haystack or not needle:
+            return False
+        if haystack == needle:
+            return True
+        return re.search(rf"(^|\s){re.escape(needle)}($|\s)", haystack) is not None
+
+    def should_skip_prep_ticket_for_product(self, urun):
+        product_names = [str(urun or "").strip()]
+        menu_name = self._find_menu_product_name(urun)
+        if menu_name and menu_name not in product_names:
+            product_names.append(menu_name)
+
+        for term in self.prep_ticket_skip_products:
+            if any(self._prep_ticket_term_matches(product_name, term) for product_name in product_names):
+                return True
+        return False
+
     def sanitize_prep_printer_settings(self, printers_data=None):
         defaults = self.get_default_prep_printer_settings()
         printers_data = self.coerce_json_setting(printers_data, {})
@@ -1120,6 +1179,7 @@ class RestaurantServer:
         kategori = self.get_menu_category_for_product(urun)
         panel = self.get_preparation_panel_for_product(urun, kategori)
         panel_info = self.get_prep_panel_info(panel)
+        skip_prep_ticket = self.should_skip_prep_ticket_for_product(urun)
         siparis = {
             'uid': siparis_id,
             'urun': urun,
@@ -1131,6 +1191,7 @@ class RestaurantServer:
             'garson': garson,
             'not': not_bilgisi,
             'durum': 'mutfakta',
+            'prep_ticket_skipped': skip_prep_ticket,
             'saat': created_at.strftime("%H:%M:%S"),
             'created_at': created_at.isoformat(timespec='seconds')
         }
@@ -1156,10 +1217,14 @@ class RestaurantServer:
             'saat': siparis['saat'],
             'created_at': siparis['created_at'],
             'garson': garson,
+            'prep_ticket_skipped': skip_prep_ticket,
             'terminal_id': terminal_id or f"public:{masa_adi}"
         }
         socketio.emit('kitchen_new_order', ticket_payload)
-        self.send_prep_ticket_to_printer(panel, ticket_payload)
+        if skip_prep_ticket:
+            logger.info(f"🧾 Reyon fişi atlandı: {urun} -> {masa_adi} ({panel})")
+        else:
+            self.send_prep_ticket_to_printer(panel, ticket_payload)
         if panel == "mutfak":
             self.send_to_kitchen_legacy(masa_adi, f"{urun} ({not_bilgisi})" if not_bilgisi else urun, adet)
         return (siparis, None) if return_error else siparis
@@ -1190,6 +1255,7 @@ class RestaurantServer:
             "va_kitchen_approval": "EVET",
             "prep_panels_json": "",
             "prep_category_overrides_json": "{}",
+            "prep_ticket_skip_products_json": json.dumps(list(DEFAULT_PREP_TICKET_SKIP_PRODUCTS), ensure_ascii=False),
             "prep_printers_json": "{}",
             "receipt_printer_json": "{}",
             "receipt_printer_enabled": "HAYIR",
@@ -1236,6 +1302,9 @@ class RestaurantServer:
         self.prep_panel_settings = self.sanitize_prep_panel_settings(defaults.get("prep_panels_json"))
         self.prep_category_overrides = self.sanitize_prep_category_overrides(
             defaults.get("prep_category_overrides_json")
+        )
+        self.prep_ticket_skip_products = self.sanitize_prep_ticket_skip_products(
+            defaults.get("prep_ticket_skip_products_json")
         )
         printer_json = self.coerce_json_setting(defaults.get("prep_printers_json"), {})
         if not printer_json:
@@ -1302,6 +1371,10 @@ class RestaurantServer:
                     f"{json.dumps(self.prep_category_overrides, ensure_ascii=False)}\n"
                 )
                 f.write(
+                    "prep_ticket_skip_products_json:"
+                    f"{json.dumps(self.prep_ticket_skip_products, ensure_ascii=False)}\n"
+                )
+                f.write(
                     "prep_printers_json:"
                     f"{json.dumps(self.prep_printers, ensure_ascii=False)}\n"
                 )
@@ -1355,6 +1428,7 @@ class RestaurantServer:
             'system': self.get_system_info(),
             'prep_panels': self.get_preparation_panels(),
             'prep_category_overrides': self.prep_category_overrides,
+            'prep_ticket_skip_products': self.prep_ticket_skip_products,
             'portion_stock': self.get_portion_stock_snapshot(),
             'daily_meals': self.get_daily_meals_payload()
         }
@@ -1759,6 +1833,8 @@ class RestaurantServer:
             return True
         if not user or not user.get("active", True):
             return False
+        if page_key in ADMIN_ONLY_PAGE_KEYS:
+            return user.get("role") == "admin"
         permissions = user.get("permissions") or self.get_role_permissions(user.get("role"))
         return "*" in permissions or page_key in permissions
 
@@ -2204,6 +2280,28 @@ class RestaurantServer:
 
         return urun, adet
 
+    def prep_ticket_group_value(self, value):
+        return re.sub(r"\s+", " ", self._normalize_text_for_match(value)).strip()
+
+    def prep_ticket_item_group_key(self, raw, display_urun, note):
+        category = str(raw.get("kategori") or "").strip()
+        if not category:
+            category = self.get_menu_category_for_product(raw.get("urun"))
+        panel = str(raw.get("panel") or "").strip()
+        return (
+            self.prep_ticket_group_value(panel),
+            self.prep_ticket_group_value(category),
+            self.prep_ticket_group_value(display_urun),
+            self.prep_ticket_group_value(note),
+        )
+
+    def prep_ticket_item_title(self, item):
+        adet = self.format_order_quantity(item.get("adet", 1))
+        urun = str(item.get("urun") or "").strip()
+        note = str(item.get("not") or "").strip()
+        detail = f"{urun} {note}".strip() if note else urun
+        return f"{adet} x {detail}".strip()
+
     def extract_meal_name_from_note(self, note):
         """Not alanında 'Yemek: xxx' formatı varsa yemek adını döndür."""
         meal_name, _ = self.split_order_note_details(note)
@@ -2225,11 +2323,14 @@ class RestaurantServer:
             raw_note = str(raw.get("not") or "").strip()
             meal_name, extra_note = self.split_order_note_details(raw_note)
             adet = self.coerce_order_quantity(raw.get("adet", 1))
-            raw_with_context = {
-                "kategori": order_data.get("kategori"),
-                "panel": order_data.get("panel"),
-                **raw
-            }
+            raw_with_context = dict(raw)
+            if not raw_with_context.get("kategori"):
+                raw_with_context["kategori"] = order_data.get("kategori") or self.get_menu_category_for_product(urun)
+            if not raw_with_context.get("panel"):
+                raw_with_context["panel"] = (
+                    order_data.get("panel")
+                    or self.get_preparation_panel_for_product(urun, raw_with_context.get("kategori"))
+                )
 
             if meal_name:
                 # Porsiyon bilgisini koru (Tam/Yarım), kategori adını yemek adıyla değiştir
@@ -2244,16 +2345,20 @@ class RestaurantServer:
                 display_urun, display_adet = self.prep_ticket_display_item(raw_with_context, urun, adet)
                 note = self.clean_prep_ticket_note(raw_note)
 
-            key = (display_urun, note)
+            key = self.prep_ticket_item_group_key(raw_with_context, display_urun, note)
             if key in grouped_index:
                 existing = grouped[grouped_index[key]]
-                existing["adet"] = self.coerce_order_quantity(existing.get("adet", 1)) + display_adet
+                existing["adet"] = self.coerce_order_quantity(
+                    self.coerce_order_quantity(existing.get("adet", 1)) + display_adet
+                )
             else:
                 grouped_index[key] = len(grouped)
                 grouped.append({
                     "urun": display_urun,
                     "adet": display_adet,
-                    "not": note
+                    "not": note,
+                    "kategori": raw_with_context.get("kategori"),
+                    "panel": raw_with_context.get("panel"),
                 })
         return grouped
 
@@ -2364,9 +2469,8 @@ class RestaurantServer:
         section_font = self.prep_ticket_font(43, bold=True)
         date_font = self.prep_ticket_font(30, bold=True)
         item_font = self.prep_ticket_font(39, bold=True)
-        note_font = self.prep_ticket_font(37, bold=True)
 
-        if not all([label_font, small_font, section_font, date_font, item_font, note_font]):
+        if not all([label_font, small_font, section_font, date_font, item_font]):
             return None
 
         masa_adi = str(order_data.get("masa") or "-").strip()
@@ -2411,17 +2515,10 @@ class RestaurantServer:
         for item_index, item in enumerate(ticket_items):
             if item_index > 0:
                 y += 4
-            adet = self.format_order_quantity(item.get("adet", 1))
-            urun = self.ticket_upper(item.get("urun") or "")
-            note = self.ticket_upper(item.get("not") or "")
-            item_text = f"{adet} {urun}".strip()
+            item_text = self.ticket_upper(self.prep_ticket_item_title(item))
             for line in self.wrap_ticket_text_pixels(draw, item_text, item_font, max_item_width):
                 draw.text((margin_x, y), line, font=item_font, fill=0)
                 y += 42
-            if note:
-                for line in self.wrap_ticket_text_pixels(draw, note, note_font, max_item_width - 28):
-                    draw.text((margin_x + 28, y), line, font=note_font, fill=0)
-                    y += 40
 
         if not ticket_items:
             draw.text((margin_x, y), "SİPARİŞ", font=item_font, fill=0)
@@ -2456,16 +2553,10 @@ class RestaurantServer:
             output.append(self.escpos_line("-" * width))
 
         for item in ticket_items:
-            adet = self.format_order_quantity(item.get("adet", 1))
-            urun = self.ticket_upper(item.get("urun") or "")
-            note = self.ticket_upper(item.get("not") or "")
-            item_text = f"{adet} {urun}".strip()
+            item_text = self.ticket_upper(self.prep_ticket_item_title(item))
             for index, line in enumerate(self.wrap_ticket_text(item_text, wide_width)):
                 prefix = "" if index == 0 else "  "
                 output.append(self.escpos_line(f"{prefix}{line}", bold=True, size=0x10))
-            if note:
-                for line in self.wrap_ticket_text(note, wide_width):
-                    output.append(self.escpos_line(f"  {line}", size=0x10))
 
         return b"".join(output)
 
@@ -2852,6 +2943,21 @@ class RestaurantServer:
             if visible_items:
                 visible_menu[category] = visible_items
         return visible_menu
+
+    def get_menu_product_options(self):
+        """Ayar ekranlarında ürün adı seçimi için sade menü listesi."""
+        products = []
+        for category, items in self.menu_data.items():
+            for item in items:
+                if not item:
+                    continue
+                name = str(item[0] or "").strip()
+                if name:
+                    products.append({
+                        "category": category,
+                        "name": name
+                    })
+        return products
 
     def _normalize_text_for_match(self, value):
         text = unicodedata.normalize('NFKD', str(value or '').casefold())
@@ -3414,9 +3520,21 @@ class RestaurantServer:
         except Exception:
             adet = 1
 
-        product_name = self._find_menu_product_name(urun)
-        normalized = self._normalize_text_for_match(product_name)
-        multiplier = 0.5 if normalized.startswith('yarim porsiyon ') else 1.0
+        raw_name = str(urun or '').strip()
+        normalized_raw = self._normalize_text_for_match(raw_name)
+        trailing_match = re.search(r'\(\s*(\d+(?:[,.]\d+)?)\s*porsiyon\s*\)\s*$', raw_name, flags=re.IGNORECASE)
+        if normalized_raw.startswith('yarim porsiyon '):
+            multiplier = 0.5
+        elif trailing_match:
+            try:
+                multiplier = max(0.0, float(trailing_match.group(1).replace(',', '.')))
+            except Exception:
+                multiplier = 1.0
+        else:
+            product_name = self._find_menu_product_name(urun)
+            normalized = self._normalize_text_for_match(product_name)
+            multiplier = 0.5 if normalized.startswith('yarim porsiyon ') else 1.0
+
         return round(adet * multiplier, 2)
 
     def get_menu_category_for_product(self, urun):
@@ -4333,6 +4451,11 @@ def gunsonu_page():
     """Gün sonu işlemleri sayfası"""
     return app.send_static_file('gunsonu.html')
 
+@app.route('/raporlar')
+def raporlar_page():
+    """Operasyon raporları sayfası"""
+    return app.send_static_file('raporlar.html')
+
 @app.route('/mutfak')
 def mutfak_page():
     """Mutfak sipariş takip sayfası"""
@@ -4477,9 +4600,11 @@ def get_settings():
         'salons': server.salons,
         'prep_panels': server.get_preparation_panels(),
         'prep_category_overrides': server.prep_category_overrides,
+        'prep_ticket_skip_products': server.prep_ticket_skip_products,
         'prep_printers': server.prep_printers,
         'receipt_printer': server.receipt_printer,
         'menu_categories': list(server.menu_data.keys()),
+        'menu_products': server.get_menu_product_options(),
         'daily_meal_categories': server._daily_meal_categories(),
         'va_max_duration': server.va_max_duration,
         'va_rate_limit': server.va_rate_limit,
@@ -4536,6 +4661,9 @@ def save_settings():
     server.prep_category_overrides = server.sanitize_prep_category_overrides(
         data.get('prep_category_overrides', server.prep_category_overrides)
     )
+    server.prep_ticket_skip_products = server.sanitize_prep_ticket_skip_products(
+        data.get('prep_ticket_skip_products', server.prep_ticket_skip_products)
+    )
     server.prep_printers = server.sanitize_prep_printer_settings(
         data.get('prep_printers', server.prep_printers)
     )
@@ -4589,6 +4717,30 @@ def get_serial_ports():
 
 # ==================== GÜN SONU API ====================
 
+def _parse_report_date(value, default_value):
+    raw = (value or default_value or '').strip()
+    try:
+        return datetime.datetime.strptime(raw, '%Y-%m-%d').date()
+    except ValueError:
+        raise ValueError(f"Geçersiz tarih: {raw}")
+
+def _date_range_from_request(default_days=0):
+    today = datetime.date.today()
+    default_start = today - datetime.timedelta(days=max(default_days, 0))
+    baslangic = _parse_report_date(request.args.get('baslangic'), default_start.isoformat())
+    bitis = _parse_report_date(request.args.get('bitis'), today.isoformat())
+    if baslangic > bitis:
+        raise ValueError("Başlangıç tarihi bitiş tarihinden sonra olamaz")
+    if (bitis - baslangic).days > 366:
+        raise ValueError("Rapor aralığı en fazla 366 gün olabilir")
+    return baslangic.isoformat(), bitis.isoformat()
+
+def _float_value(value):
+    return float(value or 0)
+
+def _int_value(value):
+    return int(value or 0)
+
 @app.route('/api/gunsonu/ozet')
 def get_gunsonu_ozet():
     """Günlük özet rapor"""
@@ -4626,30 +4778,96 @@ def get_gunsonu_ozet():
 
 @app.route('/api/gunsonu/detay')
 def get_gunsonu_detay():
-    """Günlük detay rapor"""
+    """Günlük ürün bazlı kalem toplamları"""
     if not USE_DATABASE:
         return jsonify({'success': False, 'error': 'Veri tabanı bağlantısı yok'}), 503
     tarih = request.args.get('tarih', datetime.datetime.now().strftime('%Y-%m-%d'))
     try:
-        rows = db.get_sales_by_date(tarih)
+        rows = db.get_item_totals_by_date(tarih)
         result = []
         for r in rows:
             result.append({
                 'urun': r['urun'],
                 'adet': server.coerce_order_quantity(r['adet']),
-                'fiyat': float(r['fiyat']),
-                'odeme': r['odeme'],
-                'tip': r.get('tip', 'normal'),
-                'invoice_pending': bool(r.get('invoice_pending', False)),
-                'invoice_document_type': r.get('invoice_document_type'),
-                'invoice_tax_id': r.get('invoice_tax_id') or '',
-                'invoice_serial_no': r.get('invoice_serial_no') or '',
-                'invoice_note': r.get('invoice_note') or '',
-                'tarih_saat': str(r['tarih_saat']) if r['tarih_saat'] else ''
+                'satis_adet': server.coerce_order_quantity(r['satis_adet']),
+                'ikram_adet': server.coerce_order_quantity(r['ikram_adet']),
+                'toplam': _float_value(r['toplam']),
+                'ikram_toplam': _float_value(r['ikram_toplam']),
+                'ortalama_fiyat': _float_value(r['ortalama_fiyat'])
             })
         return jsonify({'success': True, 'detay': result, 'tarih': tarih})
     except Exception as e:
         logger.error(f"Gün sonu detay hatası: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/raporlar/operasyon')
+def get_operasyon_raporlari():
+    """Talep, yoğunluk ve zaman raporları"""
+    if not USE_DATABASE:
+        return jsonify({'success': False, 'error': 'Veri tabanı bağlantısı yok'}), 503
+    try:
+        baslangic, bitis = _date_range_from_request(default_days=6)
+        report = db.get_operational_reports(baslangic, bitis)
+        totals = report.get('totals') or {}
+        hourly_rows = {
+            _int_value(row.get('saat')): row
+            for row in report.get('hourly_load', [])
+        }
+        hourly_load = []
+        for hour in range(24):
+            row = hourly_rows.get(hour, {})
+            hourly_load.append({
+                'saat': hour,
+                'adet': _float_value(row.get('adet')),
+                'ciro': _float_value(row.get('ciro')),
+                'satir_sayisi': _int_value(row.get('satir_sayisi')),
+            })
+
+        product_demand = [{
+            'urun': row.get('urun') or 'Ürün',
+            'adet': _float_value(row.get('adet')),
+            'satis_adet': _float_value(row.get('satis_adet')),
+            'ikram_adet': _float_value(row.get('ikram_adet')),
+            'ciro': _float_value(row.get('ciro')),
+            'ikram_toplam': _float_value(row.get('ikram_toplam')),
+        } for row in report.get('product_demand', [])]
+
+        channel_mix = [{
+            'kanal': row.get('kanal') or 'Diğer',
+            'adet': _float_value(row.get('adet')),
+            'ciro': _float_value(row.get('ciro')),
+            'satir_sayisi': _int_value(row.get('satir_sayisi')),
+        } for row in report.get('channel_mix', [])]
+
+        day_trend = [{
+            'tarih': row['tarih'].isoformat() if hasattr(row.get('tarih'), 'isoformat') else str(row.get('tarih') or ''),
+            'adet': _float_value(row.get('adet')),
+            'ciro': _float_value(row.get('ciro')),
+            'satir_sayisi': _int_value(row.get('satir_sayisi')),
+        } for row in report.get('day_trend', [])]
+
+        return jsonify({
+            'success': True,
+            'baslangic': baslangic,
+            'bitis': bitis,
+            'totals': {
+                'ciro': _float_value(totals.get('ciro')),
+                'adet': _float_value(totals.get('adet')),
+                'ikram_adet': _float_value(totals.get('ikram_adet')),
+                'ikram_toplam': _float_value(totals.get('ikram_toplam')),
+                'satir_sayisi': _int_value(totals.get('satir_sayisi')),
+                'gun_sayisi': _int_value(totals.get('gun_sayisi')),
+                'aktif_saat_sayisi': _int_value(totals.get('aktif_saat_sayisi')),
+            },
+            'product_demand': product_demand,
+            'hourly_load': hourly_load,
+            'channel_mix': channel_mix,
+            'day_trend': day_trend,
+        })
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f"Operasyon raporları hatası: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 # ==================== CARİ İŞLEMLER API ====================
@@ -6827,6 +7045,17 @@ def handle_payment(data):
     payments = normalized_payments
     if not payments:
         emit('error', {'message': 'Geçerli ödeme tutarı bulunamadı'})
+        return
+
+    payment_total_cents = int(round(sum(p['amount'] for p in payments) * 100))
+    payable_total_cents = int(round(payable_total * 100))
+    if abs(payment_total_cents - payable_total_cents) > 1:
+        emit('error', {
+            'message': (
+                f"Ödeme toplamı ({payment_total_cents / 100:.2f} TL), "
+                f"ödenecek tutarla ({payable_total_cents / 100:.2f} TL) eşleşmeli"
+            )
+        })
         return
 
     if invoice_pending and server.pos_enabled:

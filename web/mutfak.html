@@ -271,6 +271,9 @@
         ];
         let prepPanels = defaultPanels;
         let prepCategoryOverrides = {};
+        let prepTicketSkipProducts = [];
+        const PRINT_BATCH_DELAY_MS = 1000;
+        const prepPrintBatches = new Map();
         function panelFromLocation() {
             const pathParts = window.location.pathname.split('/').filter(Boolean);
             if (pathParts[0] === 'reyon' && pathParts[1]) return pathParts[1];
@@ -296,6 +299,27 @@
 
         function normalizeProductKey(value) {
             return String(value ?? '').trim().toLocaleLowerCase('tr-TR');
+        }
+
+        function prepTicketMatchText(value) {
+            return normalizeTextForMatch(value).replace(/[^0-9a-z]+/g, ' ').trim();
+        }
+
+        function escapeRegExp(value) {
+            return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        function prepTicketTermMatches(text, term) {
+            const haystack = prepTicketMatchText(text);
+            const needle = prepTicketMatchText(term);
+            if (!haystack || !needle) return false;
+            if (haystack === needle) return true;
+            return new RegExp(`(^|\\s)${escapeRegExp(needle)}($|\\s)`).test(haystack);
+        }
+
+        function shouldPrintPrepTicket(data) {
+            if (data?.prep_ticket_skipped) return false;
+            return !prepTicketSkipProducts.some(term => prepTicketTermMatches(data?.urun, term));
         }
 
         function getMenuCategoryForProduct(urun) {
@@ -661,8 +685,8 @@
                 return;
             }
             addOrderToGrid(data);
-            if (autoPrintToggle.checked) {
-                printOrder(data);
+            if (autoPrintToggle.checked && shouldPrintPrepTicket(data)) {
+                queuePrepTicketPrint(data);
             }
             playNotificationSound();
         });
@@ -700,6 +724,7 @@
             menuData = data.menu || {};
             prepPanels = Array.isArray(data.prep_panels) && data.prep_panels.length ? data.prep_panels : defaultPanels;
             prepCategoryOverrides = data.prep_category_overrides || {};
+            prepTicketSkipProducts = Array.isArray(data.prep_ticket_skip_products) ? data.prep_ticket_skip_products : [];
             portionStock = data.portion_stock || {};
             setDailyMealsPayload(data.daily_meals);
             renderPanelChrome();
@@ -723,6 +748,7 @@
                                 adet: item.adet,
                                 garson: item.garson,
                                 not: item.not || '',
+                                prep_ticket_skipped: item.prep_ticket_skipped || false,
                                 saat: item.saat || '--:--:--',
                                 created_at: item.created_at || item.createdAt || item.tarih_saat || item.Tarih_Saat || ''
                             };
@@ -1188,20 +1214,141 @@
             return mealName;
         }
 
-        function printOrder(data) {
-            const printArea = document.getElementById('printArea');
+        function cleanPrepTicketNote(note) {
+            return String(note ?? '').trim().replace(/^(not|yemek|çeşit|cesit)\s*:\s*/i, '').trim();
+        }
+
+        function prepPrintGroupValue(value) {
+            return normalizeTextForMatch(value).replace(/\s+/g, ' ').trim();
+        }
+
+        function shouldBatchPrepPrint(data) {
+            const panelId = getOrderPanelId(data);
+            const panel = prepPanels.find(panelItem => panelItem.id === panelId) || currentPanel();
+            return Boolean(panel && panel.aggregate) || panelId === 'icecek';
+        }
+
+        function prepPrintBatchKey(data) {
+            return `${getOrderPanelId(data)}|${String(data?.masa ?? '').trim()}`;
+        }
+
+        function queuePrepTicketPrint(data) {
+            if (!shouldBatchPrepPrint(data)) {
+                printOrder(data);
+                return;
+            }
+
+            const key = prepPrintBatchKey(data);
+            let batch = prepPrintBatches.get(key);
+            const item = {
+                ...data,
+                not: data.not || '',
+                kategori: data.kategori || getMenuCategoryForProduct(data.urun),
+                panel: data.panel || getOrderPanelId(data)
+            };
+
+            if (!batch) {
+                batch = {
+                    payload: {
+                        ...data,
+                        items: []
+                    },
+                    timer: null
+                };
+                prepPrintBatches.set(key, batch);
+            }
+
+            batch.payload.items.push(item);
+            batch.payload.saat = data.saat || batch.payload.saat;
+            if (data.garson) {
+                const currentGarson = batch.payload.garson || '';
+                if (!currentGarson) {
+                    batch.payload.garson = data.garson;
+                } else if (!currentGarson.split(' / ').includes(data.garson)) {
+                    batch.payload.garson = `${currentGarson} / ${data.garson}`;
+                }
+            }
+
+            if (batch.timer) clearTimeout(batch.timer);
+            batch.timer = setTimeout(() => flushPrepTicketPrintBatch(key), PRINT_BATCH_DELAY_MS);
+        }
+
+        function flushPrepTicketPrintBatch(key) {
+            const batch = prepPrintBatches.get(key);
+            if (!batch) return;
+            prepPrintBatches.delete(key);
+            if (autoPrintToggle.checked) {
+                printOrder(batch.payload);
+            }
+        }
+
+        function getPrepPrintItemParts(raw, parentData = {}) {
+            const data = {
+                ...parentData,
+                ...raw
+            };
+            if (!data.kategori) data.kategori = getMenuCategoryForProduct(data.urun);
+            if (!data.panel) data.panel = getOrderPanelId(data);
             const displayInfo = getOrderDisplayInfo(data);
             const mealName = extractMealNameFromNote(data.not, data.urun);
-            const ticketProductName = mealName || displayInfo.productName;
-            const remainingNote = mealName ? '' : (data.not || '');
-            const safeNote = remainingNote ? '<br><small>(' + escapeHtml(remainingNote) + ')</small>' : '';
+            const productName = mealName || displayInfo.productName;
+            const note = mealName ? '' : cleanPrepTicketNote(data.not);
+            const parsedQuantity = parseOrderQuantity(displayInfo.quantity, 1);
+            const quantity = parsedQuantity > 0 ? parsedQuantity : 1;
+            const key = [
+                data.panel,
+                data.kategori,
+                productName,
+                displayInfo.portionLabel,
+                note
+            ].map(prepPrintGroupValue).join('|');
+            return {
+                key,
+                productName,
+                note,
+                quantity
+            };
+        }
+
+        function getPrepPrintItems(data) {
+            const rawItems = Array.isArray(data.items) && data.items.length ? data.items : [data];
+            const grouped = [];
+            const groupedIndex = new Map();
+
+            rawItems.forEach(raw => {
+                const item = getPrepPrintItemParts(raw, data);
+                if (!item.productName) return;
+                if (groupedIndex.has(item.key)) {
+                    grouped[groupedIndex.get(item.key)].quantity += item.quantity;
+                    return;
+                }
+                groupedIndex.set(item.key, grouped.length);
+                grouped.push(item);
+            });
+
+            return grouped;
+        }
+
+        function formatPrepPrintItemLine(item) {
+            const noteText = item.note ? ` ${item.note}` : '';
+            return `${formatOrderQuantity(item.quantity)} x ${item.productName}${noteText}`;
+        }
+
+        function printOrder(data) {
+            const printArea = document.getElementById('printArea');
+            const ticketItems = getPrepPrintItems(data);
+            const itemsHtml = ticketItems.length
+                ? ticketItems.map(item => `
+                        <div style="margin: 6px 0;">${escapeHtml(formatPrepPrintItemLine(item))}</div>
+                    `).join('')
+                : '<div style="margin: 6px 0;">SİPARİŞ</div>';
             printArea.innerHTML = `
                 <div style="text-align: center; font-family: 'Courier New', monospace; width: 80mm; padding: 10px; color: black; background: white;">
                     <h2 style="margin: 0;">${escapeHtml(currentPanel().ticket_title || 'SİPARİŞ FİŞİ')}</h2>
                     <hr>
                     <h1 style="margin: 10px 0;">${escapeHtml(data.masa)}</h1>
                     <div style="text-align: left; font-size: 20px; font-weight: bold;">
-                        ${escapeHtml(formatOrderQuantity(displayInfo.quantity))} x ${escapeHtml(ticketProductName)}${safeNote}
+                        ${itemsHtml}
                     </div>
                     <hr>
                     <div style="font-size: 12px;">${escapeHtml(data.saat)}</div>

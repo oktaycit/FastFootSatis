@@ -74,9 +74,40 @@ body {
 }
 
 .company-name {
+    position: relative;
     font-size: 24px;
     font-weight: bold;
     letter-spacing: 1px;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+}
+
+.company-name::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: -5px;
+    width: 0;
+    height: 3px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.75);
+    opacity: 0;
+}
+
+.company-name.z-report-hold-active::after {
+    opacity: 1;
+    animation: zReportHoldProgress 5s linear forwards;
+}
+
+@keyframes zReportHoldProgress {
+    from {
+        width: 0;
+    }
+
+    to {
+        width: 100%;
+    }
 }
 
 .header-info {
@@ -976,6 +1007,10 @@ body.order-terminal .cashier-quick-sale {
     grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.action-grid-four {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .split-actions {
     margin-bottom: 8px;
 }
@@ -1052,6 +1087,10 @@ body.order-terminal .cashier-quick-sale {
 
 .action-btn-settings {
     background: #64748b;
+}
+
+.action-btn-reports {
+    background: #0f766e;
 }
 
 .shortcut-section {
@@ -1290,6 +1329,10 @@ body.cashier-terminal .shortcut-icon {
 
 /* Responsive Design - sadece çok küçük ekranlarda dikey layout */
 @media (max-width: 900px) {
+    .action-grid-four {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .main-container {
         flex-direction: column;
         flex-wrap: nowrap;
@@ -1347,12 +1390,15 @@ body.cashier-terminal .shortcut-icon {
 
 .modal-content {
     background-color: #fefefe;
-    margin: 5% auto;
+    margin: 3vh auto;
     width: 95%;
     max-width: 800px;
+    max-height: calc(100vh - 48px);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
     animation: modalSlide 0.3s ease;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
 }
 
@@ -1391,6 +1437,8 @@ body.cashier-terminal .shortcut-icon {
 
 .modal-body {
     padding: 20px;
+    min-height: 0;
+    overflow-y: auto;
 }
 
 .modal-total-display {
@@ -1465,6 +1513,122 @@ body.cashier-terminal .shortcut-icon {
 .input-group input:focus {
     border-color: var(--accent-color);
     outline: none;
+}
+
+.card-split-panel {
+    margin: -8px 0 22px;
+    padding: 14px;
+    background: #f8fbff;
+    border: 1px solid #d8e8f8;
+    border-left: 5px solid #2980b9;
+    border-radius: var(--radius-md);
+}
+
+.card-split-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.card-split-title {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    color: var(--primary-color);
+}
+
+.card-split-title strong {
+    font-size: 13px;
+}
+
+.card-split-title span {
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.card-split-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.btn-mini {
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    background: #eef2f7;
+    color: var(--primary-color);
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.btn-mini-primary {
+    background: #2980b9;
+    color: white;
+}
+
+.btn-mini:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.card-split-rows {
+    display: grid;
+    gap: 8px;
+}
+
+.card-split-row {
+    display: grid;
+    grid-template-columns: minmax(72px, 0.45fr) minmax(120px, 1fr) 36px;
+    gap: 8px;
+    align-items: center;
+}
+
+.card-split-label {
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.card-split-row input {
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 2px solid #d8e8f8;
+    border-radius: var(--radius-sm);
+    color: var(--primary-color);
+    font-size: 18px;
+    font-weight: 800;
+    text-align: right;
+}
+
+.card-split-row input:focus {
+    border-color: #2980b9;
+    outline: none;
+}
+
+.card-split-remove {
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: #fee2e2;
+    color: #b91c1c;
+    cursor: pointer;
+    font-size: 18px;
+    font-weight: 900;
+    line-height: 1;
+}
+
+.card-split-remove:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
 }
 
 .customer-selection {
@@ -2221,6 +2385,16 @@ body.cashier-terminal .shortcut-icon {
         grid-template-columns: 1fr !important;
         /* Stack inputs vertically */
         gap: 15px;
+    }
+
+    .card-split-header,
+    .card-split-actions {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .card-split-row {
+        grid-template-columns: 64px minmax(0, 1fr) 36px;
     }
 
     /* Settings View specific */

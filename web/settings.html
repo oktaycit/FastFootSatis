@@ -470,6 +470,17 @@
             white-space: nowrap;
         }
 
+        .prep-skip-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .prep-skip-actions input {
+            flex: 1;
+            min-width: 0;
+            margin-bottom: 0;
+        }
+
         .settings-select {
             padding: 11px;
             border: 2px solid #e0e0e0;
@@ -836,6 +847,33 @@
             <div class="card-body">
                 <div id="prepPanelEditor" class="prep-panel-grid">
                     <!-- Reyon ayarları buraya gelecek -->
+                </div>
+
+                <hr class="divider">
+
+                <p
+                    style="font-size:13px; font-weight:600; color:var(--text-secondary); margin-bottom:10px; text-transform:uppercase;">
+                    Reyon Fişi Basılmayacak Ürünler
+                </p>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="prepTicketSkipInput">Ürün Ekle</label>
+                        <div class="prep-skip-actions">
+                            <input type="text" id="prepTicketSkipInput" list="prepTicketSkipOptions"
+                                placeholder="Örn: 0.5 Lt. Su"
+                                onkeydown="if(event.key==='Enter'){event.preventDefault(); addPrepTicketSkipProduct();}">
+                            <button class="btn-settings btn-info-s btn-sm" type="button"
+                                onclick="addPrepTicketSkipProduct()">➕ Ekle</button>
+                        </div>
+                        <datalist id="prepTicketSkipOptions"></datalist>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="prepTicketSkipProducts">Fiş Basılmayacak Ürünler</label>
+                    <textarea class="prep-textarea" id="prepTicketSkipProducts" placeholder="Su, 0.5 Lt. Su"></textarea>
+                    <small style="color:var(--text-secondary);">
+                        Virgül veya satırla ayırın. Tek kelimeler ayrı kelime olarak eşleşir; örn. "su", "Meyve Suyu" ürününü etkilemez.
+                    </small>
                 </div>
 
                 <hr class="divider">
@@ -1278,7 +1316,9 @@
         let prepPrinters = {};
         let receiptPrinter = {};
         let prepCategoryOverrides = {};
+        let prepTicketSkipProducts = ['su'];
         let menuCategories = [];
+        let menuProducts = [];
 
         function escapeHtml(value) {
             return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -1355,7 +1395,9 @@
                 document.getElementById('receiptPrinterPort').value = receiptPrinter.port || 9100;
                 document.getElementById('receiptPrinterCopies').value = receiptPrinter.copies || 1;
                 prepCategoryOverrides = data.prep_category_overrides || {};
+                prepTicketSkipProducts = Array.isArray(data.prep_ticket_skip_products) ? data.prep_ticket_skip_products : ['su'];
                 menuCategories = Array.isArray(data.menu_categories) ? data.menu_categories : [];
+                menuProducts = Array.isArray(data.menu_products) ? data.menu_products : [];
                 renderPrepSettings();
 
                 // QR Menü & Online Sipariş Politikası
@@ -1575,6 +1617,38 @@
                 const select = document.getElementById(`prep_category_route_${index}`);
                 if (select) select.value = prepCategoryOverrides[category] || guessPanelForCategory(category);
             });
+
+            renderPrepTicketSkipProducts();
+        }
+
+        function renderPrepTicketSkipProducts() {
+            const textarea = document.getElementById('prepTicketSkipProducts');
+            if (textarea) textarea.value = keywordsToText(prepTicketSkipProducts);
+
+            const options = document.getElementById('prepTicketSkipOptions');
+            if (!options) return;
+            options.innerHTML = menuProducts.map(product => {
+                const name = typeof product === 'string' ? product : product.name;
+                const category = typeof product === 'string' ? '' : product.category;
+                return `<option value="${escapeHtml(name || '')}" label="${escapeHtml(category || '')}"></option>`;
+            }).join('');
+        }
+
+        function addPrepTicketSkipProduct() {
+            const input = document.getElementById('prepTicketSkipInput');
+            const textarea = document.getElementById('prepTicketSkipProducts');
+            if (!input || !textarea) return;
+
+            const value = input.value.trim();
+            if (!value) return;
+
+            const current = textToKeywords(textarea.value);
+            const valueKey = normalizeForPrep(value);
+            if (!current.some(item => normalizeForPrep(item) === valueKey)) {
+                current.push(value);
+                textarea.value = keywordsToText(current);
+            }
+            input.value = '';
         }
 
         function guessPanelForCategory(category) {
@@ -1625,7 +1699,9 @@
                 if (panelId) categoryOverrides[category] = panelId;
             });
 
-            return { panels, printers, categoryOverrides };
+            const ticketSkipProducts = textToKeywords(document.getElementById('prepTicketSkipProducts')?.value);
+
+            return { panels, printers, categoryOverrides, ticketSkipProducts };
         }
 
         function collectReceiptPrinterSettings() {
@@ -1777,6 +1853,7 @@
                 prep_printers: prepSettings.printers,
                 receipt_printer: receiptPrinter,
                 prep_category_overrides: prepSettings.categoryOverrides,
+                prep_ticket_skip_products: prepSettings.ticketSkipProducts,
                 mevcut_sifre: mevcutSifre
             };
 

@@ -25,6 +25,15 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 Kurulum `netsh interface portproxy` kullanir ve kalicidir. Windows yeniden baslasa bile
 kurallar durur; IP Helper servisi otomatik baslatilir.
 
+Kurulum tamamlaninca masaustune `FastFootPrinterBridge` kisayolu eklenir. Bu kisayol
+yonetici izni isteyerek bridge kurallarini yeniler ve test scriptini calistirir.
+
+Kisayolu elle olusturmak gerekirse:
+
+```powershell
+.\create_desktop_shortcut.ps1
+```
+
 ## Test
 
 ```powershell

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Restoran - Gün Sonu Z Raporu</title>
+    <title>Restoran - Gün Sonu Kalem Raporu</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
@@ -461,7 +461,7 @@
     <header class="header">
         <div class="header-left">
             <a href="/" class="back-btn">← Ana Sayfa</a>
-            <h1 class="page-title">🗂 Gün Sonu — Z Raporu</h1>
+            <h1 class="page-title">🗂 Gün Sonu — Kalem Özeti</h1>
         </div>
         <div class="header-right">
             <input type="date" class="date-selector" id="dateSelector">
@@ -491,7 +491,7 @@
                 <div class="stat-sub" id="statKartAdet">0 işlem</div>
             </div>
             <div class="stat-card count">
-                <div class="stat-label">Toplam Kalem</div>
+                <div class="stat-label">Kalem Çeşidi</div>
                 <div class="stat-value" id="statKalem">0</div>
                 <div class="stat-sub" id="statOtherPayments"></div>
             </div>
@@ -525,29 +525,27 @@
                 </div>
             </div>
 
-            <!-- Sağ: Satış detayları -->
+            <!-- Sağ: Ürün toplamları -->
             <div class="panel-card">
                 <div class="panel-header">
-                    <h3>🧾 Satış Kalemleri</h3>
-                    <span class="badge" id="detaySayi">0 kayıt</span>
+                    <h3>🧾 Kalem Toplamları</h3>
+                    <span class="badge" id="detaySayi">0 ürün</span>
                 </div>
                 <div class="detay-wrapper">
                     <table class="detay-table">
                         <thead>
                             <tr>
-                                <th>#</th>
                                 <th>Ürün</th>
-                                <th>Adet</th>
-                                <th>Fiyat</th>
-                                <th>Toplam</th>
-                                <th>Ödeme</th>
-                                <th>Fatura</th>
-                                <th>Saat</th>
+                                <th>Satış Adedi</th>
+                                <th>İkram</th>
+                                <th>Ortalama</th>
+                                <th>Satış Tutarı</th>
+                                <th>İkram Değeri</th>
                             </tr>
                         </thead>
                         <tbody id="detayBody">
                             <tr>
-                                <td colspan="8" class="empty-state"
+                                <td colspan="6" class="empty-state"
                                     style="padding:30px; text-align:center; color:var(--muted);">Yükleniyor...</td>
                             </tr>
                         </tbody>
@@ -677,29 +675,26 @@
                 if (!d.success) { showDetayError(d.error); return; }
 
                 const detay = d.detay || [];
-                document.getElementById('detaySayi').textContent = `${detay.length} kayıt`;
+                document.getElementById('detaySayi').textContent = `${detay.length} ürün`;
                 document.getElementById('statKalem').textContent = detay.length;
 
                 if (!detay.length) {
                     document.getElementById('detayBody').innerHTML =
-                        `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">🧾</div><p>Satış kaydı yok</p><span>${tarih} tarihinde satış bulunamadı</span></div></td></tr>`;
+                        `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">🧾</div><p>Satış kaydı yok</p><span>${tarih} tarihinde satış bulunamadı</span></div></td></tr>`;
                     return;
                 }
 
-                document.getElementById('detayBody').innerHTML = detay.map((s, i) => {
-                    const saat = formatSaat(s.tarih_saat);
-                    const isIkram = (s.tip || '') === 'ikram';
-                    const listeToplam = s.adet * s.fiyat;
-                    const toplam = isIkram ? 0 : listeToplam;
+                document.getElementById('detayBody').innerHTML = detay.map((s) => {
+                    const satisAdet = Number(s.satis_adet || 0);
+                    const ikramAdet = Number(s.ikram_adet || 0);
+                    const ikramToplam = Number(s.ikram_toplam || 0);
                     return `<tr>
-                    <td style="color:var(--muted);font-size:12px;">${i + 1}</td>
-                    <td style="font-weight:600;">${escHtml(s.urun)}${isIkram ? ' <span style="color:#fbbf24;font-size:11px;">(İkram)</span>' : ''}</td>
-                    <td style="text-align:center;">${s.adet}</td>
-                    <td>${formatTL(s.fiyat)}</td>
-                    <td class="tutar-cell">${isIkram ? `0,00 TL<br><span style="font-size:11px;color:var(--muted)">İkram ${formatTL(listeToplam)}</span>` : formatTL(toplam)}</td>
-                    <td><span class="odeme-badge ${getOdemeCls(s.odeme)}">${getOdemeEmoji(s.odeme)} ${escHtml(s.odeme)}</span></td>
-                    <td>${renderInvoiceCell(s)}</td>
-                    <td style="color:var(--muted);font-size:12px;font-family:monospace;">${saat}</td>
+                    <td style="font-weight:600;">${escHtml(s.urun)}</td>
+                    <td style="text-align:center;">${formatQty(satisAdet)}</td>
+                    <td style="text-align:center;">${ikramAdet > 0 ? formatQty(ikramAdet) : '-'}</td>
+                    <td>${formatTL(s.ortalama_fiyat || 0)}</td>
+                    <td class="tutar-cell">${formatTL(s.toplam || 0)}</td>
+                    <td>${ikramToplam > 0.01 ? `<span style="color:#fbbf24;font-weight:700;">${formatTL(ikramToplam)}</span>` : '<span style="color:var(--muted);">-</span>'}</td>
                 </tr>`;
                 }).join('');
 
@@ -714,12 +709,16 @@
         }
         function showDetayError(msg) {
             document.getElementById('detayBody').innerHTML =
-                `<tr><td colspan="8" style="padding:20px;text-align:center;color:#fca5a5;">⚠️ ${escHtml(msg)}</td></tr>`;
+                `<tr><td colspan="6" style="padding:20px;text-align:center;color:#fca5a5;">⚠️ ${escHtml(msg)}</td></tr>`;
         }
 
         // ── Yardımcılar ──
         function formatTL(n) {
             return Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TL';
+        }
+        function formatQty(n) {
+            const value = Number(n || 0);
+            return value.toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
         }
         function formatTarihGoster(str) {
             try {

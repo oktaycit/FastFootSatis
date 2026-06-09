@@ -15,9 +15,11 @@ let currentItems = [];
 let currentTotal = 0;
 let selectedItemIndices = [];
 let isSelectivePayment = false;
+let suppressCardSplitSync = false;
 let activeShift = null;
 let cashierOrderEntryOpen = false;
 const PAYMENT_METHODS = ['Nakit', 'Kredi Kartı', 'Açık Hesap'];
+const Z_REPORT_HOLD_MS = 5000;
 
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -154,6 +156,11 @@ const elements = {
     paymentNakit: null,
     paymentKart: null,
     paymentCari: null,
+    cardSplitPanel: null,
+    cardSplitSummary: null,
+    cardSplitRows: null,
+    btnAddCardSplit: null,
+    btnSplitCardsEqual: null,
     invoicePending: null,
     invoiceDocumentType: null,
     invoiceTaxId: null,
@@ -459,6 +466,63 @@ function setCashierOrderEntry(open) {
 
 function toggleCashierOrderEntry() {
     setCashierOrderEntry(!cashierOrderEntryOpen);
+}
+
+async function openGunsonuReport() {
+    try {
+        const response = await fetch('/api/auth/me?path=%2Fgunsonu');
+        const data = await response.json();
+        if (data.success && data.can_access_path) {
+            window.location.href = '/gunsonu';
+            return;
+        }
+        showNotification('Z raporunu sadece yönetici açabilir.', 'warning');
+    } catch (error) {
+        console.warn('Z raporu yetki kontrolü yapılamadı:', error);
+        window.location.href = '/gunsonu';
+    }
+}
+
+window.openGunsonuReport = openGunsonuReport;
+
+function setupZReportLongPress() {
+    const target = elements.companyName;
+    if (!target || target.dataset.zReportHoldReady === '1') return;
+
+    target.dataset.zReportHoldReady = '1';
+    let holdTimer = null;
+    let holdCompleted = false;
+
+    const clearHold = () => {
+        if (holdTimer) {
+            clearTimeout(holdTimer);
+            holdTimer = null;
+        }
+        target.classList.remove('z-report-hold-active');
+    };
+
+    const startHold = (event) => {
+        if (event.button !== undefined && event.button !== 0) return;
+        holdCompleted = false;
+        clearHold();
+        target.classList.add('z-report-hold-active');
+        holdTimer = setTimeout(() => {
+            holdTimer = null;
+            holdCompleted = true;
+            target.classList.remove('z-report-hold-active');
+            openGunsonuReport();
+        }, Z_REPORT_HOLD_MS);
+    };
+
+    target.addEventListener('pointerdown', startHold);
+    target.addEventListener('pointerup', clearHold);
+    target.addEventListener('pointercancel', clearHold);
+    target.addEventListener('pointerleave', clearHold);
+    target.addEventListener('contextmenu', (event) => {
+        if (holdTimer || holdCompleted) {
+            event.preventDefault();
+        }
+    });
 }
 
 /**
@@ -1339,6 +1403,211 @@ function cancelItem(uid, event) {
 /**
  * Split Payment Modal Functions
  */
+function moneyToCents(value) {
+    const parsed = parseFloat(value);
+    if (!Number.isFinite(parsed)) return 0;
+    return Math.max(0, Math.round(parsed * 100));
+}
+
+function centsToMoney(cents) {
+    return Math.max(0, cents) / 100;
+}
+
+function formatMoneyValue(value) {
+    return centsToMoney(moneyToCents(value)).toFixed(2);
+}
+
+function setMoneyInputValue(input, amount) {
+    if (!input) return;
+    const cents = moneyToCents(amount);
+    input.value = cents > 0 ? centsToMoney(cents).toFixed(2) : '';
+}
+
+function splitAmountEvenly(amount, count) {
+    const totalCents = moneyToCents(amount);
+    const splitCount = Math.max(1, parseInt(count, 10) || 1);
+    const base = Math.floor(totalCents / splitCount);
+    let remainder = totalCents % splitCount;
+
+    return Array.from({ length: splitCount }, () => {
+        const cents = base + (remainder > 0 ? 1 : 0);
+        if (remainder > 0) remainder -= 1;
+        return centsToMoney(cents);
+    });
+}
+
+function getCardSplitInputs() {
+    if (!elements.cardSplitRows) return [];
+    return Array.from(elements.cardSplitRows.querySelectorAll('.card-split-amount'));
+}
+
+function getCardSplitAmounts() {
+    return getCardSplitInputs().map(input => centsToMoney(moneyToCents(input.value)));
+}
+
+function getCardSplitTotal() {
+    return getCardSplitAmounts().reduce((sum, amount) => sum + amount, 0);
+}
+
+function updateCardSplitPanel() {
+    if (!elements.cardSplitPanel) return;
+
+    const kart = moneyToCents(elements.paymentKart?.value || 0);
+    const rows = getCardSplitInputs();
+    const hasCardPayment = kart > 0 || rows.length > 0;
+
+    elements.cardSplitPanel.style.display = hasCardPayment ? 'block' : 'none';
+    if (elements.cardSplitSummary) {
+        const rowCount = Math.max(rows.length, kart > 0 ? 1 : 0);
+        const total = centsToMoney(kart).toFixed(2);
+        elements.cardSplitSummary.textContent = rowCount > 1 ? `${rowCount} kart | ${total} TL` : `1 kart | ${total} TL`;
+    }
+
+    rows.forEach((input, index) => {
+        const row = input.closest('.card-split-row');
+        const label = row?.querySelector('.card-split-label');
+        const removeBtn = row?.querySelector('.card-split-remove');
+        if (label) label.textContent = `Kart ${index + 1}`;
+        if (removeBtn) removeBtn.disabled = rows.length <= 1;
+    });
+}
+
+function renderCardSplitRows(amounts = [], focusIndex = null) {
+    if (!elements.cardSplitRows) return;
+
+    elements.cardSplitRows.innerHTML = '';
+    amounts.forEach((amount, index) => {
+        const row = document.createElement('div');
+        row.className = 'card-split-row';
+
+        const label = document.createElement('span');
+        label.className = 'card-split-label';
+        label.textContent = `Kart ${index + 1}`;
+
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.step = '0.01';
+        input.min = '0';
+        input.className = 'card-split-amount';
+        input.value = formatMoneyValue(amount);
+        input.addEventListener('input', () => {
+            syncCardTotalFromSplitRows();
+            balancePaymentInputs(elements.paymentKart);
+        });
+        input.addEventListener('focus', () => input.select());
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'card-split-remove';
+        removeBtn.textContent = '×';
+        removeBtn.addEventListener('click', () => removeCardSplitRow(index));
+
+        row.appendChild(label);
+        row.appendChild(input);
+        row.appendChild(removeBtn);
+        elements.cardSplitRows.appendChild(row);
+    });
+
+    updateCardSplitPanel();
+
+    if (focusIndex !== null) {
+        const inputs = getCardSplitInputs();
+        const target = inputs[Math.max(0, Math.min(focusIndex, inputs.length - 1))];
+        if (target) {
+            target.focus();
+            target.select();
+        }
+    }
+}
+
+function syncCardTotalFromSplitRows() {
+    if (suppressCardSplitSync) return;
+    suppressCardSplitSync = true;
+    setMoneyInputValue(elements.paymentKart, getCardSplitTotal());
+    suppressCardSplitSync = false;
+    updateCardSplitPanel();
+}
+
+function syncCardSplitRowsToTotal() {
+    if (suppressCardSplitSync || !elements.cardSplitRows) return;
+
+    const totalCents = moneyToCents(elements.paymentKart?.value || 0);
+    const amounts = getCardSplitAmounts();
+
+    if (totalCents <= 0) {
+        renderCardSplitRows([]);
+        return;
+    }
+
+    if (amounts.length <= 1) {
+        renderCardSplitRows([centsToMoney(totalCents)]);
+        return;
+    }
+
+    const currentCents = amounts.map(moneyToCents);
+    const currentTotal = currentCents.reduce((sum, cents) => sum + cents, 0);
+    const delta = totalCents - currentTotal;
+    const nextCents = [...currentCents];
+    nextCents[nextCents.length - 1] += delta;
+
+    if (nextCents.some(cents => cents < 0)) {
+        renderCardSplitRows(splitAmountEvenly(centsToMoney(totalCents), amounts.length));
+        return;
+    }
+
+    renderCardSplitRows(nextCents.map(centsToMoney));
+}
+
+function addCardSplitRow() {
+    const total = centsToMoney(moneyToCents(elements.paymentKart?.value || 0));
+    if (total <= 0) {
+        showNotification('Önce kart tutarı giriniz.', 'warning');
+        return;
+    }
+
+    const amounts = getCardSplitAmounts();
+    if (amounts.length <= 1) {
+        renderCardSplitRows(splitAmountEvenly(total, 2), 1);
+        syncCardTotalFromSplitRows();
+        return;
+    }
+
+    const rowTotalCents = amounts.map(moneyToCents).reduce((sum, cents) => sum + cents, 0);
+    const remainingCents = Math.max(0, moneyToCents(total) - rowTotalCents);
+    renderCardSplitRows([...amounts, centsToMoney(remainingCents)], amounts.length);
+    syncCardTotalFromSplitRows();
+}
+
+function splitCardsEqual() {
+    const total = centsToMoney(moneyToCents(elements.paymentKart?.value || 0));
+    if (total <= 0) {
+        showNotification('Önce kart tutarı giriniz.', 'warning');
+        return;
+    }
+
+    const count = Math.max(2, getCardSplitInputs().length || 2);
+    renderCardSplitRows(splitAmountEvenly(total, count));
+    syncCardTotalFromSplitRows();
+}
+
+function removeCardSplitRow(index) {
+    const amounts = getCardSplitAmounts();
+    if (amounts.length <= 1) return;
+
+    amounts.splice(index, 1);
+    renderCardSplitRows(amounts);
+    syncCardTotalFromSplitRows();
+    balancePaymentInputs(elements.paymentKart);
+}
+
+function getCardPaymentParts() {
+    const splitAmounts = getCardSplitAmounts().filter(amount => moneyToCents(amount) > 0);
+    if (splitAmounts.length > 0) return splitAmounts;
+
+    const kart = centsToMoney(moneyToCents(elements.paymentKart?.value || 0));
+    return kart > 0 ? [kart] : [];
+}
+
 function checkVardiya() {
     const isTerminal = getTerminalRole() === 'terminal';
     if (isTerminal) return true; // Terminal restricts checkout via UI anyway
@@ -1518,6 +1787,7 @@ function openPaymentModal(prefillType = null, isSelective = false) {
     if (selectedPaymentMethod === 'Nakit') elements.paymentNakit.value = itemsTotal.toFixed(2);
     if (selectedPaymentMethod === 'Kredi Kartı') elements.paymentKart.value = itemsTotal.toFixed(2);
     if (selectedPaymentMethod === 'Açık Hesap') elements.paymentCari.value = itemsTotal.toFixed(2);
+    syncCardSplitRowsToTotal();
 
     elements.customerSearch.value = '';
     elements.selectedCustomer.value = '';
@@ -1605,6 +1875,7 @@ function handlePaymentInputFocus(input) {
         if (fullInput && Math.abs(otherTotal - total) < 0.01) {
             fullInput.value = '';
             input.value = total.toFixed(2);
+            syncCardSplitRowsToTotal();
             updateRemainingAmount();
             input.select();
             return;
@@ -1614,6 +1885,7 @@ function handlePaymentInputFocus(input) {
 
         if (remaining > 0) {
             input.value = remaining.toFixed(2);
+            syncCardSplitRowsToTotal();
             updateRemainingAmount();
             input.select();
         }
@@ -1648,6 +1920,9 @@ function balancePaymentInputs(changedInput) {
             item.el.value = newVal > 0.001 ? newVal.toFixed(2) : '';
             excess -= reduceBy;
         }
+    }
+    if (changedInput !== elements.paymentKart) {
+        syncCardSplitRowsToTotal();
     }
     updateRemainingAmount();
 }
@@ -1707,28 +1982,38 @@ function selectCustomer(name, isNew = false) {
 }
 
 function finalizeSplitPayment() {
-    const nakit = parseFloat(elements.paymentNakit.value) || 0;
-    const kart = parseFloat(elements.paymentKart.value) || 0;
-    const cari = parseFloat(elements.paymentCari.value) || 0;
+    const nakit = centsToMoney(moneyToCents(elements.paymentNakit.value));
+    const cardPayments = getCardPaymentParts();
+    const kart = cardPayments.reduce((sum, amount) => sum + amount, 0);
+    const cari = centsToMoney(moneyToCents(elements.paymentCari.value));
 
-    const total = nakit + kart + cari;
+    const totalCents = moneyToCents(nakit) + moneyToCents(kart) + moneyToCents(cari);
 
-    if (total === 0) {
+    if (totalCents === 0) {
         showNotification('Ödeme tutarı girilmedi!', 'warning');
         return;
     }
 
     const paymentTotal = getCurrentPaymentTotal();
+    const paymentTotalCents = moneyToCents(paymentTotal);
 
-    if (Math.abs(total - paymentTotal) > 0.01 && !isSelectivePayment) {
-        if (!confirm(`Girilen toplam (${total.toFixed(2)}) sipariş tutarından (${paymentTotal.toFixed(2)}) farklı. Devam etmek istiyor musunuz?`)) {
-            return;
-        }
+    if (Math.abs(totalCents - paymentTotalCents) > 1) {
+        showNotification(
+            `Girilen toplam (${centsToMoney(totalCents).toFixed(2)} TL), ödenecek tutarla (${centsToMoney(paymentTotalCents).toFixed(2)} TL) eşleşmeli.`,
+            'warning'
+        );
+        return;
     }
 
     const payments = [];
     if (nakit > 0) payments.push({ type: 'Nakit', amount: nakit });
-    if (kart > 0) payments.push({ type: 'Kredi Kartı', amount: kart });
+    cardPayments.forEach((amount, index) => {
+        payments.push({
+            type: 'Kredi Kartı',
+            amount: centsToMoney(moneyToCents(amount)),
+            description: cardPayments.length > 1 ? `Kredi Kartı ${index + 1}` : 'Kredi Kartı'
+        });
+    });
     if (cari > 0) {
         const customer = elements.selectedCustomer.value;
         if (!customer) {
@@ -1808,6 +2093,8 @@ function processPayment(type) {
  * Event listeners setup
  */
 function setupEventListeners() {
+    setupZReportLongPress();
+
     if (elements.btnTotalPayment) {
         elements.btnTotalPayment.onclick = () => {
             if (!currentMasa) {
@@ -1882,6 +2169,14 @@ function setupEventListeners() {
         elements.btnFinalizePayment.onclick = () => finalizeSplitPayment();
     }
 
+    if (elements.btnAddCardSplit) {
+        elements.btnAddCardSplit.onclick = () => addCardSplitRow();
+    }
+
+    if (elements.btnSplitCardsEqual) {
+        elements.btnSplitCardsEqual.onclick = () => splitCardsEqual();
+    }
+
     if (elements.invoicePending) {
         elements.invoicePending.onchange = () => {
             const enabled = elements.invoicePending.checked;
@@ -1912,6 +2207,8 @@ function setupEventListeners() {
     if (elements.paymentKart) {
         elements.paymentKart.oninput = () => {
             balancePaymentInputs(elements.paymentKart);
+            syncCardSplitRowsToTotal();
+            updateRemainingAmount();
         };
         elements.paymentKart.onfocus = () => handlePaymentInputFocus(elements.paymentKart);
     }

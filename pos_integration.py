@@ -18,6 +18,12 @@ except ImportError:
                 "requests modülü yüklü değil; POS/ÖKC bridge için requirements.txt kurulmalı"
             )
 
+        @staticmethod
+        def get(*args, **kwargs):
+            raise _MissingRequests.RequestException(
+                "requests modülü yüklü değil; POS/ÖKC bridge için requirements.txt kurulmalı"
+            )
+
     requests = _MissingRequests
 
 logger = logging.getLogger(__name__)
@@ -209,10 +215,11 @@ class POSManager:
         if amount <= 0:
             return None
 
-        payment_name = str(payment.get("type") or "Kredi Kartı").strip()
+        payment_type_name = str(payment.get("type") or "Kredi Kartı").strip()
+        payment_name = str(payment.get("description") or payment_type_name).strip()
         token_type = payment.get("token_type")
         if token_type is None:
-            token_type = self.PAYMENT_TYPE_CODES.get(payment_name.lower(), 3)
+            token_type = self.PAYMENT_TYPE_CODES.get(payment_type_name.lower(), 3)
 
         return {
             "description": payment_name,
