@@ -137,6 +137,12 @@
             letter-spacing: 0.5px;
         }
 
+        .panel-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
         .add-btn {
             background: rgba(255, 255, 255, 0.2);
             border: 1px solid rgba(255, 255, 255, 0.3);
@@ -152,6 +158,23 @@
 
         .add-btn:hover {
             background: rgba(255, 255, 255, 0.35);
+        }
+
+        .import-btn {
+            background: rgba(15, 23, 42, 0.24);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s;
+        }
+
+        .import-btn:hover {
+            background: rgba(15, 23, 42, 0.42);
         }
 
         .search-box {
@@ -538,6 +561,10 @@
             animation: slideUp 0.25s ease;
         }
 
+        .modal-wide {
+            width: 520px;
+        }
+
         @keyframes slideUp {
             from {
                 opacity: 0;
@@ -593,6 +620,38 @@
             background: var(--surface);
         }
 
+        .import-note {
+            background: rgba(99, 102, 241, 0.1);
+            border: 1px solid rgba(99, 102, 241, 0.22);
+            border-radius: 8px;
+            color: #c7d2fe;
+            font-size: 12px;
+            line-height: 1.5;
+            padding: 10px 12px;
+        }
+
+        .import-result {
+            display: none;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 13px;
+            line-height: 1.5;
+            margin-top: 12px;
+            max-height: 160px;
+            overflow: auto;
+            padding: 10px 12px;
+        }
+
+        .import-result strong {
+            color: #c7d2fe;
+        }
+
+        .import-result .error-line {
+            color: #fca5a5;
+        }
+
         .modal-actions {
             display: flex;
             gap: 10px;
@@ -616,6 +675,12 @@
         .btn-primary:hover {
             opacity: 0.9;
             transform: translateY(-1px);
+        }
+
+        .btn-primary:disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+            transform: none;
         }
 
         .btn-cancel {
@@ -667,6 +732,12 @@
             background: #7f1d1d;
             color: #fca5a5;
             border: 1px solid #ef4444;
+        }
+
+        .toast.info {
+            background: #1e3a8a;
+            color: #bfdbfe;
+            border: 1px solid #3b82f6;
         }
 
         /* Scrollbar */
@@ -727,7 +798,10 @@
             <div class="panel-card">
                 <div class="panel-header">
                     <h2>👥 Müşteri Listesi</h2>
-                    <button class="add-btn" onclick="showAddModal()">+ Yeni</button>
+                    <div class="panel-actions">
+                        <button class="import-btn" onclick="showImportModal()">CSV</button>
+                        <button class="add-btn" onclick="showAddModal()">+ Yeni</button>
+                    </div>
                 </div>
                 <div class="search-box">
                     <input type="text" id="searchInput" placeholder="🔍 Müşteri ara..." oninput="filterList()">
@@ -802,6 +876,25 @@
         </div>
     </div>
 
+    <!-- MODAL: CSV İçe Aktar -->
+    <div class="modal-overlay" id="importModal">
+        <div class="modal modal-wide">
+            <h3>CSV İçe Aktar</h3>
+            <div class="form-group">
+                <label>CSV Dosyası</label>
+                <input type="file" id="cariCsvFile" accept=".csv,text/csv">
+            </div>
+            <div class="import-note">
+                Kolonlar: cari_isim, telefon, adres, devreden_borc. Bakiye ve devreden_alacak kolonları da desteklenir.
+            </div>
+            <div class="import-result" id="importResult"></div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeModal('importModal')">İptal</button>
+                <button class="btn-primary" id="importSubmitBtn" onclick="submitCsvImport()">İçe Aktar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL: Yeni Müşteri -->
     <div class="modal-overlay" id="addModal">
         <div class="modal">
@@ -817,6 +910,11 @@
             <div class="form-group">
                 <label>Adres</label>
                 <input type="text" id="newCariAdres" placeholder="Müşteri adresi..." autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label>Devreden Bakiye (TL)</label>
+                <input type="text" id="newCariDevir" inputmode="decimal" placeholder="Borç: 1500, Alacak: -250"
+                    autocomplete="off">
             </div>
             <div class="modal-actions">
                 <button class="btn-cancel" onclick="closeModal('addModal')">İptal</button>
@@ -898,8 +996,9 @@
                 if (b < 0) { badgeCls = 'bakiye-alacak'; badgeTxt = `✅ ${formatTL(Math.abs(b))}`; }
                 const active = selectedCari === h.cari_isim ? 'active' : '';
                 const tarih = h.olusturma_tarihi ? h.olusturma_tarihi.split('T')[0] : '';
+                const cariArg = escAttr(JSON.stringify(h.cari_isim));
                 return `
-                <div class="cari-item ${active}" onclick="selectCari('${escHtml(h.cari_isim)}')">
+                <div class="cari-item ${active}" onclick="selectCari(${cariArg})">
                     <div class="cari-item-info">
                         <div class="cari-item-name">${escHtml(h.cari_isim)}</div>
                         ${tarih ? `<div class="cari-item-date">📅 ${tarih}</div>` : ''}
@@ -911,14 +1010,19 @@
 
         function filterList() {
             const q = document.getElementById('searchInput').value.toLowerCase();
-            renderList(allHesaplar.filter(h => h.cari_isim.toLowerCase().includes(q)));
+            renderList(allHesaplar.filter(h => {
+                const searchable = `${h.cari_isim || ''} ${h.telefon || ''} ${h.adres || ''}`.toLowerCase();
+                return searchable.includes(q);
+            }));
         }
 
         // ── Hesap Seç ──
         async function selectCari(isim) {
+            selectedCari = isim;
             renderList(allHesaplar.filter(h => {
                 const q = document.getElementById('searchInput').value.toLowerCase();
-                return h.cari_isim.toLowerCase().includes(q) || (h.telefon && h.telefon.includes(q));
+                const searchable = `${h.cari_isim || ''} ${h.telefon || ''} ${h.adres || ''}`.toLowerCase();
+                return searchable.includes(q);
             }));
 
             const customer = allHesaplar.find(h => h.cari_isim === isim);
@@ -937,8 +1041,8 @@
                 // İletişim bilgileri
                 const contactEl = document.getElementById('detailContact');
                 contactEl.innerHTML = '';
-                if (customer.telefon) contactEl.innerHTML += `📞 ${customer.telefon} `;
-                if (customer.adres) contactEl.innerHTML += `<br>🏠 ${customer.adres}`;
+                if (customer && customer.telefon) contactEl.innerHTML += `📞 ${escHtml(customer.telefon)} `;
+                if (customer && customer.adres) contactEl.innerHTML += `<br>🏠 ${escHtml(customer.adres)}`;
 
                 const b = d.bakiye;
                 const bEl = document.getElementById('detailBakiye');
@@ -972,11 +1076,85 @@
             }
         }
 
+        // ── CSV İçe Aktar ──
+        function showImportModal() {
+            document.getElementById('cariCsvFile').value = '';
+            const resultEl = document.getElementById('importResult');
+            resultEl.style.display = 'none';
+            resultEl.innerHTML = '';
+            document.getElementById('importModal').classList.add('show');
+        }
+
+        async function submitCsvImport() {
+            const input = document.getElementById('cariCsvFile');
+            const file = input.files && input.files[0];
+            if (!file) { showToast('CSV dosyası seçin', 'error'); return; }
+
+            const btn = document.getElementById('importSubmitBtn');
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = 'Aktarılıyor...';
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const r = await fetch('/api/cari/import_csv', {
+                    method: 'POST',
+                    body: formData
+                });
+                const d = await r.json();
+                renderImportResult(d);
+
+                if (d.success) {
+                    showToast(`${d.imported} cari aktarıldı`, 'success');
+                    await loadHesaplar();
+                    if (selectedCari && allHesaplar.some(h => h.cari_isim === selectedCari)) {
+                        await selectCari(selectedCari);
+                    }
+                } else {
+                    showToast(d.error || 'CSV aktarılamadı', 'error');
+                }
+            } catch (e) {
+                showToast('CSV aktarımında bağlantı hatası', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        }
+
+        function renderImportResult(data) {
+            const el = document.getElementById('importResult');
+            const errors = data.errors || [];
+            const lines = [
+                `<strong>Aktarılan cari:</strong> ${Number(data.imported || 0)}`,
+                `<strong>Devreden bakiye:</strong> ${Number(data.with_devir || 0)}`,
+                `<strong>Atlanan satır:</strong> ${Number(data.skipped || 0)}`
+            ];
+
+            if (data.error && !data.success) {
+                lines.push(`<span class="error-line">${escHtml(data.error)}</span>`);
+            }
+            if (errors.length) {
+                lines.push('<strong>İlk hatalar:</strong>');
+                errors.forEach(err => {
+                    lines.push(`<span class="error-line">Satır ${escHtml(err.line)}: ${escHtml(err.error)}</span>`);
+                });
+                if (Number(data.error_count || 0) > errors.length) {
+                    lines.push(`<span class="error-line">+${Number(data.error_count) - errors.length} hata daha</span>`);
+                }
+            }
+
+            el.innerHTML = lines.join('<br>');
+            el.style.display = 'block';
+        }
+
         // ── Yeni Müşteri ──
         function showAddModal() {
             document.getElementById('newCariIsim').value = '';
             document.getElementById('newCariTelefon').value = '';
             document.getElementById('newCariAdres').value = '';
+            document.getElementById('newCariDevir').value = '';
             document.getElementById('addModal').classList.add('show');
             setTimeout(() => document.getElementById('newCariIsim').focus(), 100);
         }
@@ -985,30 +1163,27 @@
             const isim = document.getElementById('newCariIsim').value.trim();
             const telefon = document.getElementById('newCariTelefon').value.trim();
             const adres = document.getElementById('newCariAdres').value.trim();
+            const devredenBakiye = document.getElementById('newCariDevir').value.trim();
 
             if (!isim) { showToast('Müşteri adı boş olamaz', 'error'); return; }
             try {
-                // 1. Hesabı oluştur
                 const r = await fetch('/api/cari/hesap', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cari_isim: isim })
+                    body: JSON.stringify({
+                        cari_isim: isim,
+                        telefon,
+                        adres,
+                        devreden_bakiye: devredenBakiye
+                    })
                 });
                 const d = await r.json();
 
                 if (d.success) {
-                    // 2. Detayları güncelle (varsa)
-                    if (telefon || adres) {
-                        await fetch('/api/cari/update_details', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ cari_isim: isim, telefon, adres })
-                        });
-                    }
-
                     showToast(`"${isim}" eklendi`, 'success');
                     closeModal('addModal');
                     await loadHesaplar();
+                    await selectCari(isim);
                 } else {
                     showToast(d.error || 'Hata', 'error');
                 }
@@ -1081,6 +1256,7 @@
         }
 
         function escHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+        function escAttr(s) { return escHtml(s).replace(/'/g, '&#39;'); }
 
         function showToast(msg, type = 'success') {
             const t = document.getElementById('toast');

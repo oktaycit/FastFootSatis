@@ -14,6 +14,7 @@ import json
 import os
 import sys
 import io
+import csv
 import logging
 import socket
 import subprocess
@@ -4650,6 +4651,135 @@ def get_gunsonu_detay():
 
 # ==================== CARİ İŞLEMLER API ====================
 
+def _normalize_csv_key(value):
+    text = str(value or "").strip().lower()
+    tr_map = str.maketrans({
+        "ç": "c", "ğ": "g", "ı": "i", "ö": "o", "ş": "s", "ü": "u",
+        "Ç": "c", "Ğ": "g", "İ": "i", "I": "i", "Ö": "o", "Ş": "s", "Ü": "u",
+    })
+    text = text.translate(tr_map)
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = re.sub(r"[^a-z0-9]+", "_", text)
+    return text.strip("_")
+
+
+def _csv_aliases(*names):
+    return {_normalize_csv_key(name) for name in names}
+
+
+CARI_CSV_FIELDS = {
+    "cari_isim": _csv_aliases(
+        "cari_isim", "cari isim", "cari adı", "cari adi", "cari ad",
+        "müşteri", "musteri", "müşteri adı", "musteri adi", "musteri_adi",
+        "müşteri ünvanı", "musteri unvani", "ad soyad", "ad_soyad",
+        "adı soyadı", "adi soyadi", "isim", "unvan", "ünvan", "firma"
+    ),
+    "telefon": _csv_aliases(
+        "telefon", "tel", "gsm", "cep", "cep telefonu", "telefon no",
+        "telefon_no", "tel no", "tel_no", "cep tel", "cep_tel",
+        "telefon numarası", "telefon numarasi", "phone"
+    ),
+    "adres": _csv_aliases(
+        "adres", "address", "müşteri adresi", "musteri adresi",
+        "teslimat adresi", "teslimat_adresi"
+    ),
+    "devreden_borc": _csv_aliases(
+        "devreden borç", "devreden borc", "devreden_borc", "devir borcu",
+        "devir_borcu", "önceki borç", "onceki borc", "eski borç",
+        "eski borc", "borç", "borc", "borcu"
+    ),
+    "devreden_alacak": _csv_aliases(
+        "devreden alacak", "devreden_alacak", "alacak", "alacağı",
+        "alacagi", "credit"
+    ),
+    "bakiye": _csv_aliases(
+        "bakiye", "balance", "devreden bakiye", "devreden_bakiye",
+        "devir", "devreden"
+    ),
+}
+
+
+def _decode_csv_upload(raw_bytes):
+    for encoding in ("utf-8-sig", "utf-8", "cp1254", "iso-8859-9", "latin-1"):
+        try:
+            return raw_bytes.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw_bytes.decode("utf-8", errors="replace")
+
+
+def _detect_csv_delimiter(text):
+    sample = text[:4096]
+    try:
+        return csv.Sniffer().sniff(sample, delimiters=",;\t|").delimiter
+    except csv.Error:
+        counts = {delimiter: sample.count(delimiter) for delimiter in [",", ";", "\t", "|"]}
+        return max(counts, key=counts.get) if max(counts.values()) > 0 else ","
+
+
+def _row_value(row, field_name):
+    aliases = CARI_CSV_FIELDS[field_name]
+    for key, value in row.items():
+        if _csv_key_matches(key, aliases):
+            return str(value or "").strip()
+    return ""
+
+
+def _csv_key_matches(key, aliases):
+    normalized = _normalize_csv_key(key)
+    return any(
+        normalized == alias
+        or normalized.startswith(f"{alias}_")
+        or normalized.endswith(f"_{alias}")
+        for alias in aliases
+    )
+
+
+def _parse_csv_money(value):
+    if value is None:
+        return 0.0
+    text = str(value).strip()
+    if not text:
+        return 0.0
+
+    is_negative = text.startswith("-") or (text.startswith("(") and text.endswith(")"))
+    cleaned = re.sub(r"[^0-9,.\-]", "", text).replace("-", "")
+    if not cleaned:
+        return 0.0
+
+    last_comma = cleaned.rfind(",")
+    last_dot = cleaned.rfind(".")
+    if last_comma >= 0 and last_dot >= 0:
+        if last_comma > last_dot:
+            cleaned = cleaned.replace(".", "").replace(",", ".")
+        else:
+            cleaned = cleaned.replace(",", "")
+    elif last_comma >= 0:
+        decimal_len = len(cleaned) - last_comma - 1
+        cleaned = cleaned.replace(".", "")
+        cleaned = cleaned.replace(",", ".") if decimal_len in (1, 2) else cleaned.replace(",", "")
+    else:
+        parts = cleaned.split(".")
+        if len(parts) > 2:
+            if all(len(part) == 3 for part in parts[1:]):
+                cleaned = "".join(parts)
+            else:
+                cleaned = "".join(parts[:-1]) + "." + parts[-1]
+        elif len(parts) == 2 and len(parts[1]) == 3:
+            cleaned = "".join(parts)
+
+    try:
+        amount = float(cleaned)
+    except ValueError:
+        return 0.0
+    return -amount if is_negative else amount
+
+
+def _has_csv_column(fieldnames, field_name):
+    aliases = CARI_CSV_FIELDS[field_name]
+    return any(_csv_key_matches(field, aliases) for field in (fieldnames or []))
+
 @app.route('/api/cari/hesaplar')
 def get_cari_hesaplar():
     """Tüm cari hesapları döndür"""
@@ -4662,6 +4792,8 @@ def get_cari_hesaplar():
             result.append({
                 'id': h['id'],
                 'cari_isim': h['cari_isim'],
+                'telefon': h.get('telefon') or '',
+                'adres': h.get('adres') or '',
                 'bakiye': float(h['bakiye']),
                 'olusturma_tarihi': str(h['olusturma_tarihi']) if h['olusturma_tarihi'] else ''
             })
@@ -4726,6 +4858,89 @@ def add_cari_islem():
     except Exception as e:
         logger.error(f"Cari işlem hatası: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/cari/import_csv', methods=['POST'])
+def import_cari_csv():
+    """CSV dosyasından cari hesapları ve devreden bakiyeleri aktar."""
+    if not USE_DATABASE:
+        return jsonify({'success': False, 'error': 'Veri tabanı bağlantısı yok'}), 503
+
+    upload = request.files.get('file')
+    if not upload or not upload.filename:
+        return jsonify({'success': False, 'error': 'CSV dosyası seçilmedi'}), 400
+
+    raw = upload.read()
+    if not raw:
+        return jsonify({'success': False, 'error': 'CSV dosyası boş'}), 400
+
+    text = _decode_csv_upload(raw)
+    delimiter = _detect_csv_delimiter(text)
+    reader = csv.DictReader(io.StringIO(text), delimiter=delimiter)
+    if not reader.fieldnames:
+        return jsonify({'success': False, 'error': 'CSV başlık satırı bulunamadı'}), 400
+    if not _has_csv_column(reader.fieldnames, 'cari_isim'):
+        return jsonify({
+            'success': False,
+            'error': 'CSV içinde müşteri adı kolonu bulunamadı. Örn: cari_isim, musteri_adi, isim, unvan'
+        }), 400
+
+    has_borc = _has_csv_column(reader.fieldnames, 'devreden_borc')
+    has_alacak = _has_csv_column(reader.fieldnames, 'devreden_alacak')
+    has_bakiye = _has_csv_column(reader.fieldnames, 'bakiye')
+
+    imported = 0
+    with_devir = 0
+    skipped = 0
+    errors = []
+
+    for line_no, row in enumerate(reader, start=2):
+        if not any(str(value or '').strip() for value in row.values()):
+            skipped += 1
+            continue
+
+        cari_isim = _row_value(row, 'cari_isim')
+        if not cari_isim:
+            skipped += 1
+            errors.append({'line': line_no, 'error': 'Müşteri adı boş'})
+            continue
+
+        telefon = _row_value(row, 'telefon') or None
+        adres = _row_value(row, 'adres') or None
+
+        if has_borc or has_alacak:
+            devreden_bakiye = _parse_csv_money(_row_value(row, 'devreden_borc'))
+            devreden_bakiye -= _parse_csv_money(_row_value(row, 'devreden_alacak'))
+        elif has_bakiye:
+            devreden_bakiye = _parse_csv_money(_row_value(row, 'bakiye'))
+        else:
+            devreden_bakiye = 0.0
+
+        try:
+            db.get_or_create_cari(cari_isim)
+            if telefon or adres:
+                db.update_cari_details(cari_isim, telefon, adres)
+            if abs(devreden_bakiye) >= 0.01:
+                islem = 'borc' if devreden_bakiye > 0 else 'odeme'
+                db.save_cari_transaction(cari_isim, islem, round(devreden_bakiye, 2))
+                with_devir += 1
+            imported += 1
+        except Exception as e:
+            errors.append({'line': line_no, 'error': str(e)})
+
+    logger.info(
+        f"📥 Cari CSV aktarımı: {imported} hesap, {with_devir} devreden bakiye, "
+        f"{skipped} atlanan satır, {len(errors)} hata"
+    )
+    return jsonify({
+        'success': imported > 0,
+        'imported': imported,
+        'with_devir': with_devir,
+        'skipped': skipped,
+        'errors': errors[:20],
+        'error_count': len(errors),
+        'error': None if imported > 0 else 'Aktarılacak geçerli satır bulunamadı'
+    }), 200 if imported > 0 else 400
 
 # ==================== KASA VE VARDIYA API ====================
 
@@ -4837,11 +5052,24 @@ def add_cari_hesap():
     cari_isim = data.get('cari_isim', '').strip()
     if not cari_isim:
         return jsonify({'success': False, 'error': 'Müşteri adı boş olamaz'}), 400
+
+    telefon = (data.get('telefon') or '').strip() or None
+    adres = (data.get('adres') or '').strip() or None
+    raw_devreden = data.get('devreden_bakiye', '')
+    raw_devreden_text = str(raw_devreden or '').strip()
+    if raw_devreden_text and not re.search(r'\d', raw_devreden_text):
+        return jsonify({'success': False, 'error': 'Geçerli devreden bakiye girin'}), 400
+    devreden_bakiye = _parse_csv_money(raw_devreden_text) if raw_devreden_text else 0.0
     
     try:
         db.get_or_create_cari(cari_isim)
+        if telefon or adres:
+            db.update_cari_details(cari_isim, telefon, adres)
+        if abs(devreden_bakiye) >= 0.01:
+            islem = 'borc' if devreden_bakiye > 0 else 'odeme'
+            db.save_cari_transaction(cari_isim, islem, round(devreden_bakiye, 2))
         logger.info(f"👤 Yeni cari hesap: {cari_isim}")
-        return jsonify({'success': True})
+        return jsonify({'success': True, 'devreden_bakiye': devreden_bakiye})
     except Exception as e:
         logger.error(f"Cari hesap oluşturma hatası: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500

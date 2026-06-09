@@ -1812,7 +1812,7 @@ function setupEventListeners() {
 
     if (elements.btnCari) {
         elements.btnCari.onclick = () => {
-            showNotification('Cari yönetimi özelliği yakında eklenecek!', 'info');
+            window.location.href = '/cari';
         };
     }
 
