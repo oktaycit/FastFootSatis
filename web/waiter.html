@@ -2056,7 +2056,7 @@
                         return;
                     }
                     if (grillOrderInfo) {
-                        addGrillToBasket(grillOrderInfo, currentCategory);
+                        await addGrillToBasket(grillOrderInfo, currentCategory);
                     } else if (card.type === 'portion-group') {
                         await addPortionGroupToBasket(card.name, card.variants, currentCategory);
                     } else {
@@ -2170,11 +2170,24 @@
             });
         }
 
-        function addGrillToBasket(grillOrderInfo, category = '') {
+        async function addGrillToBasket(grillOrderInfo, category = '') {
             if (!grillOrderInfo || !grillOrderInfo.name) return;
+            const variants = GRILL_PORTION_VALUES.map(value => ({
+                type: Math.abs(value - 0.5) < 0.001 ? 'half' : (Math.abs(value - 1.5) < 0.001 ? 'onehalf' : 'full'),
+                baseName: grillOrderInfo.name,
+                synthetic: true,
+                item: [
+                    value === 1 ? grillOrderInfo.name : `${grillOrderInfo.name} (${formatPortionAmount(value)} porsiyon)`,
+                    roundMoney(grillOrderInfo.basePrice * value)
+                ]
+            }));
+            const selectedVariant = await choosePortionVariant(grillOrderInfo.name, variants);
+            if (!selectedVariant) return;
+
+            const portionAmount = getPortionVariantUnitMultiplier(selectedVariant);
             addToBasket(grillOrderInfo.name, grillOrderInfo.basePrice, category, {
                 quantity: 1,
-                portionAmount: 1,
+                portionAmount,
                 basePrice: grillOrderInfo.basePrice,
                 portionSelectable: true
             });
