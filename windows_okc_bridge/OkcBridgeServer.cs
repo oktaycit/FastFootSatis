@@ -26,12 +26,16 @@ namespace FastFootOkcBridge
         private static readonly object FiscalInfoLock = new object();
         // Eşzamanlı satış isteklerini engelle — ÖKC aynı anda tek işlem yapabilir
         private static readonly SemaphoreSlim SaleLock = new SemaphoreSlim(1, 1);
+        private static readonly DateTime BridgeStartedAt = DateTime.Now;
 
         private static volatile bool _deviceConnected;
         private static volatile bool _deviceStateKnown;
         private static volatile bool _fiscalInfoLoaded;
+        private static volatile int _lastSerialCallbackType = -1;
         private static string _lastDeviceId = "";
         private static string _lastFiscalInfo = "";
+        private static string _lastDeviceStateAt = "";
+        private static string _lastSerialCallbackAt = "";
 
         private sealed class PendingSale
         {
@@ -71,16 +75,35 @@ namespace FastFootOkcBridge
             Console.WriteLine(string.Format("FastFood OKC Bridge dinliyor: {0}", prefix));
             Console.WriteLine("Endpointler: GET /health, POST /api/sale, GET /api/fiscal-info");
             Console.WriteLine("Cikis icin Ctrl+C.");
+            Console.WriteLine("Not: deviceStateKnown=false ise IntegrationHub cihaz state callback'i henuz gelmemistir; satis yine de denenir.");
 
             var listenerThread = new Thread(delegate() { ListenForRequests(listener); });
             listenerThread.IsBackground = true;
             listenerThread.Start();
+
+            StartCallbackWatchdog();
 
             while (true)
             {
                 Application.DoEvents();
                 Thread.Sleep(10);  // 50ms → 10ms: Callback tepki süresini iyileştir
             }
+        }
+
+        private static void StartCallbackWatchdog()
+        {
+            var watchdogThread = new Thread(delegate()
+            {
+                Thread.Sleep(30000);
+                if (!_deviceStateKnown)
+                {
+                    Console.WriteLine(string.Format(
+                        "{0:yyyy-MM-dd HH:mm:ss} UYARI: OKC cihaz state callback'i henuz gelmedi. USB init loglari gorunuyorsa satis yine de sendBasket ile denenecek.",
+                        DateTime.Now));
+                }
+            });
+            watchdogThread.IsBackground = true;
+            watchdogThread.Start();
         }
 
         private static void ListenForRequests(HttpListener listener)
@@ -123,6 +146,7 @@ namespace FastFootOkcBridge
             _deviceStateKnown = true;
             _deviceConnected = isConnected;
             _lastDeviceId = id ?? "";
+            _lastDeviceStateAt = FormatTimestamp(DateTime.Now);
             if (!isConnected)
             {
                 _fiscalInfoLoaded = false;
@@ -133,6 +157,8 @@ namespace FastFootOkcBridge
 
         private static void SerialInCallback(int type, string value)
         {
+            _lastSerialCallbackType = type;
+            _lastSerialCallbackAt = FormatTimestamp(DateTime.Now);
             Console.WriteLine(string.Format("{0:yyyy-MM-dd HH:mm:ss} OKC callback type={1}", DateTime.Now, type));
 
             if (type == 3)
@@ -184,9 +210,14 @@ namespace FastFootOkcBridge
                     {
                         { "success", true },
                         { "bridgeReady", true },
+                        { "bridgeStartedAt", FormatTimestamp(BridgeStartedAt) },
+                        { "uptimeSeconds", Convert.ToInt32((DateTime.Now - BridgeStartedAt).TotalSeconds) },
                         { "deviceStateKnown", _deviceStateKnown },
                         { "deviceConnected", _deviceConnected },
                         { "deviceId", _lastDeviceId },
+                        { "lastDeviceStateAt", _lastDeviceStateAt },
+                        { "lastSerialCallbackAt", _lastSerialCallbackAt },
+                        { "lastSerialCallbackType", _lastSerialCallbackType },
                         { "pendingSales", PendingSales.Count },
                         { "message", GetDeviceStatusMessage() }
                     });
@@ -199,8 +230,13 @@ namespace FastFootOkcBridge
                     {
                         { "success", true },
                         { "bridgeReady", true },
+                        { "bridgeStartedAt", FormatTimestamp(BridgeStartedAt) },
+                        { "uptimeSeconds", Convert.ToInt32((DateTime.Now - BridgeStartedAt).TotalSeconds) },
                         { "deviceStateKnown", _deviceStateKnown },
                         { "deviceConnected", _deviceConnected },
+                        { "lastDeviceStateAt", _lastDeviceStateAt },
+                        { "lastSerialCallbackAt", _lastSerialCallbackAt },
+                        { "lastSerialCallbackType", _lastSerialCallbackType },
                         { "fiscalInfo", _lastFiscalInfo },
                         { "message", "Live fiscalInfo sorgusu kapali; POS DLL bu cagriyi bazi kurulumlarda sonlandirabiliyor." }
                     });
@@ -237,6 +273,11 @@ namespace FastFootOkcBridge
             }
 
             return _deviceConnected ? "OKC cihazi bagli." : "OKC cihazi bagli degil.";
+        }
+
+        private static string FormatTimestamp(DateTime value)
+        {
+            return value.ToString("yyyy-MM-dd HH:mm:ss");
         }
 
         private static void HandleSale(HttpListenerContext context)
@@ -296,6 +337,7 @@ namespace FastFootOkcBridge
                         { "success", false },
                         { "message", "IntegrationHub sendBasket basarisiz dondu" },
                         { "sendStatus", sendStatus },
+                        { "deviceStateKnown", _deviceStateKnown },
                         { "deviceConnected", _deviceConnected }
                     }, 502);
                     return;
@@ -310,6 +352,7 @@ namespace FastFootOkcBridge
                     {
                         { "success", false },
                         { "message", "OKC satis callback zaman asimi" },
+                        { "deviceStateKnown", _deviceStateKnown },
                         { "deviceConnected", _deviceConnected }
                     }, 504);
                     return;

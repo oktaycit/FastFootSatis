@@ -46,5 +46,7 @@ curl http://localhost:8787/api/fiscal-info
 `/health` yanitinda `deviceStateKnown:false` gorunurse bridge aciktir ancak OKC
 baglanti callback'i henuz gelmemistir. Bu durumda FastFood satis istegini yine
 bridge'e iletir; cihaz gercekten hazir degilse hata `sendBasket` cevabindan gelir.
+`lastSerialCallbackAt` bos kalir ve konsolda `Trying again` devam ederse USB
+bulunmus ama OKC/Token handshake cevabi henuz gelmiyor demektir.
 
 `/api/fiscal-info` yanıtındaki kısım numaraları ve KDV oranları, FastFood ürün eşleştirmesi için referans alınmalıdır.
