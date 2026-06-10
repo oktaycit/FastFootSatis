@@ -2329,6 +2329,18 @@ class RestaurantServer:
                 return label, base_name
         return "", name
 
+    def prep_ticket_portion_display_name(self, portion_label, base_name):
+        name = str(base_name or "").strip()
+        label_key = self._normalize_text_for_match(portion_label)
+        if label_key.startswith("tam"):
+            return name
+        if label_key.startswith("yarim"):
+            return f"Yarım {name}".strip()
+        if label_key.startswith("bir bucuk"):
+            return f"Bir Buçuk {name}".strip()
+        label = re.sub(r'\s+porsiyon\s*$', '', str(portion_label or "").strip(), flags=re.IGNORECASE)
+        return f"{label} {name}".strip() if label else name
+
     def is_dynamic_prep_portion_order(self, raw, urun, adet):
         if not self.prep_ticket_portion_label(adet):
             return False
@@ -2341,10 +2353,11 @@ class RestaurantServer:
     def prep_ticket_display_item(self, raw, urun, adet):
         label, base_name = self.prep_ticket_explicit_portion_info(urun)
         if label and base_name:
-            return f"{label} {base_name}", adet
+            return self.prep_ticket_portion_display_name(label, base_name), adet
 
         if self.is_dynamic_prep_portion_order(raw, urun, adet):
-            return f"{self.prep_ticket_portion_label(adet)} {urun}", 1
+            label = self.prep_ticket_portion_label(adet)
+            return self.prep_ticket_portion_display_name(label, urun), 1
 
         return urun, adet
 
@@ -2401,10 +2414,10 @@ class RestaurantServer:
                 )
 
             if meal_name:
-                # Porsiyon bilgisini koru (Tam/Yarım), kategori adını yemek adıyla değiştir
+                # Tam porsiyon yazısını fişte sadeleştir, yarım gibi hazırlık bilgisini koru.
                 label, _ = self.prep_ticket_explicit_portion_info(urun)
                 if label:
-                    display_urun = f"{label} {meal_name}"
+                    display_urun = self.prep_ticket_portion_display_name(label, meal_name)
                 else:
                     display_urun = meal_name
                 display_adet = adet
@@ -2789,6 +2802,179 @@ class RestaurantServer:
             receipt_text,
             "hesap fisi"
         )
+
+    def get_system_default_printer_name(self):
+        system = platform.system()
+        if system == "Windows":
+            command = [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "(Get-CimInstance Win32_Printer | Where-Object Default).Name"
+            ]
+        else:
+            command = ["lpstat", "-d"]
+
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=3,
+                check=False
+            )
+        except Exception as e:
+            logger.warning(f"Varsayılan yazıcı okunamadı: {e}")
+            return ""
+
+        output = "\n".join(part.strip() for part in (result.stdout, result.stderr) if part and part.strip())
+        if not output:
+            return ""
+
+        first_line = output.splitlines()[0].strip()
+        if "no system default" in first_line.lower():
+            return ""
+        if system != "Windows" and ":" in first_line:
+            return first_line.rsplit(":", 1)[1].strip()
+        return first_line
+
+    def looks_like_barcode_printer(self, printer_name):
+        normalized = self._normalize_text_for_match(printer_name)
+        normalized = re.sub(r"[^0-9a-z]+", " ", normalized).strip()
+        barcode_terms = (
+            "barkod",
+            "barcode",
+            "etiket",
+            "label",
+            "zebra",
+            "tsc",
+            "godex",
+            "argox",
+            "dymo",
+        )
+        return any(term in normalized for term in barcode_terms)
+
+    def send_raw_to_system_printer(self, printer_name, payload):
+        if not printer_name or not payload:
+            return False
+
+        system = platform.system()
+        try:
+            if system == "Windows":
+                return self.send_raw_to_windows_printer(printer_name, payload)
+
+            commands = [
+                ["lp", "-d", printer_name, "-o", "raw"],
+                ["lpr", "-P", printer_name, "-o", "raw"],
+            ]
+            last_error = None
+            for command in commands:
+                try:
+                    subprocess.run(
+                        command,
+                        input=payload,
+                        timeout=3,
+                        check=True,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+                    return True
+                except Exception as e:
+                    last_error = e
+                    continue
+            if last_error:
+                raise last_error
+        except Exception as e:
+            logger.warning(f"Ham yazıcı komutu gönderilemedi ({printer_name}): {e}")
+        return False
+
+    def send_raw_to_windows_printer(self, printer_name, payload):
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class DocInfo(ctypes.Structure):
+                _fields_ = [
+                    ("pDocName", wintypes.LPWSTR),
+                    ("pOutputFile", wintypes.LPWSTR),
+                    ("pDatatype", wintypes.LPWSTR),
+                ]
+
+            winspool = ctypes.WinDLL("winspool.drv", use_last_error=True)
+            open_printer = winspool.OpenPrinterW
+            open_printer.argtypes = [wintypes.LPWSTR, ctypes.POINTER(wintypes.HANDLE), wintypes.LPVOID]
+            open_printer.restype = wintypes.BOOL
+
+            close_printer = winspool.ClosePrinter
+            close_printer.argtypes = [wintypes.HANDLE]
+            close_printer.restype = wintypes.BOOL
+
+            start_doc = winspool.StartDocPrinterW
+            start_doc.argtypes = [wintypes.HANDLE, wintypes.DWORD, ctypes.POINTER(DocInfo)]
+            start_doc.restype = wintypes.DWORD
+
+            end_doc = winspool.EndDocPrinter
+            end_doc.argtypes = [wintypes.HANDLE]
+            end_doc.restype = wintypes.BOOL
+
+            start_page = winspool.StartPagePrinter
+            start_page.argtypes = [wintypes.HANDLE]
+            start_page.restype = wintypes.BOOL
+
+            end_page = winspool.EndPagePrinter
+            end_page.argtypes = [wintypes.HANDLE]
+            end_page.restype = wintypes.BOOL
+
+            write_printer = winspool.WritePrinter
+            write_printer.argtypes = [
+                wintypes.HANDLE,
+                ctypes.c_void_p,
+                wintypes.DWORD,
+                ctypes.POINTER(wintypes.DWORD),
+            ]
+            write_printer.restype = wintypes.BOOL
+
+            printer_handle = wintypes.HANDLE()
+            if not open_printer(printer_name, ctypes.byref(printer_handle), None):
+                raise ctypes.WinError(ctypes.get_last_error())
+
+            started_doc = False
+            started_page = False
+            try:
+                doc_info = DocInfo("FastFoot barkod bip", None, "RAW")
+                if not start_doc(printer_handle, 1, ctypes.byref(doc_info)):
+                    raise ctypes.WinError(ctypes.get_last_error())
+                started_doc = True
+
+                if not start_page(printer_handle):
+                    raise ctypes.WinError(ctypes.get_last_error())
+                started_page = True
+
+                buffer = ctypes.create_string_buffer(payload)
+                written = wintypes.DWORD()
+                if not write_printer(printer_handle, buffer, len(payload), ctypes.byref(written)):
+                    raise ctypes.WinError(ctypes.get_last_error())
+                return written.value == len(payload)
+            finally:
+                if started_page:
+                    end_page(printer_handle)
+                if started_doc:
+                    end_doc(printer_handle)
+                close_printer(printer_handle)
+        except Exception as e:
+            logger.warning(f"Windows ham yazıcı komutu gönderilemedi ({printer_name}): {e}")
+            return False
+
+    def beep_if_system_printer_is_barcode(self):
+        printer_name = self.get_system_default_printer_name()
+        if not printer_name or not self.looks_like_barcode_printer(printer_name):
+            return False
+
+        payload = b"SOUND 5,200\r\n"
+        sent = self.send_raw_to_system_printer(printer_name, payload)
+        if sent:
+            logger.info(f"🔔 Barkod yazıcı bip komutu gönderildi: {printer_name}")
+        return sent
 
     def load_salons(self):
         """Salon listesini yükle"""
@@ -7435,6 +7621,7 @@ def handle_print_receipt(data):
                     subprocess.run(["open", full_path])
                 elif system == "Windows":
                     os.startfile(full_path)
+            server.beep_if_system_printer_is_barcode()
         elif not sent_to_ip_printer:
             # Direct print kapalıysa sadece dosyayı aç (izleme amaçlı)
             system = platform.system()
