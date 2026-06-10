@@ -15,7 +15,11 @@ Windows Tailscale IP'si: `100.76.106.39`
 
 ## Kurulum
 
-Windows makinede PowerShell'i Yonetici olarak acin ve bu klasorde calistirin:
+Windows makinede ilk kurulum icin `setup_printer.bat` dosyasini calistirin. Dosya
+gerekirse yonetici izni ister, scriptleri `C:\FastFootPrinterBridge` klasorune indirir,
+bridge kurallarini kurar ve masaustu kisayolunu hazirlar.
+
+Elle kurulum gerekirse PowerShell'i Yonetici olarak acin ve bu klasorde calistirin:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass -Force
@@ -40,6 +44,11 @@ Kisayolu elle olusturmak gerekirse:
 ```powershell
 .\create_desktop_shortcut.ps1
 ```
+
+Manuel Windows kisayolu olusturulacaksa hedef olarak `setup_printer.bat` yerine
+`C:\FastFootPrinterBridge\start_printer_bridge.bat` secilmelidir. `setup_printer.bat`
+ilk kurulum/yeniden indirme icindir; gunluk baslatma kisayolu `start_printer_bridge.bat`
+olmalidir.
 
 ## Test
 
