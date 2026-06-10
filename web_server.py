@@ -1223,7 +1223,8 @@ class RestaurantServer:
             self.save_active_adisyonlar()
 
     def add_order_item(self, masa_adi, urun, fiyat, garson='Bilinmiyor', adet=1,
-                       not_bilgisi='', tip='normal', terminal_id=None, return_error=False):
+                       not_bilgisi='', tip='normal', terminal_id=None, kategori=None,
+                       return_error=False):
         if masa_adi not in self.adisyonlar:
             return (None, 'Masa bulunamadı') if return_error else None
 
@@ -1243,7 +1244,7 @@ class RestaurantServer:
 
         siparis_id = str(uuid.uuid4())[:8]
         created_at = datetime.datetime.now().astimezone()
-        kategori = self.get_menu_category_for_product(urun)
+        kategori = self.resolve_order_category(urun, kategori)
         panel = self.get_preparation_panel_for_product(urun, kategori)
         panel_info = self.get_prep_panel_info(panel)
         skip_prep_ticket = self.should_skip_prep_ticket_for_product(urun)
@@ -3032,7 +3033,7 @@ class RestaurantServer:
         return text.replace('ı', 'i')
 
     def _normalize_product_key(self, urun):
-        return str(urun or '').strip().casefold()
+        return re.sub(r'\s+', ' ', self._normalize_text_for_match(urun)).strip()
 
     def _coerce_portion_amount(self, value, default=0):
         try:
@@ -3605,23 +3606,30 @@ class RestaurantServer:
         return round(adet * multiplier, 2)
 
     def get_menu_category_for_product(self, urun):
-        target = self._normalize_product_key(urun)
-        for category, items in self.menu_data.items():
-            for item in items:
-                name = str(item[0] or '').strip()
-                if self._normalize_product_key(name) == target:
-                    return category
+        category, _, _ = self._find_menu_product_entry(urun)
+        if category:
+            return category
         daily_group = self.get_daily_meal_group_for_product(urun)
         if daily_group:
             return daily_group
         return ''
+
+    def resolve_order_category(self, urun, kategori=None):
+        category_name = str(kategori or '').strip()
+        if category_name:
+            return self._canonical_menu_category(category_name)
+        return self.get_menu_category_for_product(urun)
 
     def get_preparation_panel_for_category(self, category):
         category_name = str(category or '').strip()
         if category_name in self.prep_category_overrides:
             return self.prep_category_overrides[category_name]
 
-        normalized = self._normalize_text_for_match(category)
+        normalized = self._normalize_text_for_match(category_name)
+        for override_category, panel_id in self.prep_category_overrides.items():
+            if self._normalize_text_for_match(override_category) == normalized:
+                return panel_id
+
         for panel_id, panel in self.prep_panel_settings.items():
             keywords = panel.get('category_keywords', [])
             if any(keyword in normalized for keyword in keywords):
@@ -4175,6 +4183,7 @@ class RestaurantServer:
                         adet=item.get('adet', 1),
                         not_bilgisi=item.get('not') or item.get('not_bilgisi') or '',
                         terminal_id=f"TCP:{terminal_adi}",
+                        kategori=item.get('kategori') or item.get('category'),
                         return_error=True
                     )
                     if not siparis:
@@ -5502,6 +5511,7 @@ def integration_webhook(platform):
             not_bilgisi=item.get('not') or item.get('not_bilgisi') or '',
             tip=item.get('tip', 'normal'),
             terminal_id=f"API:{platform}",
+            kategori=item.get('kategori') or item.get('category'),
             return_error=True
         )
         if not siparis:
@@ -6028,11 +6038,18 @@ def api_online_order():
             urun = (it.get('urun') or '').strip()
             adet = min(max(1, int(it.get('adet', 1))), max_qty)
             fiyat = float(it.get('fiyat', 0))
+            kategori = str(it.get('kategori') or it.get('category') or '').strip()[:80]
         except Exception:
             continue
         if not urun or adet <= 0 or fiyat < 0:
             continue
-        order_candidates.append({'urun': urun, 'adet': adet, 'fiyat': fiyat, 'not': not_bilgisi})
+        order_candidates.append({
+            'urun': urun,
+            'adet': adet,
+            'fiyat': fiyat,
+            'not': not_bilgisi,
+            'kategori': kategori
+        })
 
     if not order_candidates:
         return jsonify({'success': False, 'error': 'Gecerli siparis kalemi bulunamadi'}), 400
@@ -6061,6 +6078,7 @@ def api_online_order():
             garson='Online Siparis',
             adet=item['adet'],
             not_bilgisi=not_bilgisi,
+            kategori=item.get('kategori'),
             return_error=True
         )
         if not siparis:
@@ -6312,11 +6330,18 @@ def api_public_order():
             adet = min(max(1, int(it.get('adet', 1))), max_qty)
             fiyat = float(it.get('fiyat', 0))
             item_note = str(it.get('not') or it.get('not_bilgisi') or '').strip()[:160]
+            kategori = str(it.get('kategori') or it.get('category') or '').strip()[:80]
         except Exception:
             continue
         if not urun or adet <= 0 or fiyat < 0:
             continue
-        order_candidates.append({'urun': urun, 'adet': adet, 'fiyat': fiyat, 'not': item_note})
+        order_candidates.append({
+            'urun': urun,
+            'adet': adet,
+            'fiyat': fiyat,
+            'not': item_note,
+            'kategori': kategori
+        })
 
     if not order_candidates:
         return jsonify({'success': False, 'error': 'Geçerli sipariş kalemi bulunamadı'}), 400
@@ -6334,6 +6359,7 @@ def api_public_order():
             garson='Müşteri QR',
             adet=item['adet'],
             not_bilgisi=item.get('not', ''),
+            kategori=item.get('kategori'),
             return_error=True
         )
         if not order_item:
@@ -6665,6 +6691,7 @@ def handle_add_item(data):
         adet=data.get('adet', 1),
         not_bilgisi=not_bilgisi,
         tip=data.get('tip', 'normal'),
+        kategori=data.get('kategori') or data.get('category'),
         return_error=True
     )
     if not order_item:

@@ -2629,6 +2629,7 @@
                     urun: getBasketSendName(item),
                     fiyat: getBasketUnitPrice(item),
                     adet: getBasketQuantity(item),
+                    kategori: item.category || '',
                     garson: loggedWaiter,
                     not: composeBasketItemNote(item)
                 });

@@ -1177,7 +1177,7 @@
                 }
             }
             const key = `${category}__${name}__${price}`;
-            if (!state.cart[key]) state.cart[key] = { urun: name, fiyat: price, adet: 0, category };
+            if (!state.cart[key]) state.cart[key] = { urun: name, fiyat: price, adet: 0, category, kategori: category };
             state.cart[key].adet += 1;
             renderCart();
         };

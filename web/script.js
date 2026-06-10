@@ -1048,6 +1048,7 @@ function addQuickWaterToOrder() {
     }
     addItemToOrder(water.name, water.price, {
         allowCashierQuickSale: true,
+        category: water.category,
         garson: 'Kasa'
     });
 }
@@ -1073,6 +1074,7 @@ function addQuickDessertToOrder() {
     addItemToOrder(dessert.name, dessert.price, {
         allowCashierQuickSale: true,
         adet: kg,
+        category: dessert.category,
         garson: 'Kasa',
         not: `${formatGramAmount(grams)} gr`
     });
@@ -1466,6 +1468,7 @@ function addItemToOrder(urun, fiyat, options = {}) {
         urun: urun,
         fiyat: fiyat,
         adet: quantity,
+        kategori: options.category || '',
         garson: options.garson || 'Bilinmiyor',
         not: options.not || '',
         source: allowCashierQuickSale ? 'cashier_quick_sale' : 'menu'

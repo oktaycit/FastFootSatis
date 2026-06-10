@@ -298,7 +298,7 @@
         }
 
         function normalizeProductKey(value) {
-            return String(value ?? '').trim().toLocaleLowerCase('tr-TR');
+            return normalizeTextForMatch(value).replace(/\s+/g, ' ').trim();
         }
 
         function prepTicketMatchText(value) {
@@ -338,6 +338,12 @@
             }
 
             const normalized = normalizeTextForMatch(category);
+            for (const [overrideCategory, panelId] of Object.entries(prepCategoryOverrides || {})) {
+                if (normalizeTextForMatch(overrideCategory) === normalized) {
+                    return panelId;
+                }
+            }
+
             for (const panel of prepPanels) {
                 const keywords = panel.category_keywords || [];
                 if (keywords.some(keyword => normalized.includes(keyword))) {
