@@ -1913,6 +1913,7 @@
         function hasSystemLayoutPayload(data) {
             return Object.prototype.hasOwnProperty.call(data, 'masa_sayisi')
                 || Object.prototype.hasOwnProperty.call(data, 'paket_sayisi')
+                || Object.prototype.hasOwnProperty.call(data, 'paket_labels')
                 || Object.prototype.hasOwnProperty.call(data, 'salons');
         }
 
@@ -1933,7 +1934,7 @@
             paketCont.innerHTML = '';
             const salons = Array.isArray(sysInfo.salons) ? sysInfo.salons : [];
             const masaCount = Number(sysInfo.masa_sayisi || 0);
-            const paketCount = Number(sysInfo.paket_sayisi || 0);
+            const paketLabels = getPaketLabels();
 
             // Render Salons
             if (salons.length > 0) {
@@ -1961,11 +1962,10 @@
             }
 
             // Render Pakets
-            for (let i = 1; i <= paketCount; i++) {
-                const name = `Paket ${i}`;
-                const div = createTableButton(name, 'P' + i);
+            paketLabels.forEach(name => {
+                const div = createTableButton(name, getPaketDisplayLabel(name));
                 paketCont.appendChild(div);
-            }
+            });
         }
 
         function renderCategories() {
@@ -2391,6 +2391,22 @@
                 '"': '&quot;',
                 "'": '&#39;'
             }[char]));
+        }
+
+        function getPaketLabels() {
+            if (Object.prototype.hasOwnProperty.call(sysInfo, 'paket_labels')) {
+                return Array.isArray(sysInfo.paket_labels)
+                    ? sysInfo.paket_labels.map(label => String(label || '').trim()).filter(Boolean)
+                    : [];
+            }
+
+            const paketCount = Number(sysInfo.paket_sayisi || 0);
+            return Array.from({ length: Math.max(0, paketCount) }, (_, index) => `Paket ${index + 1}`);
+        }
+
+        function getPaketDisplayLabel(label) {
+            const match = String(label || '').trim().match(/^Paket\s+(\d+)$/i);
+            return match ? `P${match[1]}` : label;
         }
 
         function isMenuItemVisible(item) {

@@ -40,6 +40,7 @@ config.txt
 menu.txt
 waiters.json
 salons.json
+paket_labels.json
 integrations.json
 active_adisyonlar.json
 cashiers.json

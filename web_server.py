@@ -89,6 +89,7 @@ COUNTER_FILE = os.path.join(SCRIPT_DIR, "sira_no.txt")
 WAITERS_FILE = os.path.join(SCRIPT_DIR, "waiters.json")
 INTEGRATION_CONFIG = os.path.join(SCRIPT_DIR, "integrations.json")
 SALONS_FILE = os.path.join(SCRIPT_DIR, "salons.json")
+PAKET_LABELS_FILE = os.path.join(SCRIPT_DIR, "paket_labels.json")
 CASHIERS_FILE = os.path.join(SCRIPT_DIR, "cashiers.json")
 KITCHEN_FILE = os.path.join(SCRIPT_DIR, "kitchen.json")
 USERS_FILE = os.path.join(SCRIPT_DIR, "users.json")
@@ -458,6 +459,8 @@ class RestaurantServer:
         self.terminal_id = "1"
         self.admin_password = "1234"
         self.paket_sayisi = 5
+        self.paket_labels = []
+        self.paket_labels_configured = False
         self.direct_print = False
         self.default_payment_method = "Nakit"
         self.prep_panel_settings = self.get_default_prep_panel_settings()
@@ -539,6 +542,7 @@ class RestaurantServer:
         # Ayarları yükle
         self.load_settings()
         self.load_salons()
+        self.load_paket_labels()
         self.load_waiters()
         self.load_cashiers()
         self.load_kitchen()
@@ -1478,6 +1482,7 @@ class RestaurantServer:
             'ip': get_local_ip(),
             'masa_sayisi': self.masa_sayisi,
             'paket_sayisi': self.paket_sayisi,
+            'paket_labels': self.get_paket_labels(),
             'salons': self.salons,
             'database': USE_DATABASE,
             'pdf': PDF_SUPPORT,
@@ -2989,6 +2994,79 @@ class RestaurantServer:
         else:
             self.salons = []
 
+    def sanitize_paket_labels(self, labels):
+        """Paket etiketi listesini temizle ve tekrarsız döndür."""
+        if labels is None:
+            return []
+        if isinstance(labels, str):
+            text = labels.strip()
+            if not text:
+                return []
+            try:
+                labels = json.loads(text)
+            except Exception:
+                labels = text.split(",")
+        if not isinstance(labels, list):
+            return []
+
+        clean_labels = []
+        seen = set()
+        for label in labels:
+            clean_label = str(label or "").strip()
+            if not clean_label or clean_label in seen:
+                continue
+            seen.add(clean_label)
+            clean_labels.append(clean_label)
+            if len(clean_labels) >= 100:
+                break
+        return clean_labels
+
+    def default_paket_labels(self, count=None):
+        """Eski ayarlara uyumlu varsayılan paket etiketleri."""
+        try:
+            label_count = int(self.paket_sayisi if count is None else count)
+        except Exception:
+            label_count = 0
+        label_count = max(0, min(label_count, 100))
+        return [f"Paket {i}" for i in range(1, label_count + 1)]
+
+    def get_paket_labels(self):
+        """Aktif paket etiketlerini döndür."""
+        labels = self.sanitize_paket_labels(self.paket_labels)
+        if self.paket_labels_configured:
+            return labels
+        return labels or self.default_paket_labels()
+
+    def load_paket_labels(self):
+        """Paket etiket listesini yükle."""
+        self.paket_labels = []
+        self.paket_labels_configured = False
+        if not os.path.exists(PAKET_LABELS_FILE):
+            return
+        try:
+            with open(PAKET_LABELS_FILE, "r", encoding="utf-8") as f:
+                self.paket_labels = self.sanitize_paket_labels(json.load(f))
+            self.paket_labels_configured = True
+            self.paket_sayisi = len(self.paket_labels)
+            logger.info(f"✓ {len(self.paket_labels)} paket etiketi yüklendi")
+        except Exception as e:
+            logger.error(f"Paket etiketi yükleme hatası: {e}")
+            self.paket_labels = []
+            self.paket_labels_configured = False
+
+    def save_paket_labels(self):
+        """Paket etiket listesini dosyaya kaydet."""
+        try:
+            self.paket_labels = self.sanitize_paket_labels(self.paket_labels)
+            self.paket_labels_configured = True
+            self.paket_sayisi = len(self.paket_labels)
+            with open(PAKET_LABELS_FILE, "w", encoding="utf-8") as f:
+                json.dump(self.paket_labels, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception as e:
+            logger.error(f"Paket etiketi kaydetme hatası: {e}")
+            return False
+
     def refresh_adisyonlar(self, preserve_existing=False):
         """Masa/paket yapısını yeniden oluştur."""
         previous_adisyonlar = self.adisyonlar if preserve_existing else {}
@@ -3010,9 +3088,8 @@ class RestaurantServer:
                 add_adisyon_name(f"Masa {i}")
                 
         # Paketler
-        if self.paket_sayisi > 0:
-            for i in range(1, self.paket_sayisi + 1):
-                add_adisyon_name(f"Paket {i}")
+        for label in self.get_paket_labels():
+            add_adisyon_name(label)
         
         if not next_adisyonlar:
             add_adisyon_name("Genel")
@@ -4849,6 +4926,7 @@ def get_settings():
         'terminal_id':  server.terminal_id,
         'masa_sayisi':  server.masa_sayisi,
         'paket_sayisi': server.paket_sayisi,
+        'paket_labels': server.get_paket_labels(),
         'direct_print': server.direct_print,
         'default_payment_method': server.default_payment_method,
         'cid_port': server.cid_port,
@@ -4900,12 +4978,25 @@ def save_settings():
         data.get('default_payment_method', server.default_payment_method)
     )
 
-    yeni_masa   = int(data.get('masa_sayisi',  server.masa_sayisi))
-    yeni_paket  = int(data.get('paket_sayisi', server.paket_sayisi))
+    yeni_masa = int(data.get('masa_sayisi', server.masa_sayisi))
+    yeni_paket = int(data.get('paket_sayisi', server.paket_sayisi))
+    yeni_paket_labels = server.paket_labels
+    paket_labels_degisti = False
+    if 'paket_labels' in data:
+        yeni_paket_labels = server.sanitize_paket_labels(data.get('paket_labels'))
+        yeni_paket = len(yeni_paket_labels)
+        paket_labels_degisti = (yeni_paket_labels != server.get_paket_labels())
 
-    masa_degisti = (yeni_masa != server.masa_sayisi or yeni_paket != server.paket_sayisi)
+    masa_degisti = (
+        yeni_masa != server.masa_sayisi
+        or yeni_paket != server.paket_sayisi
+        or paket_labels_degisti
+    )
     server.masa_sayisi   = yeni_masa
     server.paket_sayisi  = yeni_paket
+    if 'paket_labels' in data:
+        server.paket_labels = yeni_paket_labels
+        server.paket_labels_configured = True
     
     server.cid_port = int(data.get('cid_port', server.cid_port))
     server.cid_type = data.get('cid_type', server.cid_type)
@@ -4944,6 +5035,8 @@ def save_settings():
 
     # Kaydet
     ok = server.save_settings()
+    if ok and 'paket_labels' in data:
+        ok = server.save_paket_labels()
     if not ok:
         return jsonify({'success': False, 'error': 'Dosyaya yazılamadı'}), 500
 
@@ -4954,6 +5047,7 @@ def save_settings():
         socketio.emit('system_update', {
             'masa_sayisi':  server.masa_sayisi,
             'paket_sayisi': server.paket_sayisi,
+            'paket_labels': server.get_paket_labels(),
             'company_name': server.company_name,
             'terminal_id':  server.terminal_id
         })
@@ -6105,6 +6199,10 @@ def save_salons_api():
     """Salon düzenini kaydet"""
     try:
         data = request.json
+        paket_labels = None
+        if isinstance(data, dict):
+            paket_labels = data.get('paket_labels')
+            data = data.get('salons')
         if not isinstance(data, list):
             return jsonify({'success': False, 'error': 'Geçersiz veri formatı'})
             
@@ -6114,6 +6212,10 @@ def save_salons_api():
         # Sunucu cache'ini yenile
         global server
         server.salons = data
+        if paket_labels is not None:
+            server.paket_labels = server.sanitize_paket_labels(paket_labels)
+            if not server.save_paket_labels():
+                return jsonify({'success': False, 'error': 'Paket etiketleri kaydedilemedi'})
         server.refresh_adisyonlar(preserve_existing=True)
         server.save_active_adisyonlar()
         

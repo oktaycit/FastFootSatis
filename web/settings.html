@@ -595,6 +595,20 @@
                     </div>
                 </div>
 
+                <div style="margin-bottom:18px; padding-bottom:15px; border-bottom:1px solid #eee;">
+                    <label>Paket Etiketleri</label>
+                    <div id="paketLabelsDesigner" class="chip-container" style="margin-top:8px; margin-bottom:10px;">
+                        <!-- Dinamik Paket Etiketleri -->
+                    </div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <input type="text" id="newPaketLabel" placeholder="Örn: P1-5, Kurye 1"
+                            style="margin:0; flex:1; min-width:220px;"
+                            onkeypress="if(event.key==='Enter') addPaketLabelsUI()">
+                        <button class="btn-settings btn-info-s btn-sm" onclick="addPaketLabelsUI()"
+                            style="margin:0;">➕ Paket</button>
+                    </div>
+                </div>
+
                 <div
                     style="display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
                     <div class="form-group" style="margin-bottom:0; flex:1; min-width:250px;">
@@ -1359,6 +1373,10 @@
                 document.getElementById('terminalId').value = data.terminal_id || '';
                 document.getElementById('masaSayisi').value = data.masa_sayisi ?? '';
                 document.getElementById('paketSayisi').value = data.paket_sayisi ?? '';
+                localPaketLabels = Array.isArray(data.paket_labels)
+                    ? data.paket_labels.map(label => String(label || '').trim()).filter(Boolean)
+                    : defaultPaketLabels(Number(data.paket_sayisi || 0));
+                renderPaketLabelsDesigner();
                 document.getElementById('directPrint').checked = data.direct_print || false;
                 document.getElementById('defaultPaymentMethod').value = data.default_payment_method || 'Nakit';
 
@@ -1773,10 +1791,12 @@
         }
 
         async function saveSettings() {
+            syncPaketLabelsFromCount(false);
             const firmaIsmi = document.getElementById('firmaIsmi').value.trim();
             const terminalId = document.getElementById('terminalId').value.trim();
             const masaSayisi = parseInt(document.getElementById('masaSayisi').value);
-            const paketSayisi = parseInt(document.getElementById('paketSayisi').value);
+            const paketLabels = getCleanPaketLabels();
+            const paketSayisi = paketLabels.length;
             const directPrint = document.getElementById('directPrint').checked;
             const defaultPaymentMethod = document.getElementById('defaultPaymentMethod').value || 'Nakit';
 
@@ -1835,6 +1855,7 @@
                 terminal_id: terminalId,
                 masa_sayisi: masaSayisi,
                 paket_sayisi: paketSayisi,
+                paket_labels: paketLabels,
                 direct_print: directPrint,
                 default_payment_method: defaultPaymentMethod,
                 cid_enabled: cidEnabled,
@@ -2162,6 +2183,12 @@
                 return;
             }
 
+            if (active.id === 'newPaketLabel') {
+                e.preventDefault();
+                addPaketLabelsUI();
+                return;
+            }
+
             if (active.id && active.id.startsWith('newTable_')) {
                 e.preventDefault();
                 const salonIndex = Number(active.id.replace('newTable_', ''));
@@ -2174,6 +2201,115 @@
 
         /* --- Salon Builder JS --- */
         let localSalons = [];
+        let localPaketLabels = [];
+
+        function defaultPaketLabels(count) {
+            const labelCount = Math.max(0, Math.min(parseInt(count) || 0, 100));
+            return Array.from({ length: labelCount }, (_, index) => `Paket ${index + 1}`);
+        }
+
+        function getCleanPaketLabels() {
+            const seen = new Set();
+            return (localPaketLabels || [])
+                .map(label => String(label || '').trim())
+                .filter(label => {
+                    if (!label || seen.has(label)) return false;
+                    seen.add(label);
+                    return true;
+                });
+        }
+
+        function syncPaketCountInput() {
+            const paketInput = document.getElementById('paketSayisi');
+            if (paketInput) paketInput.value = getCleanPaketLabels().length;
+        }
+
+        function syncPaketLabelsFromCount(render = true) {
+            const paketInput = document.getElementById('paketSayisi');
+            if (!paketInput) return;
+            const count = parseInt(paketInput.value);
+            if (isNaN(count) || count < 0) return;
+
+            const labels = getCleanPaketLabels();
+            if (labels.length === count) {
+                localPaketLabels = labels;
+                return;
+            }
+
+            if (count < labels.length) {
+                localPaketLabels = labels.slice(0, count);
+            } else {
+                const existing = new Set(labels);
+                localPaketLabels = labels.slice();
+                for (let i = 1; localPaketLabels.length < count && i <= 100; i++) {
+                    const label = `Paket ${i}`;
+                    if (!existing.has(label)) {
+                        existing.add(label);
+                        localPaketLabels.push(label);
+                    }
+                }
+            }
+
+            if (render) renderPaketLabelsDesigner();
+        }
+
+        function renderPaketLabelsDesigner() {
+            const container = document.getElementById('paketLabelsDesigner');
+            if (!container) return;
+            localPaketLabels = getCleanPaketLabels();
+            container.innerHTML = '';
+
+            if (localPaketLabels.length === 0) {
+                container.innerHTML = '<div style="color:#999; padding:8px 0;">Henüz paket etiketi yok.</div>';
+                syncPaketCountInput();
+                return;
+            }
+
+            localPaketLabels.forEach((label, index) => {
+                const chip = document.createElement('div');
+                chip.className = 'table-chip';
+                chip.innerHTML = `${escapeHtml(label)} <span class="del" onclick="deletePaketLabel(${index})">✕</span>`;
+                container.appendChild(chip);
+            });
+            syncPaketCountInput();
+        }
+
+        function addPaketLabelsUI() {
+            const el = document.getElementById('newPaketLabel');
+            const rawInput = el.value.trim();
+            if (!rawInput) return;
+
+            const existingLabels = new Set(getCleanPaketLabels());
+            const requestedLabels = expandTableInput(rawInput);
+            const newLabels = [];
+            const seenInInput = new Set();
+            let skippedCount = 0;
+
+            requestedLabels.forEach(label => {
+                if (existingLabels.has(label) || seenInInput.has(label)) {
+                    skippedCount++;
+                    return;
+                }
+                seenInInput.add(label);
+                newLabels.push(label);
+            });
+
+            if (newLabels.length === 0) {
+                showToast('Bu paket etiketi zaten var!', 'warning');
+                return;
+            }
+
+            localPaketLabels.push(...newLabels);
+            el.value = '';
+            renderPaketLabelsDesigner();
+            const skippedText = skippedCount ? ` ${skippedCount} mevcut etiket atlandı.` : '';
+            showToast(`${newLabels.length} paket etiketi eklendi.${skippedText}`, 'success');
+        }
+
+        function deletePaketLabel(index) {
+            localPaketLabels.splice(index, 1);
+            renderPaketLabelsDesigner();
+        }
 
         function renderSalonsDesigner() {
             const container = document.getElementById('salonsDesigner');
@@ -2320,7 +2456,10 @@
                 const res = await fetch('/api/salons', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(localSalons)
+                    body: JSON.stringify({
+                        salons: localSalons,
+                        paket_labels: getCleanPaketLabels()
+                    })
                 });
                 const data = await res.json();
                 if (data.success) {
@@ -2337,6 +2476,10 @@
         // Sayfa yüklenince
 
         window.addEventListener('DOMContentLoaded', () => {
+            const paketInput = document.getElementById('paketSayisi');
+            if (paketInput) {
+                paketInput.addEventListener('change', () => syncPaketLabelsFromCount(true));
+            }
             loadSettings();
             loadSystemInfo();
         });

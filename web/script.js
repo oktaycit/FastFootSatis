@@ -35,6 +35,25 @@ function escapeHtml(value) {
     }[char]));
 }
 
+function getPaketLabels() {
+    if (Object.prototype.hasOwnProperty.call(systemInfo, 'paket_labels')) {
+        return Array.isArray(systemInfo.paket_labels)
+            ? systemInfo.paket_labels.map(label => String(label || '').trim()).filter(Boolean)
+            : [];
+    }
+
+    const paketCount = Number(systemInfo.paket_sayisi || 0);
+    return Array.from({ length: Math.max(0, paketCount) }, (_, index) => `Paket ${index + 1}`);
+}
+
+function isPaketMasa(masa) {
+    return getPaketLabels().includes(String(masa || '').trim());
+}
+
+function getTableButtonId(masa) {
+    return `btn-${encodeURIComponent(String(masa || '').trim()).replace(/%/g, '_')}`;
+}
+
 function isMenuItemVisible(item) {
     if (!Array.isArray(item) || item.length <= 7) return true;
     const value = item[7];
@@ -419,6 +438,7 @@ function onSystemUpdate(data) {
 function hasSystemLayoutPayload(data) {
     return Object.prototype.hasOwnProperty.call(data, 'masa_sayisi')
         || Object.prototype.hasOwnProperty.call(data, 'paket_sayisi')
+        || Object.prototype.hasOwnProperty.call(data, 'paket_labels')
         || Object.prototype.hasOwnProperty.call(data, 'salons')
         || Object.prototype.hasOwnProperty.call(data, 'company_name')
         || Object.prototype.hasOwnProperty.call(data, 'terminal_id');
@@ -1220,20 +1240,19 @@ function renderMenu() {
 function renderTables() {
     if (!elements.paketSection || !elements.paketGrid || !elements.masaSection) return;
 
-    const paketCount = Number(systemInfo.paket_sayisi || 0);
+    const paketLabels = getPaketLabels();
     const masaCount = Number(systemInfo.masa_sayisi || 0);
     const salons = Array.isArray(systemInfo.salons) ? systemInfo.salons : [];
 
     // Paket section
-    if (paketCount > 0) {
+    if (paketLabels.length > 0) {
         elements.paketSection.style.display = 'block';
         elements.paketGrid.innerHTML = '';
 
-        for (let i = 1; i <= paketCount; i++) {
-            const masa = `Paket ${i}`;
+        paketLabels.forEach(masa => {
             const btn = createTableButton(masa, true);
             elements.paketGrid.appendChild(btn);
-        }
+        });
     } else {
         elements.paketSection.style.display = 'none';
         elements.paketGrid.innerHTML = '';
@@ -1288,7 +1307,7 @@ function renderTables() {
 function createTableButton(masa, isPaket) {
     const btn = document.createElement('button');
     btn.className = 'table-btn';
-    btn.id = `btn-${masa.replace(' ', '-')}`;
+    btn.id = getTableButtonId(masa);
 
     if (isPaket) {
         btn.classList.add('paket');
@@ -1311,7 +1330,7 @@ function createTableButton(masa, isPaket) {
 }
 
 function updateTableButton(masa) {
-    const btnId = `btn-${masa.replace(' ', '-')}`;
+    const btnId = getTableButtonId(masa);
     const btn = document.getElementById(btnId);
 
     if (!btn) return;
@@ -1337,7 +1356,7 @@ function selectMasa(masa) {
         btn.classList.remove('selected');
     });
 
-    const btnId = `btn-${masa.replace(' ', '-')}`;
+    const btnId = getTableButtonId(masa);
     const btn = document.getElementById(btnId);
     if (btn) {
         btn.classList.add('selected');
@@ -2486,7 +2505,7 @@ function setupEventListeners() {
 function updateCourierArea() {
     if (!elements.courierAssignmentArea) return;
 
-    if (currentMasa && currentMasa.startsWith('Paket')) {
+    if (currentMasa && isPaketMasa(currentMasa)) {
         elements.courierAssignmentArea.style.display = 'block';
         fetchCouriers();
 
