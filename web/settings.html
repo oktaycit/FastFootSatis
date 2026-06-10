@@ -79,7 +79,8 @@
 
         .form-group input[type="text"],
         .form-group input[type="number"],
-        .form-group input[type="password"] {
+        .form-group input[type="password"],
+        .form-group select {
             padding: 11px 14px;
             border: 2px solid #e0e0e0;
             border-radius: var(--radius-md);
@@ -90,7 +91,8 @@
             background: #f8f9fa;
         }
 
-        .form-group input:focus {
+        .form-group input:focus,
+        .form-group select:focus {
             border-color: var(--accent-color);
             background: #fff;
         }
@@ -1139,7 +1141,15 @@
                             <span class="slider"></span>
                         </label>
                     </div>
+                    <div style="font-weight:700; color:var(--text-secondary); margin:4px 0 10px;">Bağlantı Bilgileri</div>
                     <div class="form-row">
+                        <div class="form-group">
+                            <label>Ortam</label>
+                            <select id="acc_mysoft_environment">
+                                <option value="test">Test</option>
+                                <option value="live">Canlı</option>
+                            </select>
+                        </div>
                         <div class="form-group">
                             <label>Base URL</label>
                             <input type="text" id="acc_mysoft_base_url" placeholder="https://...">
@@ -1175,6 +1185,35 @@
                         <div class="form-group">
                             <label>Firma VKN</label>
                             <input type="text" id="acc_mysoft_company_tax_id" placeholder="Satıcı VKN">
+                        </div>
+                        <div class="form-group">
+                            <label>Tenant VKN/TCKN</label>
+                            <input type="text" id="acc_mysoft_tenant_identifier_number" placeholder="tenantIdentifierNumber">
+                        </div>
+                    </div>
+                    <div style="font-weight:700; color:var(--text-secondary); margin:4px 0 10px;">Fatura Varsayılanları</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Fatura Seri / Prefix</label>
+                            <input type="text" id="acc_mysoft_invoice_series" placeholder="Örn. GIB2026">
+                        </div>
+                        <div class="form-group">
+                            <label>Numaratör Kodu</label>
+                            <input type="text" id="acc_mysoft_numbering_unit" placeholder="Mysoft numaratör kodu">
+                        </div>
+                        <div class="form-group">
+                            <label>XSLT / Dizayn Kodu</label>
+                            <input type="text" id="acc_mysoft_xslt_code" placeholder="Varsa dizayn kodu">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Gönderici Alias</label>
+                            <input type="text" id="acc_mysoft_sender_alias" placeholder="urn:mail:...">
+                        </div>
+                        <div class="form-group">
+                            <label>Varsayılan Alıcı Alias</label>
+                            <input type="text" id="acc_mysoft_receiver_alias" placeholder="Opsiyonel">
                         </div>
                     </div>
                 </div>
@@ -1495,6 +1534,7 @@
 
                 if (acc.mysoft) {
                     document.getElementById('acc_mysoft_draft').checked = acc.mysoft.draft !== false;
+                    document.getElementById('acc_mysoft_environment').value = acc.mysoft.environment || 'test';
                     document.getElementById('acc_mysoft_base_url').value = acc.mysoft.base_url || '';
                     document.getElementById('acc_mysoft_auth_endpoint').value = acc.mysoft.auth_endpoint || '';
                     document.getElementById('acc_mysoft_invoice_endpoint').value = acc.mysoft.invoice_endpoint || '';
@@ -1503,6 +1543,12 @@
                     document.getElementById('acc_mysoft_api_key').value = acc.mysoft.api_key || '';
                     document.getElementById('acc_mysoft_bearer_token').value = acc.mysoft.bearer_token || '';
                     document.getElementById('acc_mysoft_company_tax_id').value = acc.mysoft.company_tax_id || '';
+                    document.getElementById('acc_mysoft_tenant_identifier_number').value = acc.mysoft.tenant_identifier_number || '';
+                    document.getElementById('acc_mysoft_invoice_series').value = acc.mysoft.invoice_series || '';
+                    document.getElementById('acc_mysoft_numbering_unit').value = acc.mysoft.numbering_unit || '';
+                    document.getElementById('acc_mysoft_sender_alias').value = acc.mysoft.sender_alias || '';
+                    document.getElementById('acc_mysoft_receiver_alias').value = acc.mysoft.receiver_alias || '';
+                    document.getElementById('acc_mysoft_xslt_code').value = acc.mysoft.xslt_code || '';
                 }
 
                 toggleAccountingUI();
@@ -1972,6 +2018,7 @@
                     mysoft: {
                         enabled: document.getElementById('int_acc_platform').value === 'mysoft',
                         draft: document.getElementById('acc_mysoft_draft').checked,
+                        environment: document.getElementById('acc_mysoft_environment').value,
                         base_url: document.getElementById('acc_mysoft_base_url').value.trim(),
                         auth_endpoint: document.getElementById('acc_mysoft_auth_endpoint').value.trim(),
                         invoice_endpoint: document.getElementById('acc_mysoft_invoice_endpoint').value.trim(),
@@ -1979,7 +2026,13 @@
                         password: document.getElementById('acc_mysoft_password').value.trim(),
                         api_key: document.getElementById('acc_mysoft_api_key').value.trim(),
                         bearer_token: document.getElementById('acc_mysoft_bearer_token').value.trim(),
-                        company_tax_id: document.getElementById('acc_mysoft_company_tax_id').value.trim()
+                        company_tax_id: document.getElementById('acc_mysoft_company_tax_id').value.trim(),
+                        tenant_identifier_number: document.getElementById('acc_mysoft_tenant_identifier_number').value.trim(),
+                        invoice_series: document.getElementById('acc_mysoft_invoice_series').value.trim(),
+                        numbering_unit: document.getElementById('acc_mysoft_numbering_unit').value.trim(),
+                        sender_alias: document.getElementById('acc_mysoft_sender_alias').value.trim(),
+                        receiver_alias: document.getElementById('acc_mysoft_receiver_alias').value.trim(),
+                        xslt_code: document.getElementById('acc_mysoft_xslt_code').value.trim()
                     }
                 }
             };

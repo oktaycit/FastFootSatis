@@ -47,32 +47,33 @@ class MysoftProviderTests(unittest.TestCase):
 
         self.assertEqual(result, {"skipped": True})
 
-    @patch("integrations.requests.Session")
-    def test_send_invoice_posts_to_configured_endpoint(self, session_cls):
+    def test_send_invoice_posts_to_configured_endpoint(self):
         session = Mock()
         response = Mock()
         response.json.return_value = {"success": True, "id": "inv-1"}
         session.post.return_value = response
-        session_cls.return_value = session
+        requests_module = Mock()
+        requests_module.Session.return_value = session
 
-        provider = MysoftProvider({
-            "enabled": True,
-            "base_url": "https://mysoft.example",
-            "invoice_endpoint": "/invoice/create",
-            "api_key": "secret",
-        })
-        provider.authenticate()
-        result = provider.send_invoice({
-            "masa": "Masa 1",
-            "customer": "ABC Ltd",
-            "invoice_pending": True,
-            "invoice_document_type": 9007,
-            "invoice_tax_id": "11111111111",
-            "invoice_serial_no": "ARS2026000000001",
-            "payment_type": "Nakit",
-            "total": 150.0,
-            "items": [{"urun": "Yemek", "adet": 1, "fiyat": 150.0}],
-        })
+        with patch("integrations.requests", requests_module):
+            provider = MysoftProvider({
+                "enabled": True,
+                "base_url": "https://mysoft.example",
+                "invoice_endpoint": "/invoice/create",
+                "api_key": "secret",
+            })
+            provider.authenticate()
+            result = provider.send_invoice({
+                "masa": "Masa 1",
+                "customer": "ABC Ltd",
+                "invoice_pending": True,
+                "invoice_document_type": 9007,
+                "invoice_tax_id": "11111111111",
+                "invoice_serial_no": "ARS2026000000001",
+                "payment_type": "Nakit",
+                "total": 150.0,
+                "items": [{"urun": "Yemek", "adet": 1, "fiyat": 150.0}],
+            })
 
         self.assertEqual(result["id"], "inv-1")
         session.post.assert_called_once()
@@ -88,6 +89,13 @@ class IntegrationManagerTests(unittest.TestCase):
         accounting = manager.settings["accounting"]
         self.assertIn("mysoft", accounting)
         self.assertEqual(accounting["active_platform"], "none")
+        self.assertEqual(accounting["mysoft"]["environment"], "test")
+        self.assertIn("tenant_identifier_number", accounting["mysoft"])
+        self.assertIn("invoice_series", accounting["mysoft"])
+        self.assertIn("numbering_unit", accounting["mysoft"])
+        self.assertIn("sender_alias", accounting["mysoft"])
+        self.assertIn("receiver_alias", accounting["mysoft"])
+        self.assertIn("xslt_code", accounting["mysoft"])
 
 
 if __name__ == "__main__":

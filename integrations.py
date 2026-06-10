@@ -56,6 +56,7 @@ class IntegrationManager:
                 "kolaybi": {"api_key": "", "api_secret": ""},
                 "mysoft": {
                     "enabled": False,
+                    "environment": "test",
                     "base_url": "",
                     "auth_endpoint": "",
                     "invoice_endpoint": "",
@@ -64,6 +65,12 @@ class IntegrationManager:
                     "api_key": "",
                     "bearer_token": "",
                     "company_tax_id": "",
+                    "tenant_identifier_number": "",
+                    "invoice_series": "",
+                    "numbering_unit": "",
+                    "sender_alias": "",
+                    "receiver_alias": "",
+                    "xslt_code": "",
                     "draft": True
                 }
             }

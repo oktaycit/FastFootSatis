@@ -1591,18 +1591,7 @@
             if (!card) return null;
 
             if (card.type === 'portion-group') {
-                const variants = sortPortionVariants(card.variants || []);
-                const fullVariant = variants.find(variant => variant.type === 'full');
-                const sourceVariant = fullVariant || variants[0];
-                if (!sourceVariant || !sourceVariant.item) return null;
-                const sourceMultiplier = getPortionVariantUnitMultiplier(sourceVariant);
-                const sourcePrice = Number(sourceVariant.item[1] || 0);
-                const basePrice = sourceMultiplier > 0 ? roundMoney(sourcePrice / sourceMultiplier) : sourcePrice;
-                return {
-                    name: card.name,
-                    basePrice,
-                    sourceItem: sourceVariant.item
-                };
+                return null;
             }
 
             const item = card.item;
