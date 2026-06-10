@@ -617,6 +617,73 @@ class RestaurantServer:
             'gross_total': gross_total
         }
 
+    def normalize_selected_item_quantities(self, items, item_quantities=None, item_indices=None):
+        """Ödeme için seçilen satır/miktarları doğrula ve normalize et."""
+        if not items:
+            return [], None
+
+        selections = defaultdict(float)
+        if item_quantities:
+            for entry in item_quantities:
+                if not isinstance(entry, dict):
+                    continue
+                try:
+                    idx = int(entry.get('index'))
+                except Exception:
+                    continue
+                quantity = float(self.coerce_order_quantity(
+                    entry.get('quantity', entry.get('adet', 0)),
+                    default=0
+                ))
+                if 0 <= idx < len(items) and quantity > 0:
+                    selections[idx] += quantity
+        elif item_indices:
+            for idx in item_indices:
+                try:
+                    idx = int(idx)
+                except Exception:
+                    continue
+                if 0 <= idx < len(items):
+                    selections[idx] += float(self.coerce_order_quantity(items[idx].get('adet', 1)))
+
+        normalized = []
+        for idx, quantity in sorted(selections.items()):
+            available = float(self.coerce_order_quantity(items[idx].get('adet', 1)))
+            if quantity > available + 0.001:
+                return [], 'Seçilen ürün miktarı adisyondaki miktardan fazla'
+            quantity = min(quantity, available)
+            normalized.append({
+                'index': idx,
+                'quantity': self.coerce_order_quantity(quantity)
+            })
+
+        return normalized, None
+
+    def selected_items_for_payment(self, items, selections):
+        """Seçilen miktarlara göre satış/POS için bağımsız kalem kopyaları üret."""
+        selected_items = []
+        for selection in selections:
+            idx = selection['index']
+            if 0 <= idx < len(items):
+                item_copy = dict(items[idx])
+                item_copy['adet'] = selection['quantity']
+                selected_items.append(item_copy)
+        return selected_items
+
+    def remove_selected_item_quantities(self, items, selections):
+        """Tahsil edilen miktarı aktif adisyondan düş."""
+        for selection in sorted(selections, key=lambda item: item['index'], reverse=True):
+            idx = selection['index']
+            if not (0 <= idx < len(items)):
+                continue
+            current_quantity = float(self.coerce_order_quantity(items[idx].get('adet', 1)))
+            paid_quantity = float(self.coerce_order_quantity(selection['quantity'], default=0))
+            remaining = round(current_quantity - paid_quantity, 3)
+            if remaining <= 0.001:
+                items.pop(idx)
+            else:
+                items[idx]['adet'] = self.coerce_order_quantity(remaining)
+
     # ==================== PUBLIC QR SESSION HELPERS ====================
     def _b64url_encode(self, raw):
         return base64.urlsafe_b64encode(raw).decode('ascii').rstrip("=")
@@ -6995,27 +7062,30 @@ def handle_payment(data):
 
     payments = data.get('payments', [])
     payment_type = data.get('type', 'Nakit') # Eski format desteği
-    item_indices = data.get('item_indices', []) # YENİ: Seçili ürünlerin indexleri
+    item_indices = data.get('item_indices', []) # Eski format: seçili ürünlerin indexleri
+    item_quantities = data.get('item_quantities', []) # Yeni format: index + seçilen adet
     invoice_pending = bool(data.get('invoice_pending', False))
     invoice_info = normalize_invoice_info(data)
     invoice_note = invoice_info['note']
 
     # Hangi kalemlerin ödendiğini belirle
-    normalized_item_indices = []
-    if item_indices:
-        items_to_pay = []
-        # Indexleri büyükten küçüğe sıralayarak pop işleminin diğer indexleri kaydırmasını önleyeceğiz
-        # Ama önce kopyasını alıp işlem yapalım ki hata durumunda veri kaybolmasın
-        for idx in item_indices:
-            try:
-                idx = int(idx)
-            except Exception:
-                continue
-            if 0 <= idx < len(server.adisyonlar[masa_adi]):
-                normalized_item_indices.append(idx)
-                items_to_pay.append(server.adisyonlar[masa_adi][idx])
-        
-        if not items_to_pay:
+    selected_quantities = []
+    if item_quantities or item_indices:
+        selected_quantities, selection_error = server.normalize_selected_item_quantities(
+            server.adisyonlar[masa_adi],
+            item_quantities=item_quantities,
+            item_indices=item_indices
+        )
+        if selection_error:
+            emit('error', {'message': selection_error})
+            return
+
+        items_to_pay = server.selected_items_for_payment(
+            server.adisyonlar[masa_adi],
+            selected_quantities
+        )
+
+        if not selected_quantities or not items_to_pay:
             emit('error', {'message': 'Seçilen ürünler bulunamadı'})
             return
         items = items_to_pay
@@ -7145,12 +7215,9 @@ def handle_payment(data):
         
         # Adisyonu temizle (Sadece ödenen kalemleri)
         is_partial = False
-        if normalized_item_indices:
-            # Indexleri büyükten küçüğe sıralayıp sil
-            for idx in sorted(normalized_item_indices, reverse=True):
-                if 0 <= idx < len(server.adisyonlar[masa_adi]):
-                    server.adisyonlar[masa_adi].pop(idx)
-            
+        if selected_quantities:
+            server.remove_selected_item_quantities(server.adisyonlar[masa_adi], selected_quantities)
+
             # Eğer masada hala ürün varsa bu bir kısmi ödemedir
             if server.adisyonlar[masa_adi]:
                 is_partial = True

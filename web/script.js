@@ -13,7 +13,7 @@ let adisyonlar = {};
 let currentMasa = null;
 let currentItems = [];
 let currentTotal = 0;
-let selectedItemIndices = [];
+let selectedItemKeys = [];
 let isSelectivePayment = false;
 let suppressCardSplitSync = false;
 let activeShift = null;
@@ -605,19 +605,20 @@ function onPaymentCompleted(data) {
         adisyonlar[data.masa] = [];
     }
 
-    // If this is our current masa, clear display ONLY IF NOT partial
-    if (data.masa === currentMasa && !data.is_partial) {
-        currentItems = [];
-        currentTotal = 0;
-        updateOrderDisplay();
-
+    if (data.masa === currentMasa) {
+        // Clear display only when the whole account is closed.
+        if (!data.is_partial) {
+            currentItems = [];
+            currentTotal = 0;
+            updateOrderDisplay();
+        }
         if (typeof closePaymentModal === 'function') {
             closePaymentModal();
         }
     }
 
     // Seçimleri temizle
-    selectedItemIndices = [];
+    selectedItemKeys = [];
     updateSplitButtons();
 
     // Update table button
@@ -805,6 +806,101 @@ function formatOrderQuantity(value) {
     if (!Number.isFinite(quantity)) return '0';
     if (Number.isInteger(quantity)) return String(quantity);
     return quantity.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+}
+
+function parseOrderQuantity(value, fallback = 1) {
+    const quantity = Number(String(value ?? '').replace(',', '.'));
+    if (!Number.isFinite(quantity) || quantity <= 0) return fallback;
+    return Math.round(quantity * 1000) / 1000;
+}
+
+function orderQuantitiesMatch(left, right) {
+    return Math.abs(Number(left || 0) - Number(right || 0)) < 0.001;
+}
+
+function getOrderDisplayRows(items = currentItems) {
+    const rows = [];
+
+    (items || []).forEach((item, index) => {
+        const quantity = parseOrderQuantity(item?.adet, 1);
+        if (Number.isInteger(quantity) && quantity > 1) {
+            for (let unitNumber = 1; unitNumber <= quantity; unitNumber += 1) {
+                rows.push({
+                    key: `${index}:${unitNumber}`,
+                    item,
+                    index,
+                    quantity: 1,
+                    unitNumber,
+                    unitCount: quantity,
+                    isSplitUnit: true
+                });
+            }
+            return;
+        }
+
+        rows.push({
+            key: `${index}:all`,
+            item,
+            index,
+            quantity,
+            unitNumber: null,
+            unitCount: 1,
+            isSplitUnit: false
+        });
+    });
+
+    return rows;
+}
+
+function getSelectedOrderRows() {
+    const selectedKeys = new Set(selectedItemKeys);
+    return getOrderDisplayRows().filter(row => selectedKeys.has(row.key));
+}
+
+function getSelectedPaymentItems() {
+    return getSelectedOrderRows().map(row => ({
+        ...row.item,
+        adet: row.quantity
+    }));
+}
+
+function getSelectedItemQuantities() {
+    const quantitiesByIndex = new Map();
+
+    getSelectedOrderRows().forEach(row => {
+        quantitiesByIndex.set(
+            row.index,
+            (quantitiesByIndex.get(row.index) || 0) + row.quantity
+        );
+    });
+
+    return Array.from(quantitiesByIndex.entries()).map(([index, quantity]) => ({
+        index,
+        quantity: parseOrderQuantity(quantity, quantity)
+    }));
+}
+
+function getSelectedWholeItemIndices() {
+    const quantities = getSelectedItemQuantities();
+    const indices = [];
+
+    for (const selection of quantities) {
+        const item = currentItems[selection.index];
+        if (!item) return [];
+        if (!orderQuantitiesMatch(selection.quantity, parseOrderQuantity(item.adet, 1))) {
+            return [];
+        }
+        indices.push(selection.index);
+    }
+
+    return indices;
+}
+
+function pruneSelectedItemKeys() {
+    if (!selectedItemKeys.length) return;
+
+    const validKeys = new Set(getOrderDisplayRows().map(row => row.key));
+    selectedItemKeys = selectedItemKeys.filter(key => validKeys.has(key));
 }
 
 function formatGramAmount(value) {
@@ -1203,7 +1299,7 @@ function selectMasa(masa) {
     }
 
     // Reset selection on masa switch
-    selectedItemIndices = [];
+    selectedItemKeys = [];
     updateSplitButtons();
     updateQuickSaleUI();
 }
@@ -1212,17 +1308,23 @@ function updateOrderDisplay() {
     if (!elements.orderList) return;
 
     refreshCurrentTotal();
+    pruneSelectedItemKeys();
 
     if (currentItems.length === 0) {
         elements.orderList.innerHTML = '<div class="empty-state"><p>Sipariş yok</p></div>';
     } else {
         elements.orderList.innerHTML = '';
 
-        currentItems.forEach((item, index) => {
+        getOrderDisplayRows().forEach((row) => {
+            const item = row.item;
             const orderItem = document.createElement('div');
             orderItem.className = 'order-item';
+            if (row.isSplitUnit) {
+                orderItem.classList.add('split-unit');
+            }
 
-            const listTotal = getLineTotal(item);
+            const displayItem = { ...item, adet: row.quantity };
+            const listTotal = getLineTotal(displayItem);
             const isIkram = isComplimentaryItem(item);
             const itemTotal = isIkram ? 0 : listTotal;
             const isHazir = isReadyItem(item);
@@ -1231,6 +1333,10 @@ function updateOrderDisplay() {
                 ? '<span style="color: #2ecc71; font-weight: bold; font-size: 10px;">[HAZIR] </span>'
                 : (isServed ? '<span style="color: #7f8c8d; font-weight: bold; font-size: 10px;">[SERVİS EDİLDİ] </span>' : '');
             const itemNote = item.not || '';
+            const unitChip = row.isSplitUnit
+                ? `<span class="order-unit-chip">${row.unitNumber}/${row.unitCount}</span>`
+                : '';
+            const canCancelFromRow = !row.isSplitUnit && isKitchenCancelableItem(item) && item.uid;
 
             if (isIkram) {
                 orderItem.classList.add('ikram');
@@ -1240,14 +1346,14 @@ function updateOrderDisplay() {
                 <div class="order-item-info" style="flex-grow: 1;">
                     <div class="order-item-name">
                         ${statusBadge}
-                        ${formatOrderQuantity(item.adet)}x ${item.urun}${isIkram ? ' (İKRAM)' : ''}
+                        ${formatOrderQuantity(row.quantity)}x ${escapeHtml(item.urun)}${unitChip}${isIkram ? ' (İKRAM)' : ''}
                     </div>
-                    <div style="font-size: 10px; color: #777;">${item.garson || 'Bilinmiyor'} - ${item.saat || ''}</div>
+                    <div style="font-size: 10px; color: #777;">${escapeHtml(item.garson || 'Bilinmiyor')} - ${escapeHtml(item.saat || '')}</div>
                     ${itemNote ? `<div style="font-size: 11px; color: #b7791f; margin-top: 3px;">Not: ${escapeHtml(itemNote)}</div>` : ''}
                 </div>
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <div class="order-item-price">${isIkram ? `İKRAM<br><small>${listTotal.toFixed(2)} TL</small>` : `${itemTotal.toFixed(2)} TL`}</div>
-                    ${isKitchenCancelableItem(item) && item.uid ? `
+                    ${canCancelFromRow ? `
                         <button class="btn-cancel-small" onclick="cancelItem('${item.uid}', event)" 
                                 style="background: #e74c3c; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 10px; cursor: pointer;">
                             İPTAL
@@ -1256,13 +1362,13 @@ function updateOrderDisplay() {
                 </div>
             `;
 
-            if (selectedItemIndices.includes(index)) {
+            if (selectedItemKeys.includes(row.key)) {
                 orderItem.classList.add('selected');
             }
 
             orderItem.onclick = (e) => {
                 if (!e.target.closest('button')) {
-                    toggleItemSelection(index);
+                    toggleItemSelection(row.key);
                 }
             };
 
@@ -1621,12 +1727,12 @@ function checkVardiya() {
     return true;
 }
 
-function toggleItemSelection(index) {
-    const pos = selectedItemIndices.indexOf(index);
+function toggleItemSelection(key) {
+    const pos = selectedItemKeys.indexOf(key);
     if (pos === -1) {
-        selectedItemIndices.push(index);
+        selectedItemKeys.push(key);
     } else {
-        selectedItemIndices.splice(pos, 1);
+        selectedItemKeys.splice(pos, 1);
     }
     updateOrderDisplay();
     updateSplitButtons();
@@ -1636,22 +1742,24 @@ function updateSplitButtons() {
     updateComplimentaryCloseButton();
     if (!elements.splitButtonsArea) return;
 
-    if (selectedItemIndices.length > 0) {
-        const selectedItems = currentItems.filter((_, i) => selectedItemIndices.includes(i));
+    if (selectedItemKeys.length > 0) {
+        const selectedItems = getSelectedPaymentItems();
         const selectedPayable = getPayableTotal(selectedItems);
         const hasNormal = selectedItems.some(item => !isComplimentaryItem(item));
         const hasIkram = selectedItems.some(isComplimentaryItem);
+        const wholeItemIndices = getSelectedWholeItemIndices();
+        const canChangeComplimentary = wholeItemIndices.length > 0;
 
         elements.splitButtonsArea.style.display = 'block';
-        elements.selectedCount.textContent = selectedItemIndices.length;
+        elements.selectedCount.textContent = selectedItemKeys.length;
         if (elements.btnPaySelected) {
             elements.btnPaySelected.style.display = selectedPayable > 0 ? 'block' : 'none';
         }
         if (elements.btnCompSelected) {
-            elements.btnCompSelected.style.display = hasNormal ? 'block' : 'none';
+            elements.btnCompSelected.style.display = hasNormal && canChangeComplimentary ? 'block' : 'none';
         }
         if (elements.btnUncompSelected) {
-            elements.btnUncompSelected.style.display = hasIkram ? 'block' : 'none';
+            elements.btnUncompSelected.style.display = hasIkram && canChangeComplimentary ? 'block' : 'none';
         }
     } else {
         elements.splitButtonsArea.style.display = 'none';
@@ -1670,8 +1778,13 @@ function setSelectedComplimentary(ikram) {
         showNotification('Lütfen önce masa seçiniz!', 'warning');
         return;
     }
-    if (selectedItemIndices.length === 0) {
+    if (selectedItemKeys.length === 0) {
         showNotification('Lütfen ürün seçiniz!', 'warning');
+        return;
+    }
+    const selectedWholeItemIndices = getSelectedWholeItemIndices();
+    if (!selectedWholeItemIndices.length) {
+        showNotification('İkram işlemi için ürün satırının tamamını seçiniz.', 'warning');
         return;
     }
 
@@ -1683,12 +1796,12 @@ function setSelectedComplimentary(ikram) {
 
     socket.emit('set_item_comp', {
         masa: currentMasa,
-        item_indices: selectedItemIndices,
+        item_indices: selectedWholeItemIndices,
         ikram,
         role: currentRole
     });
 
-    selectedItemIndices = [];
+    selectedItemKeys = [];
     updateOrderDisplay();
     updateSplitButtons();
 }
@@ -1748,7 +1861,7 @@ function processPayment(type) {
  */
 function getCurrentPaymentTotal() {
     if (isSelectivePayment) {
-        return getPayableTotal(currentItems.filter((_, i) => selectedItemIndices.includes(i)));
+        return getPayableTotal(getSelectedPaymentItems());
     }
     return currentTotal;
 }
@@ -1761,7 +1874,7 @@ function openPaymentModal(prefillType = null, isSelective = false) {
 
     if (!checkVardiya()) return;
 
-    const itemsToPay = isSelective ? currentItems.filter((_, i) => selectedItemIndices.includes(i)) : currentItems;
+    const itemsToPay = isSelective ? getSelectedPaymentItems() : currentItems;
 
     if (itemsToPay.length === 0) {
         showNotification('Sipariş listesi boş!', 'warning');
@@ -2054,7 +2167,7 @@ function finalizeSplitPayment() {
         invoice_note: elements.invoiceNote ? elements.invoiceNote.value.trim() : ''
     };
     if (isSelectivePayment) {
-        payload.item_indices = selectedItemIndices;
+        payload.item_quantities = getSelectedItemQuantities();
     }
 
     const posType = systemInfo.pos_type || '';
@@ -2109,7 +2222,7 @@ function setupEventListeners() {
                 showNotification('Ödenecek tutar yok. Hesabı İkram Kapat ile kapatabilirsiniz.', 'info');
                 return;
             }
-            const isSelective = selectedItemIndices.length > 0;
+            const isSelective = selectedItemKeys.length > 0;
             const defaultPaymentMethod = getDefaultPaymentMethod();
             console.log(`💶 btnTotalPayment clicked -> opening modal with ${defaultPaymentMethod} prefill (Selective: ${isSelective})`);
             openPaymentModal(defaultPaymentMethod, isSelective);

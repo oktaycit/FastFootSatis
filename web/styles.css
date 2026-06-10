@@ -685,6 +685,11 @@ body.cashier-terminal .table-btn.occupied {
     box-shadow: var(--shadow-sm);
 }
 
+.order-item.split-unit {
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+
 .order-item.ikram {
     background: #ecfdf5;
     border-left-color: #0f766e;
@@ -708,6 +713,23 @@ body.cashier-terminal .table-btn.occupied {
 .order-item-name {
     font-weight: bold;
     color: var(--text-primary);
+}
+
+.order-unit-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    height: 22px;
+    margin-left: 8px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    color: #334155;
+    font-family: Arial, sans-serif;
+    font-size: 12px;
+    font-weight: 800;
+    vertical-align: middle;
 }
 
 .order-item-price {
