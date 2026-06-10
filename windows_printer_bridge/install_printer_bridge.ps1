@@ -1,7 +1,8 @@
 #Requires -RunAsAdministrator
 [CmdletBinding()]
 param(
-    [string]$ListenAddress = "100.76.106.39",
+    [string]$ListenAddress = "0.0.0.0",
+    [string]$WindowsTailscaleAddress = "100.76.106.39",
     [string]$AllowedRemoteAddress = "100.127.221.60",
     [int]$KasaPort = 9201,
     [int]$IzgaraPort = 9202,
@@ -69,6 +70,12 @@ function Wait-ForListenAddress {
     return $false
 }
 
+function Test-WildcardListenAddress {
+    param([string]$Address)
+
+    return $Address -in @("0.0.0.0", "*", "+")
+}
+
 $bridgeRules = @(
     [pscustomobject]@{
         Name = "kasa-tatli-icecek"
@@ -92,6 +99,9 @@ $bridgeRules = @(
 
 Write-BridgeLog "FastFoot termal yazici bridge kuruluyor..." "Cyan"
 Write-BridgeLog "Dinleme IP: $ListenAddress"
+if (Test-WildcardListenAddress -Address $ListenAddress) {
+    Write-BridgeLog "Windows Tailscale IP hedefi: $WindowsTailscaleAddress"
+}
 Write-BridgeLog "Izinli uzak sunucu: $AllowedRemoteAddress"
 
 if ($StartupDelaySeconds -gt 0) {
@@ -104,11 +114,17 @@ Wait-ForListenAddress | Out-Null
 Set-Service -Name iphlpsvc -StartupType Automatic
 Start-Service -Name iphlpsvc
 
+$cleanupListenAddresses = @($ListenAddress, $WindowsTailscaleAddress, "0.0.0.0") |
+    Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+    Select-Object -Unique
+
 foreach ($rule in $bridgeRules) {
     Write-BridgeLog "Portproxy: $ListenAddress`:$($rule.ListenPort) -> $($rule.TargetAddress)`:$($rule.TargetPort)"
-    netsh interface portproxy delete v4tov4 `
-        listenaddress=$ListenAddress `
-        listenport=$($rule.ListenPort) 2>$null | Out-Null
+    foreach ($cleanupAddress in $cleanupListenAddresses) {
+        netsh interface portproxy delete v4tov4 `
+            listenaddress=$cleanupAddress `
+            listenport=$($rule.ListenPort) 2>$null | Out-Null
+    }
 
     netsh interface portproxy add v4tov4 `
         listenaddress=$ListenAddress `
@@ -120,12 +136,18 @@ foreach ($rule in $bridgeRules) {
 Get-NetFirewallRule -DisplayName $firewallRuleName -ErrorAction SilentlyContinue |
     Remove-NetFirewallRule
 
+$firewallLocalAddress = if (Test-WildcardListenAddress -Address $ListenAddress) {
+    "Any"
+} else {
+    $ListenAddress
+}
+
 New-NetFirewallRule `
     -DisplayName $firewallRuleName `
     -Direction Inbound `
     -Action Allow `
     -Protocol TCP `
-    -LocalAddress $ListenAddress `
+    -LocalAddress $firewallLocalAddress `
     -LocalPort $KasaPort,$IzgaraPort,$MutfakPort `
     -RemoteAddress $AllowedRemoteAddress | Out-Null
 
@@ -136,6 +158,7 @@ if ($RegisterStartupTask) {
         "-ExecutionPolicy", "Bypass",
         "-File", "`"$scriptPath`"",
         "-ListenAddress", $ListenAddress,
+        "-WindowsTailscaleAddress", $WindowsTailscaleAddress,
         "-AllowedRemoteAddress", $AllowedRemoteAddress,
         "-KasaPort", $KasaPort,
         "-IzgaraPort", $IzgaraPort,

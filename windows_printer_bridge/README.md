@@ -13,6 +13,10 @@ yazicilara `9100` portundan ham ESC/POS verisini iletir.
 FastFoot sunucusu Tailscale IP'si: `100.127.221.60`
 Windows Tailscale IP'si: `100.76.106.39`
 
+Bridge Windows uzerinde varsayilan olarak `0.0.0.0` adresinde dinler. Bu, Windows
+acilisinda Tailscale IP'si gec gelse bile portproxy kurallarinin hazir kalmasini saglar.
+FastFoot ayarlarinda yine Windows Tailscale IP'si (`100.76.106.39`) kullanilir.
+
 ## Kurulum
 
 Windows makinede ilk kurulum icin `setup_printer.bat` dosyasini calistirin. Dosya
@@ -27,10 +31,12 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 ```
 
 Kurulum `netsh interface portproxy` kullanir ve kalicidir. Windows yeniden baslasa bile
-kurallar durur; IP Helper servisi otomatik baslatilir.
+kurallar durur; IP Helper servisi otomatik baslatilir. Portproxy `0.0.0.0` uzerinde
+dinledigi icin Tailscale servisi IP'yi gec alsa bile bridge Tailscale hazir oldugunda
+baglantiyi kabul eder.
 
-Baslangic gorevi Windows acildiktan sonra 45 saniye bekler, Tailscale/dinleme IP'sinin
-hazir olmasini kisa sure izler ve portproxy kurallarini tekrar yazar. Log dosyasi:
+Baslangic gorevi Windows acildiktan sonra 45 saniye bekler ve portproxy kurallarini
+tekrar yazar. Log dosyasi:
 
 ```text
 C:\ProgramData\FastFootPrinterBridge\printer_bridge.log
