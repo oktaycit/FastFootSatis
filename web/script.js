@@ -16,10 +16,14 @@ let currentTotal = 0;
 let selectedItemKeys = [];
 let isSelectivePayment = false;
 let suppressCardSplitSync = false;
+let paymentInProgress = false;
+let paymentWaitTimer = null;
 let activeShift = null;
 let cashierOrderEntryOpen = false;
 const PAYMENT_METHODS = ['Nakit', 'Kredi Kartı', 'Açık Hesap'];
 const Z_REPORT_HOLD_MS = 5000;
+const FINALIZE_PAYMENT_LABEL = '✅ Ödemeyi Tamamla';
+const PAYMENT_WAIT_TIMEOUT_MS = 150000;
 
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -74,6 +78,53 @@ function getComplimentaryTotal(items = currentItems) {
 
 function refreshCurrentTotal() {
     currentTotal = getPayableTotal(currentItems);
+}
+
+function resetFinalizePaymentButton() {
+    paymentInProgress = false;
+    if (paymentWaitTimer) {
+        clearTimeout(paymentWaitTimer);
+        paymentWaitTimer = null;
+    }
+    if (elements.btnFinalizePayment) {
+        elements.btnFinalizePayment.disabled = false;
+        elements.btnFinalizePayment.textContent = FINALIZE_PAYMENT_LABEL;
+    }
+}
+
+function setFinalizePaymentWaiting(message = '⏳ ÖKC Bekleniyor...') {
+    paymentInProgress = true;
+    if (paymentWaitTimer) {
+        clearTimeout(paymentWaitTimer);
+    }
+    if (elements.btnFinalizePayment) {
+        elements.btnFinalizePayment.disabled = true;
+        elements.btnFinalizePayment.textContent = message;
+    }
+    paymentWaitTimer = setTimeout(() => {
+        resetFinalizePaymentButton();
+        refreshCurrentMasaFromServer();
+        showNotification('ÖKC yanıtı beklenenden uzun sürdü. Masa durumu sunucudan tekrar kontrol edildi.', 'warning');
+    }, PAYMENT_WAIT_TIMEOUT_MS);
+}
+
+async function refreshCurrentMasaFromServer() {
+    if (!currentMasa) return;
+    try {
+        const response = await fetch(`/api/adisyon/${encodeURIComponent(currentMasa)}`);
+        if (!response.ok) return;
+        const data = await response.json();
+        adisyonlar[data.masa] = data.items || [];
+        if (data.masa === currentMasa) {
+            currentItems = data.items || [];
+            currentTotal = Number(data.total ?? getPayableTotal(currentItems)) || 0;
+            updateOrderDisplay();
+            updateQuickSaleUI();
+        }
+        updateTableButton(data.masa);
+    } catch (err) {
+        console.error('Masa refresh failed:', err);
+    }
 }
 
 function normalizePaymentMethod(value) {
@@ -260,7 +311,6 @@ function connectToServer() {
     // Connection events
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
-    socket.on('error', onError);
 
     // Data events
     socket.on('initial_data', onInitialData);
@@ -347,12 +397,7 @@ function onDisconnect() {
 function onError(error) {
     console.error('❌ Socket error:', error);
     showNotification(error.message || 'Bir hata oluştu', 'error');
-
-    // Re-enable payment button if failed
-    if (elements.btnFinalizePayment) {
-        elements.btnFinalizePayment.disabled = false;
-        elements.btnFinalizePayment.textContent = '✅ Ödemeyi Tamamla';
-    }
+    resetFinalizePaymentButton();
 }
 
 function onSystemInfo(data) {
@@ -599,6 +644,7 @@ function onMasaUpdate(data) {
 
 function onPaymentCompleted(data) {
     console.log('💰 Payment completed:', data);
+    resetFinalizePaymentButton();
 
     // Clear adisyon only when the whole account is closed.
     if (!data.is_partial) {
@@ -681,6 +727,11 @@ function onSuccess(data) {
     const normalized = message.toLocaleLowerCase('tr-TR');
     // Payment-completed success toasts are intentionally suppressed.
     if (normalized.includes('ödemesi alındı') || normalized.includes('parçalı ödeme alındı')) {
+        resetFinalizePaymentButton();
+        if (typeof closePaymentModal === 'function') {
+            closePaymentModal();
+        }
+        refreshCurrentMasaFromServer();
         return;
     }
     showNotification(data.message, 'success');
@@ -1867,6 +1918,11 @@ function getCurrentPaymentTotal() {
 }
 
 function openPaymentModal(prefillType = null, isSelective = false) {
+    if (paymentInProgress) {
+        showNotification('ÖKC işlemi devam ediyor, lütfen tamamlanmasını bekleyin.', 'info');
+        return;
+    }
+
     if (!currentMasa) {
         showNotification('Lütfen önce masa seçiniz!', 'warning');
         return;
@@ -1927,6 +1983,7 @@ function openPaymentModal(prefillType = null, isSelective = false) {
     }
 
     // Show modal
+    resetFinalizePaymentButton();
     elements.paymentModal.style.display = 'block';
 
     // Update totals
@@ -1937,6 +1994,9 @@ function openPaymentModal(prefillType = null, isSelective = false) {
 function closePaymentModal() {
     elements.paymentModal.style.display = 'none';
     isSelectivePayment = false;
+    if (!paymentInProgress) {
+        resetFinalizePaymentButton();
+    }
 }
 
 function updateRemainingAmount(overrideTotal = null) {
@@ -2095,6 +2155,15 @@ function selectCustomer(name, isNew = false) {
 }
 
 function finalizeSplitPayment() {
+    if (paymentInProgress) {
+        showNotification('ÖKC işlemi devam ediyor, lütfen tamamlanmasını bekleyin.', 'info');
+        return;
+    }
+    if (!socket || !socket.connected) {
+        showNotification('Sunucu bağlantısı yok. Bağlantı geldikten sonra tekrar deneyin.', 'error');
+        return;
+    }
+
     const nakit = centsToMoney(moneyToCents(elements.paymentNakit.value));
     const cardPayments = getCardPaymentParts();
     const kart = cardPayments.reduce((sum, amount) => sum + amount, 0);
@@ -2176,8 +2245,7 @@ function finalizeSplitPayment() {
     );
 
     if (shouldWaitForPos) {
-        elements.btnFinalizePayment.disabled = true;
-        elements.btnFinalizePayment.innerHTML = '⏳ ÖKC Bekleniyor...';
+        setFinalizePaymentWaiting();
         socket.emit('finalize_payment', payload);
         // Modal will be closed by onPaymentCompleted upon success
     } else {
