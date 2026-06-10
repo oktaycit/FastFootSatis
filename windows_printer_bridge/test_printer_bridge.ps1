@@ -4,7 +4,9 @@ param(
     [int]$KasaPort = 9201,
     [int]$IzgaraPort = 9202,
     [int]$MutfakPort = 9203,
-    [int]$PrinterPort = 9100
+    [int]$PrinterPort = 9100,
+    [int]$Retries = 1,
+    [int]$RetryDelaySeconds = 5
 )
 
 $targets = @(
@@ -13,9 +15,29 @@ $targets = @(
     [pscustomobject]@{ Name = "mutfak"; Address = "192.168.1.203"; Port = $PrinterPort; BridgePort = $MutfakPort }
 )
 
+function Test-PortWithRetry {
+    param(
+        [string]$ComputerName,
+        [int]$Port
+    )
+
+    $attempts = [Math]::Max(1, $Retries)
+    for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+        if (Test-NetConnection -ComputerName $ComputerName -Port $Port -InformationLevel Quiet) {
+            return $true
+        }
+
+        if ($attempt -lt $attempts) {
+            Start-Sleep -Seconds $RetryDelaySeconds
+        }
+    }
+
+    return $false
+}
+
 Write-Host "Lokal yazici portlari test ediliyor..." -ForegroundColor Cyan
 foreach ($target in $targets) {
-    $result = Test-NetConnection -ComputerName $target.Address -Port $target.Port -InformationLevel Quiet
+    $result = Test-PortWithRetry -ComputerName $target.Address -Port $target.Port
     $status = if ($result) { "OK" } else { "FAIL" }
     Write-Host "$($target.Name): $($target.Address):$($target.Port) $status"
 }
@@ -23,7 +45,7 @@ foreach ($target in $targets) {
 Write-Host ""
 Write-Host "Windows bridge dinleme portlari test ediliyor..." -ForegroundColor Cyan
 foreach ($target in $targets) {
-    $result = Test-NetConnection -ComputerName $ListenAddress -Port $target.BridgePort -InformationLevel Quiet
+    $result = Test-PortWithRetry -ComputerName $ListenAddress -Port $target.BridgePort
     $status = if ($result) { "OK" } else { "FAIL" }
     Write-Host "$($target.Name): $ListenAddress`:$($target.BridgePort) $status"
 }

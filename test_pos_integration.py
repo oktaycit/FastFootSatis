@@ -111,8 +111,15 @@ class TokenBridgePayloadTests(unittest.TestCase):
                 invoice_info={"document_type": 9006, "tax_id": "", "serial_no": ""},
             )
 
+    @patch("pos_integration.requests.get")
     @patch("pos_integration.requests.post")
-    def test_token_bridge_sale_posts_basket_to_windows_bridge(self, mock_post):
+    def test_token_bridge_sale_posts_basket_to_windows_bridge(self, mock_post, mock_get):
+        mock_get.return_value = FakeResponse({
+            "success": True,
+            "deviceStateKnown": True,
+            "deviceConnected": True,
+            "pendingSales": 0,
+        })
         mock_post.return_value = FakeResponse({
             "success": True,
             "receiptNo": 53,
@@ -134,6 +141,37 @@ class TokenBridgePayloadTests(unittest.TestCase):
         self.assertEqual(mock_post.call_args.args[0], "http://192.168.1.50:8787/api/sale")
         self.assertEqual(mock_post.call_args.kwargs["json"]["basketID"], "basket-2")
         self.assertEqual(mock_post.call_args.kwargs["timeout"], 130)
+
+
+class TokenBridgeHealthTests(unittest.TestCase):
+    @patch("pos_integration.requests.get")
+    def test_token_bridge_health_blocks_known_disconnected_device(self, mock_get):
+        mock_get.return_value = FakeResponse({
+            "success": True,
+            "deviceStateKnown": True,
+            "deviceConnected": False,
+            "pendingSales": 0,
+        })
+        manager = POSManager(True, "192.168.1.50", 8787, "token-bridge")
+
+        success, message = manager._check_bridge_health()
+
+        self.assertFalse(success)
+        self.assertIn("ÖKC cihazı bağlı değil", message)
+
+    @patch("pos_integration.requests.get")
+    def test_token_bridge_health_allows_unknown_device_state(self, mock_get):
+        mock_get.return_value = FakeResponse({
+            "success": True,
+            "deviceConnected": False,
+            "pendingSales": 0,
+        })
+        manager = POSManager(True, "192.168.1.50", 8787, "token-bridge")
+
+        success, message = manager._check_bridge_health()
+
+        self.assertTrue(success)
+        self.assertEqual(message, "")
 
 
 if __name__ == "__main__":

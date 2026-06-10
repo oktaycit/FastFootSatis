@@ -25,6 +25,13 @@ Set-ExecutionPolicy -Scope Process Bypass -Force
 Kurulum `netsh interface portproxy` kullanir ve kalicidir. Windows yeniden baslasa bile
 kurallar durur; IP Helper servisi otomatik baslatilir.
 
+Baslangic gorevi Windows acildiktan sonra 45 saniye bekler, Tailscale/dinleme IP'sinin
+hazir olmasini kisa sure izler ve portproxy kurallarini tekrar yazar. Log dosyasi:
+
+```text
+C:\ProgramData\FastFootPrinterBridge\printer_bridge.log
+```
+
 Kurulum tamamlaninca masaustune `FastFootPrinterBridge` kisayolu eklenir. Bu kisayol
 yonetici izni isteyerek bridge kurallarini yeniler ve test scriptini calistirir.
 
@@ -37,7 +44,7 @@ Kisayolu elle olusturmak gerekirse:
 ## Test
 
 ```powershell
-.\test_printer_bridge.ps1
+.\test_printer_bridge.ps1 -Retries 6 -RetryDelaySeconds 10
 ```
 
 Lokal yazici portlari `OK`, bridge portlari da `OK` gorunmelidir.

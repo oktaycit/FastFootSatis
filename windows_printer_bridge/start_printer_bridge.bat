@@ -34,7 +34,7 @@ if errorlevel 1 (
 echo.
 if exist "%TEST_SCRIPT%" (
     echo Bridge test ediliyor...
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%TEST_SCRIPT%"
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%TEST_SCRIPT%" -Retries 6 -RetryDelaySeconds 10
 ) else (
     echo test_printer_bridge.ps1 bulunamadi, test atlandi.
 )

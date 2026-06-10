@@ -28,6 +28,7 @@ namespace FastFootOkcBridge
         private static readonly SemaphoreSlim SaleLock = new SemaphoreSlim(1, 1);
 
         private static volatile bool _deviceConnected;
+        private static volatile bool _deviceStateKnown;
         private static volatile bool _fiscalInfoLoaded;
         private static string _lastDeviceId = "";
         private static string _lastFiscalInfo = "";
@@ -119,6 +120,7 @@ namespace FastFootOkcBridge
 
         private static void DeviceStateCallback(bool isConnected, string id)
         {
+            _deviceStateKnown = true;
             _deviceConnected = isConnected;
             _lastDeviceId = id ?? "";
             if (!isConnected)
@@ -181,9 +183,12 @@ namespace FastFootOkcBridge
                     WriteJson(context, new Dictionary<string, object>
                     {
                         { "success", true },
+                        { "bridgeReady", true },
+                        { "deviceStateKnown", _deviceStateKnown },
                         { "deviceConnected", _deviceConnected },
                         { "deviceId", _lastDeviceId },
-                        { "pendingSales", PendingSales.Count }
+                        { "pendingSales", PendingSales.Count },
+                        { "message", GetDeviceStatusMessage() }
                     });
                     return;
                 }
@@ -193,6 +198,8 @@ namespace FastFootOkcBridge
                     WriteJson(context, new Dictionary<string, object>
                     {
                         { "success", true },
+                        { "bridgeReady", true },
+                        { "deviceStateKnown", _deviceStateKnown },
                         { "deviceConnected", _deviceConnected },
                         { "fiscalInfo", _lastFiscalInfo },
                         { "message", "Live fiscalInfo sorgusu kapali; POS DLL bu cagriyi bazi kurulumlarda sonlandirabiliyor." }
@@ -220,6 +227,16 @@ namespace FastFootOkcBridge
                     { "message", ex.Message }
                 }, 500);
             }
+        }
+
+        private static string GetDeviceStatusMessage()
+        {
+            if (!_deviceStateKnown)
+            {
+                return "OKC cihaz durumu henuz callback ile bildirilmedi; satis istegi gelirse denenecek.";
+            }
+
+            return _deviceConnected ? "OKC cihazi bagli." : "OKC cihazi bagli degil.";
         }
 
         private static void HandleSale(HttpListenerContext context)

@@ -244,9 +244,15 @@ class POSManager:
             url = f"http://{self.ip}:{self.port}/health"
             resp = requests.get(url, timeout=5)
             data = resp.json()
-            if not data.get("deviceConnected"):
+            device_connected = data.get("deviceConnected")
+            device_state_known = data.get("deviceStateKnown")
+            if device_connected is False and device_state_known is True:
                 logger.error("ÖKC Bridge: Cihaz bağlı değil")
                 return False, "ÖKC cihazı bağlı değil, lütfen USB bağlantısını kontrol edin"
+            if device_connected is False:
+                logger.warning(
+                    "ÖKC Bridge cihaz durumu henüz kesin değil, satış isteği bridge'e iletilecek"
+                )
             pending = data.get("pendingSales", 0)
             if pending > 0:
                 logger.warning(f"ÖKC Bridge: {pending} bekleyen işlem var, yeni istek bekleniyor...")

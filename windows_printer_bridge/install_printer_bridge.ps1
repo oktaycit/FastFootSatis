@@ -7,12 +7,67 @@ param(
     [int]$IzgaraPort = 9202,
     [int]$MutfakPort = 9203,
     [int]$PrinterPort = 9100,
-    [bool]$RegisterStartupTask = $true
+    [bool]$RegisterStartupTask = $true,
+    [int]$StartupDelaySeconds = 0,
+    [int]$NetworkWaitSeconds = 90,
+    [string]$LogPath = "$env:ProgramData\FastFootPrinterBridge\printer_bridge.log"
 )
 
 $ErrorActionPreference = "Stop"
 $firewallRuleName = "FastFoot Thermal Printer Bridge"
 $taskName = "FastFoot Thermal Printer Bridge"
+
+if ($LogPath) {
+    $logDir = Split-Path -Parent $LogPath
+    if ($logDir) {
+        New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+    }
+}
+
+function Write-BridgeLog {
+    param(
+        [string]$Message,
+        [string]$ForegroundColor
+    )
+
+    if ($ForegroundColor) {
+        Write-Host $Message -ForegroundColor $ForegroundColor
+    } else {
+        Write-Host $Message
+    }
+
+    if ($LogPath) {
+        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        Add-Content -Path $LogPath -Value "[$timestamp] $Message" -Encoding UTF8
+    }
+}
+
+function Test-ListenAddressReady {
+    if ($ListenAddress -in @("0.0.0.0", "*", "+")) {
+        return $true
+    }
+
+    $ip = Get-NetIPAddress -AddressFamily IPv4 -IPAddress $ListenAddress -ErrorAction SilentlyContinue
+    return $null -ne $ip
+}
+
+function Wait-ForListenAddress {
+    if (Test-ListenAddressReady) {
+        return $true
+    }
+
+    $deadline = (Get-Date).AddSeconds([Math]::Max(0, $NetworkWaitSeconds))
+    while ((Get-Date) -lt $deadline) {
+        Write-BridgeLog "Dinleme IP henuz hazir degil: $ListenAddress. Bekleniyor..."
+        Start-Sleep -Seconds 5
+        if (Test-ListenAddressReady) {
+            return $true
+        }
+    }
+
+    Write-BridgeLog "UYARI: Dinleme IP Windows uzerinde gorunmedi: $ListenAddress. Kurallar yine de yenilenecek." "Yellow"
+    return $false
+}
 
 $bridgeRules = @(
     [pscustomobject]@{
@@ -35,15 +90,22 @@ $bridgeRules = @(
     }
 )
 
-Write-Host "FastFoot termal yazici bridge kuruluyor..." -ForegroundColor Cyan
-Write-Host "Dinleme IP: $ListenAddress"
-Write-Host "Izinli uzak sunucu: $AllowedRemoteAddress"
+Write-BridgeLog "FastFoot termal yazici bridge kuruluyor..." "Cyan"
+Write-BridgeLog "Dinleme IP: $ListenAddress"
+Write-BridgeLog "Izinli uzak sunucu: $AllowedRemoteAddress"
+
+if ($StartupDelaySeconds -gt 0) {
+    Write-BridgeLog "Baslangic gecikmesi: $StartupDelaySeconds saniye"
+    Start-Sleep -Seconds $StartupDelaySeconds
+}
+
+Wait-ForListenAddress | Out-Null
 
 Set-Service -Name iphlpsvc -StartupType Automatic
 Start-Service -Name iphlpsvc
 
 foreach ($rule in $bridgeRules) {
-    Write-Host "Portproxy: $ListenAddress`:$($rule.ListenPort) -> $($rule.TargetAddress)`:$($rule.TargetPort)"
+    Write-BridgeLog "Portproxy: $ListenAddress`:$($rule.ListenPort) -> $($rule.TargetAddress)`:$($rule.TargetPort)"
     netsh interface portproxy delete v4tov4 `
         listenaddress=$ListenAddress `
         listenport=$($rule.ListenPort) 2>$null | Out-Null
@@ -79,6 +141,9 @@ if ($RegisterStartupTask) {
         "-IzgaraPort", $IzgaraPort,
         "-MutfakPort", $MutfakPort,
         "-PrinterPort", $PrinterPort,
+        "-StartupDelaySeconds", 45,
+        "-NetworkWaitSeconds", $NetworkWaitSeconds,
+        "-LogPath", "`"$LogPath`"",
         "-RegisterStartupTask:`$false"
     ) -join " "
 
@@ -86,7 +151,7 @@ if ($RegisterStartupTask) {
     $triggerStartup = New-ScheduledTaskTrigger -AtStartup
     $triggerLogon = New-ScheduledTaskTrigger -AtLogOn
     $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -RunLevel Highest
-    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -StartWhenAvailable
 
     Register-ScheduledTask `
         -TaskName $taskName `
@@ -97,14 +162,15 @@ if ($RegisterStartupTask) {
         -Force | Out-Null
 }
 
-Write-Host ""
-Write-Host "Kurulum tamamlandi." -ForegroundColor Green
+Write-BridgeLog ""
+Write-BridgeLog "Kurulum tamamlandi." "Green"
 if ($RegisterStartupTask) {
-    Write-Host "Baslangic gorevi kuruldu: $taskName" -ForegroundColor Green
+    Write-BridgeLog "Baslangic gorevi kuruldu: $taskName" "Green"
 }
-Write-Host "Aktif portproxy kurallari:"
+Write-BridgeLog "Aktif portproxy kurallari:"
 netsh interface portproxy show v4tov4
 
-Write-Host ""
-Write-Host "Yazicilari test etmek icin:"
-Write-Host ".\test_printer_bridge.ps1"
+Write-BridgeLog ""
+Write-BridgeLog "Log dosyasi: $LogPath"
+Write-BridgeLog "Yazicilari test etmek icin:"
+Write-BridgeLog ".\test_printer_bridge.ps1 -Retries 6 -RetryDelaySeconds 10"
