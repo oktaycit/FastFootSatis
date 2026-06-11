@@ -4763,7 +4763,10 @@ def terminals():
 @app.route('/settings')
 def settings_page():
     """Ayarlar sayfası"""
-    return app.send_static_file('settings.html')
+    response = make_response(app.send_static_file('settings.html'))
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    return response
 
 @app.route('/menu_edit')
 def menu_edit_page():

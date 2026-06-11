@@ -1,4 +1,7 @@
 import datetime
+import json
+import os
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
@@ -96,6 +99,39 @@ class IntegrationManagerTests(unittest.TestCase):
         self.assertIn("sender_alias", accounting["mysoft"])
         self.assertIn("receiver_alias", accounting["mysoft"])
         self.assertIn("xslt_code", accounting["mysoft"])
+
+    def test_legacy_mysoft_settings_keep_new_default_fields(self):
+        legacy_settings = {
+            "accounting": {
+                "active_platform": "none",
+                "mysoft": {
+                    "enabled": False,
+                    "base_url": "https://mysoft.example",
+                    "invoice_endpoint": "/invoice/create",
+                },
+            }
+        }
+        fd, path = tempfile.mkstemp(prefix="fastfoot-mysoft-", suffix=".json")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(legacy_settings, f)
+
+            manager = IntegrationManager(path)
+            mysoft = manager.settings["accounting"]["mysoft"]
+
+            self.assertEqual(mysoft["base_url"], "https://mysoft.example")
+            self.assertEqual(mysoft["environment"], "test")
+            self.assertIn("tenant_identifier_number", mysoft)
+            self.assertIn("invoice_series", mysoft)
+            self.assertIn("numbering_unit", mysoft)
+            self.assertIn("sender_alias", mysoft)
+            self.assertIn("receiver_alias", mysoft)
+            self.assertIn("xslt_code", mysoft)
+        finally:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
 
 
 if __name__ == "__main__":

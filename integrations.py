@@ -8,6 +8,7 @@ import json
 import os
 import datetime
 import logging
+import copy
 
 try:
     import requests
@@ -78,7 +79,7 @@ class IntegrationManager:
 
     def _merge_default_settings(self, raw):
         defaults = self._default_settings()
-        merged = defaults
+        merged = copy.deepcopy(defaults)
         for key, value in (raw or {}).items():
             if isinstance(value, dict) and isinstance(merged.get(key), dict):
                 merged[key].update(value)
