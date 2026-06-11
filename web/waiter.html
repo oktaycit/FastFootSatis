@@ -315,6 +315,26 @@
             color: #999;
         }
 
+        .single-service-chip {
+            display: inline-flex;
+            align-items: center;
+            min-height: 18px;
+            margin-left: 6px;
+            padding: 2px 6px;
+            border-radius: 999px;
+            background: #123524;
+            color: #7ee0a5;
+            font-size: 9px;
+            font-weight: 900;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+
+        .single-service-chip.pending {
+            background: #3b2c13;
+            color: #ffd37a;
+        }
+
         .basket-control-group {
             display: flex;
             flex-direction: column;
@@ -1080,6 +1100,8 @@
         let sysInfo = {};
         let currentTable = null;
         let basket = []; // Henüz gönderilmemiş yerel sepet
+        let basketClientSeq = 0;
+        let pendingSingleServiceClientId = null;
         let serverItems = []; // Sunucudan gelen aktif siparişler
         let currentCategory = null;
         let loggedWaiter = null;
@@ -1150,6 +1172,20 @@
         }
 
         function getLineTotal(item) {
+            const adet = Number(item?.adet || 0);
+            const fiyat = Number(item?.fiyat || 0);
+            const gross = Math.max(0, adet) * Math.max(0, fiyat);
+            return Math.max(0, roundMoney(gross - getServiceDiscountAmount(item, gross)));
+        }
+
+        function getServiceDiscountAmount(item, grossTotal = null) {
+            const amount = Number(String(item?.servis_indirimi ?? item?.serviceDiscount ?? 0).replace(',', '.'));
+            if (!Number.isFinite(amount) || amount <= 0) return 0;
+            if (grossTotal === null) return roundMoney(amount);
+            return roundMoney(Math.min(amount, Math.max(0, grossTotal)));
+        }
+
+        function getLineGrossTotal(item) {
             const adet = Number(item?.adet || 0);
             const fiyat = Number(item?.fiyat || 0);
             return Math.max(0, adet) * Math.max(0, fiyat);
@@ -1498,6 +1534,47 @@
             return 1;
         }
 
+        function isHalfPortionVariant(variant) {
+            return Math.abs(getPortionVariantUnitMultiplier(variant) - 0.5) < 0.001;
+        }
+
+        function getHalfServiceCharge(variant, variants) {
+            if (!isHalfPortionVariant(variant)) return 0;
+            const halfPrice = Number(variant?.item?.[1] || 0);
+            const fullVariant = (variants || []).find(candidate => candidate?.type === 'full');
+            const fullPrice = Number(fullVariant?.item?.[1] || 0);
+            if (!Number.isFinite(halfPrice) || !Number.isFinite(fullPrice) || halfPrice <= 0 || fullPrice <= 0) {
+                return 0;
+            }
+            return roundMoney(Math.max(0, (halfPrice * 2) - fullPrice));
+        }
+
+        function getPendingSingleServiceIndex() {
+            if (!pendingSingleServiceClientId) return -1;
+            const index = basket.findIndex(item => (
+                item.singleServicePending && item.basketClientId === pendingSingleServiceClientId
+            ));
+            if (index < 0) pendingSingleServiceClientId = null;
+            return index;
+        }
+
+        function buildPortionSelectionOptions(name, variants) {
+            const ordered = buildPortionChoiceVariants(name, variants || []);
+            const options = [];
+            ordered.forEach(variant => {
+                options.push(variant);
+                const serviceCharge = getHalfServiceCharge(variant, ordered);
+                if (serviceCharge > 0) {
+                    options.push({
+                        ...variant,
+                        singleServiceMode: true,
+                        singleServiceCharge: serviceCharge
+                    });
+                }
+            });
+            return options;
+        }
+
         function buildPortionChoiceVariants(name, variants) {
             const ordered = sortPortionVariants(variants || []);
             const hasOneHalf = ordered.some(variant => Math.abs(getPortionVariantUnitMultiplier(variant) - 1.5) < 0.001);
@@ -1680,9 +1757,9 @@
         }
 
         function choosePortionVariant(name, variants) {
-            const ordered = buildPortionChoiceVariants(name, variants || []);
-            if (!ordered.length) return null;
-            if (ordered.length === 1) return ordered[0];
+            const optionsList = buildPortionSelectionOptions(name, variants || []);
+            if (!optionsList.length) return null;
+            if (optionsList.length === 1) return optionsList[0];
 
             const modal = ensurePortionSelectModal();
             const title = document.getElementById('portionSelectTitle');
@@ -1702,13 +1779,19 @@
                     resolve(variant || null);
                 };
 
-                ordered.forEach(variant => {
+                optionsList.forEach(variant => {
                     const btn = document.createElement('button');
                     btn.type = 'button';
                     btn.className = 'portion-select-btn';
+                    const serviceLabel = getPendingSingleServiceIndex() >= 0
+                        ? 'Tek Servis - 2. Yarım'
+                        : 'Tek Servis - 1. Yarım';
+                    const priceLabel = variant.singleServiceMode
+                        ? `${formatMenuPrice(variant.item[1])} TL • servis payı ${formatMenuPrice(variant.singleServiceCharge)} TL`
+                        : `${formatMenuPrice(variant.item[1])} TL`;
                     btn.innerHTML = `
-                        <span class="portion-select-label">${escapeHtml(getPortionVariantLabel(variant))}</span>
-                        <span class="portion-select-price">${formatMenuPrice(variant.item[1])} TL</span>
+                        <span class="portion-select-label">${escapeHtml(variant.singleServiceMode ? serviceLabel : getPortionVariantLabel(variant))}</span>
+                        <span class="portion-select-price">${escapeHtml(priceLabel)}</span>
                     `;
                     btn.onclick = () => finish(variant);
                     options.appendChild(btn);
@@ -2166,6 +2249,15 @@
             const selectedVariant = await choosePortionVariant(name, variants);
             if (!selectedVariant) return;
 
+            if (selectedVariant.singleServiceMode) {
+                addSingleServiceHalfToBasket(name, selectedVariant, variants, category, {
+                    note,
+                    stockNameOverride,
+                    skipDailyMealChoice: isDailyMealCategory(category)
+                });
+                return;
+            }
+
             addToBasket(selectedVariant.item[0], selectedVariant.item[1], category, {
                 note,
                 stockNameOverride,
@@ -2178,6 +2270,15 @@
             if (!mealName) return;
             const selectedVariant = await choosePortionVariant(mealName, variants);
             if (!selectedVariant) return;
+
+            if (selectedVariant.singleServiceMode) {
+                addSingleServiceHalfToBasket(mealName, selectedVariant, variants, category, {
+                    note: `Yemek: ${mealName}`,
+                    stockNameOverride: mealName,
+                    skipDailyMealChoice: true
+                });
+                return;
+            }
 
             addToBasket(selectedVariant.item[0], selectedVariant.item[1], category, {
                 note: `Yemek: ${mealName}`,
@@ -2209,6 +2310,65 @@
             });
         }
 
+        function nextBasketClientId() {
+            basketClientSeq += 1;
+            return `basket-${Date.now()}-${basketClientSeq}`;
+        }
+
+        function createSingleServiceGroupId() {
+            return `tek-servis-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+        }
+
+        function addSingleServiceHalfToBasket(name, selectedVariant, variants, category = '', options = {}) {
+            const serviceCharge = Number(selectedVariant.singleServiceCharge || getHalfServiceCharge(selectedVariant, variants));
+            if (!Number.isFinite(serviceCharge) || serviceCharge <= 0) {
+                addToBasket(selectedVariant.item[0], selectedVariant.item[1], category, options);
+                return;
+            }
+
+            const pendingIndex = getPendingSingleServiceIndex();
+            if (pendingIndex < 0) {
+                const addedIndex = addToBasket(selectedVariant.item[0], selectedVariant.item[1], category, {
+                    ...options,
+                    singleServicePending: true,
+                    singleServiceCharge: serviceCharge
+                });
+                if (addedIndex >= 0) {
+                    pendingSingleServiceClientId = basket[addedIndex].basketClientId;
+                    showWaiterToast('Tek servis için ikinci yarımı seçin', 'success', 3200);
+                    updateBasketDisplay();
+                }
+                return;
+            }
+
+            const firstItem = basket[pendingIndex];
+            const groupId = firstItem.singleServiceGroupId || createSingleServiceGroupId();
+            const discount = roundMoney(Math.min(
+                Number(firstItem.singleServiceCharge || serviceCharge),
+                serviceCharge
+            ));
+            const secondIndex = addToBasket(selectedVariant.item[0], selectedVariant.item[1], category, {
+                ...options,
+                singleService: true,
+                singleServiceGroupId: groupId,
+                singleServiceRole: 'second',
+                singleServiceCharge: serviceCharge,
+                serviceDiscount: discount,
+                serviceDiscountNote: 'Tek servis indirimi'
+            });
+            if (secondIndex < 0) return;
+
+            firstItem.singleServicePending = false;
+            firstItem.singleService = true;
+            firstItem.singleServiceGroupId = groupId;
+            firstItem.singleServiceRole = 'first';
+            firstItem.serviceDiscount = 0;
+            firstItem.serviceDiscountNote = 'Tek servis ilk yarım';
+            pendingSingleServiceClientId = null;
+            showWaiterToast(`Tek servis indirimi uygulandı: -${formatMenuPrice(discount)} TL`);
+            updateBasketDisplay();
+        }
+
         function addToBasket(name, price, category = '', options = {}) {
             let note = options.note || '';
             let stockNameOverride = options.stockNameOverride || '';
@@ -2227,6 +2387,7 @@
             const portionAmount = normalizeBasketQuantity(options.portionAmount || 1);
             const basePrice = Number(options.basePrice ?? price ?? 0);
             const nextItem = {
+                basketClientId: nextBasketClientId(),
                 name,
                 price: roundMoney(price),
                 basePrice: roundMoney(Number.isFinite(basePrice) ? basePrice : price),
@@ -2238,7 +2399,14 @@
                 stockName: stockNameOverride,
                 category,
                 panelId: options.panelId || getPrepPanelForOrderItem(name, category),
-                portionSelectable: !!options.portionSelectable
+                portionSelectable: !!options.portionSelectable,
+                singleService: !!options.singleService,
+                singleServicePending: !!options.singleServicePending,
+                singleServiceGroupId: options.singleServiceGroupId || '',
+                singleServiceRole: options.singleServiceRole || '',
+                singleServiceCharge: Number(options.singleServiceCharge || 0),
+                serviceDiscount: roundMoney(Number(options.serviceDiscount || 0)),
+                serviceDiscountNote: options.serviceDiscountNote || ''
             };
 
             const mergeIndex = findMergeableBasketItem(nextItem);
@@ -2251,23 +2419,27 @@
                 const stockError = getBasketStockError(mergedItem, mergeIndex);
                 if (stockError) {
                     alert(stockError);
-                    return;
+                    return -1;
                 }
                 basket[mergeIndex] = mergedItem;
+                updateBasketDisplay();
+                return mergeIndex;
             } else {
                 const stockError = getBasketStockError(nextItem);
                 if (stockError) {
                     alert(stockError);
-                    return;
+                    return -1;
                 }
                 basket.push(nextItem);
+                updateBasketDisplay();
+                if (window.navigator.vibrate) window.navigator.vibrate(50);
+                return basket.length - 1;
             }
-            if (window.navigator.vibrate) window.navigator.vibrate(50);
-            updateBasketDisplay();
         }
 
         function findMergeableBasketItem(nextItem) {
             return basket.findIndex(item => {
+                if (item.singleService || item.singleServicePending || nextItem.singleService || nextItem.singleServicePending) return false;
                 if ((item.note || '') || (nextItem.note || '')) return false;
                 if ((item.baseNote || '') !== (nextItem.baseNote || '')) return false;
                 if ((item.stockName || '') !== (nextItem.stockName || '')) return false;
@@ -2286,8 +2458,27 @@
         }
 
         function removeFromBasket(index) {
-            basket.splice(index, 1);
+            const removed = basket.splice(index, 1)[0];
+            if (removed?.basketClientId === pendingSingleServiceClientId) {
+                pendingSingleServiceClientId = null;
+            }
+            cleanupSingleServiceGroupAfterRemoval(removed);
             updateBasketDisplay();
+        }
+
+        function cleanupSingleServiceGroupAfterRemoval(removed) {
+            const groupId = removed?.singleServiceGroupId;
+            if (!groupId) return;
+            const remaining = basket.filter(item => item.singleServiceGroupId === groupId);
+            if (remaining.length >= 2) return;
+            remaining.forEach(item => {
+                item.singleService = false;
+                item.singleServicePending = false;
+                item.singleServiceGroupId = '';
+                item.singleServiceRole = '';
+                item.serviceDiscount = 0;
+                item.serviceDiscountNote = '';
+            });
         }
 
         function normalizeBasketQuantity(value) {
@@ -2318,8 +2509,13 @@
             return roundMoney(Number(item?.price || 0));
         }
 
+        function getBasketServiceDiscount(item, grossTotal = null) {
+            return getServiceDiscountAmount(item, grossTotal);
+        }
+
         function getBasketLineTotal(item) {
-            return roundMoney(getBasketQuantity(item) * getBasketUnitPrice(item));
+            const gross = getBasketQuantity(item) * getBasketUnitPrice(item);
+            return roundMoney(Math.max(0, gross - getBasketServiceDiscount(item, gross)));
         }
 
         function getGrillPortionIndex(value) {
@@ -2410,9 +2606,22 @@
         function getBasketPriceMeta(item) {
             const adet = getBasketQuantity(item);
             const unitPrice = getBasketUnitPrice(item);
+            const gross = roundMoney(unitPrice * adet);
+            const discount = getBasketServiceDiscount(item, gross);
             const total = getBasketLineTotal(item);
-            if (Math.abs(adet - 1) < 0.001) return `${formatMenuPrice(unitPrice)} TL`;
-            return `${formatMenuPrice(unitPrice)} TL x ${formatPortionAmount(adet)} = ${formatMenuPrice(total)} TL`;
+            const baseMeta = Math.abs(adet - 1) < 0.001
+                ? `${formatMenuPrice(unitPrice)} TL`
+                : `${formatMenuPrice(unitPrice)} TL x ${formatPortionAmount(adet)} = ${formatMenuPrice(gross)} TL`;
+            if (discount > 0) {
+                return `${baseMeta} - ${formatMenuPrice(discount)} TL tek servis = ${formatMenuPrice(total)} TL`;
+            }
+            return baseMeta;
+        }
+
+        function getSingleServiceChipHtml(item) {
+            if (item?.singleServicePending) return '<span class="single-service-chip pending">Tek servis bekliyor</span>';
+            if (item?.singleService || item?.tek_servis) return '<span class="single-service-chip">Tek servis</span>';
+            return '';
         }
 
         function escapeHtml(value) {
@@ -2578,13 +2787,18 @@
                 const itemNote = item.not || '';
                 const noteLabel = formatOrderNote(itemNote);
                 const quantity = normalizeBasketQuantity(item.adet || 1);
-                const serverPriceMeta = Math.abs(quantity - 1) < 0.001
+                const grossTotal = getLineGrossTotal(item);
+                const serviceDiscount = getServiceDiscountAmount(item, grossTotal);
+                const serverPriceBaseMeta = Math.abs(quantity - 1) < 0.001
                     ? `${formatMenuPrice(item.fiyat)} TL`
-                    : `${formatMenuPrice(item.fiyat)} TL x ${formatPortionAmount(quantity)} = ${formatMenuPrice(getLineTotal(item))} TL`;
+                    : `${formatMenuPrice(item.fiyat)} TL x ${formatPortionAmount(quantity)} = ${formatMenuPrice(grossTotal)} TL`;
+                const serverPriceMeta = serviceDiscount > 0
+                    ? `${serverPriceBaseMeta} - ${formatMenuPrice(serviceDiscount)} TL tek servis = ${formatMenuPrice(getLineTotal(item))} TL`
+                    : serverPriceBaseMeta;
                 div.innerHTML = `
                     <div style="flex-grow: 1;">
                         ${statusBadge}
-                        <span class="basket-item-name">${item.urun}${isIkram ? ' (İKRAM)' : ''}</span>
+                        <span class="basket-item-name">${escapeHtml(item.urun)}${getSingleServiceChipHtml(item)}${isIkram ? ' (İKRAM)' : ''}</span>
                         <br/><span class="basket-line-meta">${isIkram ? 'İkram' : serverPriceMeta}</span>
                         ${noteLabel ? `<br/><span class="basket-item-note">${escapeHtml(noteLabel)}</span>` : ''}
                     </div>
@@ -2604,7 +2818,9 @@
                 const quantity = getBasketQuantity(item);
                 const portionIndex = getGrillPortionIndex(getBasketPortionAmount(item));
                 const baseNoteLabel = formatOrderNote(item.baseNote || '');
-                const quantityControls = `<div class="basket-control-group">
+                const quantityControls = (item.singleService || item.singleServicePending)
+                    ? ''
+                    : `<div class="basket-control-group">
                             <span class="basket-control-label">Adet</span>
                             <div class="quantity-stepper">
                                 <button type="button" onclick="adjustBasketQuantity(${index}, -1)" ${quantity <= 1 ? 'disabled' : ''}>-</button>
@@ -2625,7 +2841,7 @@
                 div.innerHTML = `
                     <div style="flex-grow: 1;">
                         <span style="color: #3498db; font-size: 10px; font-weight: bold;">[YENİ]</span>
-                        <span class="basket-item-name">${escapeHtml(getBasketDisplayName(item))}</span>
+                        <span class="basket-item-name">${escapeHtml(getBasketDisplayName(item))}${getSingleServiceChipHtml(item)}</span>
                         <br/><span class="basket-line-meta">${getBasketPriceMeta(item)}</span>
                         ${baseNoteLabel ? `<br/><span class="basket-item-note">${escapeHtml(baseNoteLabel)}</span>` : ''}
                         <input
@@ -2674,6 +2890,8 @@
             if (!currentTable || basket.length === 0) return;
             if (!canSendBasket()) return;
             basket.forEach(item => {
+                const gross = getBasketQuantity(item) * getBasketUnitPrice(item);
+                const serviceDiscount = item.singleService ? getBasketServiceDiscount(item, gross) : 0;
                 socket.emit('add_item', {
                     masa: currentTable, // Masayı açıkça gönder
                     urun: getBasketSendName(item),
@@ -2681,10 +2899,17 @@
                     adet: getBasketQuantity(item),
                     kategori: item.category || '',
                     garson: loggedWaiter,
-                    not: composeBasketItemNote(item)
+                    not: composeBasketItemNote(item),
+                    tek_servis: !!item.singleService,
+                    servis_grup_id: item.singleServiceGroupId || '',
+                    servis_indirimi: serviceDiscount,
+                    servis_indirimi_notu: serviceDiscount > 0
+                        ? (item.serviceDiscountNote || 'Tek servis indirimi')
+                        : ''
                 });
             });
             basket = [];
+            pendingSingleServiceClientId = null;
             updateBasketDisplay();
         }
 
