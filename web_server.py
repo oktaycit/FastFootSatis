@@ -574,36 +574,12 @@ class RestaurantServer:
         return (item or {}).get('tip') == 'ikram'
 
     @staticmethod
-    def item_service_discount(item, gross_total=None):
-        """Tek servis gibi satır bazlı indirimleri toplamdan düşülecek tutar olarak döndür."""
-        try:
-            discount = float(str((item or {}).get('servis_indirimi', 0)).replace(',', '.'))
-        except Exception:
-            discount = 0.0
-        discount = max(0.0, discount)
-        if gross_total is not None:
-            discount = min(discount, max(0.0, gross_total))
-        return round(discount, 2)
-
-    @staticmethod
     def item_line_total(item):
         """Adisyon kalemi için liste fiyatı üzerinden satır toplamı."""
         try:
             adet = RestaurantServer.coerce_order_quantity((item or {}).get('adet', 1))
             fiyat = float((item or {}).get('fiyat', 0))
-            gross_total = max(0, adet) * max(0.0, fiyat)
-            return max(0.0, gross_total - RestaurantServer.item_service_discount(item, gross_total))
-        except Exception:
-            return 0.0
-
-    @staticmethod
-    def item_net_unit_price(item):
-        """Satış kayıtları için indirim sonrası birim fiyatı hesapla."""
-        try:
-            adet = RestaurantServer.coerce_order_quantity((item or {}).get('adet', 1))
-            if float(adet) <= 0:
-                return 0.0
-            return round(RestaurantServer.item_line_total(item) / float(adet), 2)
+            return max(0, adet) * max(0.0, fiyat)
         except Exception:
             return 0.0
 
@@ -1252,8 +1228,7 @@ class RestaurantServer:
 
     def add_order_item(self, masa_adi, urun, fiyat, garson='Bilinmiyor', adet=1,
                        not_bilgisi='', tip='normal', terminal_id=None, kategori=None,
-                       return_error=False, tek_servis=False, servis_grup_id='',
-                       servis_indirimi=0, servis_indirimi_notu=''):
+                       return_error=False):
         if masa_adi not in self.adisyonlar:
             return (None, 'Masa bulunamadı') if return_error else None
 
@@ -1266,21 +1241,6 @@ class RestaurantServer:
             fiyat = float(fiyat)
         except Exception:
             return (None, 'Ürün fiyatı geçersiz') if return_error else None
-        try:
-            servis_indirimi = float(str(servis_indirimi or 0).replace(',', '.'))
-        except Exception:
-            servis_indirimi = 0.0
-        servis_indirimi = max(0.0, round(servis_indirimi, 2))
-        servis_indirimi = min(servis_indirimi, max(0.0, float(adet) * max(0.0, fiyat)))
-        if tek_servis:
-            max_servis_indirimi = self.get_half_service_charge_for_order(urun)
-            if max_servis_indirimi <= 0:
-                tek_servis = False
-                servis_indirimi = 0.0
-            else:
-                servis_indirimi = min(servis_indirimi, max_servis_indirimi)
-        else:
-            servis_indirimi = 0.0
 
         stock_ok, stock_error = self.consume_portion_stock(urun, adet, not_bilgisi)
         if not stock_ok:
@@ -1307,13 +1267,6 @@ class RestaurantServer:
             'saat': created_at.strftime("%H:%M:%S"),
             'created_at': created_at.isoformat(timespec='seconds')
         }
-        if tek_servis or servis_indirimi > 0:
-            siparis['tek_servis'] = bool(tek_servis)
-            siparis['servis_grup_id'] = str(servis_grup_id or siparis_id).strip()[:40]
-            siparis['servis_indirimi'] = servis_indirimi
-            siparis['servis_indirimi_notu'] = str(
-                servis_indirimi_notu or 'Tek servis indirimi'
-            ).strip()[:80]
         self.adisyonlar[masa_adi].append(siparis)
         self.save_active_adisyonlar()
 
@@ -2714,20 +2667,7 @@ class RestaurantServer:
             item_title = f"{self.format_order_quantity(item.get('adet', 1))} x {item.get('urun', '')}{ikram}"
             lines.extend(self.wrap_ticket_text(item_title, width))
             line_total = 0 if item.get("tip") == "ikram" else self.item_line_total(item)
-            discount = self.item_service_discount(item)
-            if discount > 0:
-                try:
-                    gross_total = (
-                        float(self.coerce_order_quantity(item.get('adet', 1)))
-                        * max(0.0, float(item.get('fiyat', 0)))
-                    )
-                except Exception:
-                    gross_total = line_total + discount
-                lines.append(f"{gross_total:>26.2f} TL")
-                lines.extend(self.wrap_ticket_text(f"Tek servis indirimi: -{discount:.2f} TL", width))
-                lines.append(f"{'Satir net:':<18}{line_total:>10.2f} TL")
-            else:
-                lines.append(f"{line_total:>26.2f} TL")
+            lines.append(f"{line_total:>26.2f} TL")
             note = str(item.get("not") or "").strip()
             if note:
                 lines.extend(self.wrap_ticket_text(f"Not: {note}", width))
@@ -3389,40 +3329,6 @@ class RestaurantServer:
         if normalized.startswith('yarim porsiyon '):
             return 2
         return 1
-
-    def get_half_service_charge_for_order(self, urun):
-        """Menüdeki tam/yarım fiyat farkından yarım servis payını hesapla."""
-        category, product_name, item = self._find_menu_product_entry(urun)
-        product_name = product_name or str(urun or '').strip()
-        if not self._normalize_text_for_match(product_name).startswith('yarim porsiyon '):
-            return 0.0
-
-        try:
-            half_price = float(item[1] if item else 0)
-        except Exception:
-            half_price = 0.0
-        if half_price <= 0:
-            return 0.0
-
-        base_key = self._normalize_product_key(self._strip_portion_variant_prefix(product_name))
-        candidate_categories = [category] if category in self.menu_data else list(self.menu_data.keys())
-        for candidate_category in candidate_categories:
-            for candidate in self.menu_data.get(candidate_category, []):
-                candidate_name = str(candidate[0] if candidate else '').strip()
-                if not self._normalize_text_for_match(candidate_name).startswith('tam porsiyon '):
-                    continue
-                candidate_base_key = self._normalize_product_key(
-                    self._strip_portion_variant_prefix(candidate_name)
-                )
-                if candidate_base_key != base_key:
-                    continue
-                try:
-                    full_price = float(candidate[1])
-                except Exception:
-                    full_price = 0.0
-                if full_price > 0:
-                    return round(max(0.0, (half_price * 2) - full_price), 2)
-        return 0.0
 
     def _find_menu_product_entry(self, urun):
         target = self._normalize_product_key(urun)
@@ -7077,10 +6983,6 @@ def handle_add_item(data):
         not_bilgisi=not_bilgisi,
         tip=data.get('tip', 'normal'),
         kategori=data.get('kategori') or data.get('category'),
-        tek_servis=server.bool_from_setting(data.get('tek_servis')),
-        servis_grup_id=data.get('servis_grup_id') or '',
-        servis_indirimi=data.get('servis_indirimi', 0),
-        servis_indirimi_notu=data.get('servis_indirimi_notu') or '',
         return_error=True
     )
     if not order_item:
@@ -7583,7 +7485,7 @@ def handle_payment(data):
                 success, msg = server.pos_manager.sale(
                     pos_amount,
                     masa_adi,
-                    items=[{**item, 'fiyat': server.item_net_unit_price(item)} for item in payable_items],
+                    items=payable_items,
                     payments=payments,
                     order_id=str(uuid.uuid4()),
                     invoice_pending=invoice_pending,
@@ -7609,11 +7511,10 @@ def handle_payment(data):
         sales_data = []
         for item in items:
             item_tip = item.get('tip', 'normal')
-            net_unit_price = server.item_net_unit_price(item)
             sales_data.append({
                 'urun': item['urun'],
                 'adet': item['adet'],
-                'fiyat': net_unit_price,
+                'fiyat': item['fiyat'],
                 'odeme': 'İkram' if item_tip == 'ikram' else final_payment_label,
                 'tip': item_tip,
                 'Tarih_Saat': timestamp,
@@ -7687,7 +7588,7 @@ def handle_payment(data):
                 'items': [{
                     'urun': i['urun'],
                     'adet': i['adet'],
-                    'fiyat': server.item_net_unit_price(i)
+                    'fiyat': i['fiyat']
                 } for i in payable_items],
                 'total': payable_total,
                 'ikram_total': ikram_total,

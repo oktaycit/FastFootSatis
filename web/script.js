@@ -80,27 +80,7 @@ function isKitchenCancelableItem(item) {
 function getLineTotal(item) {
     const adet = Number(item?.adet || 0);
     const fiyat = Number(item?.fiyat || 0);
-    const gross = Math.max(0, adet) * Math.max(0, fiyat);
-    return Math.max(0, gross - getServiceDiscountAmount(item, gross));
-}
-
-function getLineGrossTotal(item) {
-    const adet = Number(item?.adet || 0);
-    const fiyat = Number(item?.fiyat || 0);
     return Math.max(0, adet) * Math.max(0, fiyat);
-}
-
-function getServiceDiscountAmount(item, grossTotal = null) {
-    const amount = Number(String(item?.servis_indirimi ?? 0).replace(',', '.'));
-    if (!Number.isFinite(amount) || amount <= 0) return 0;
-    if (grossTotal === null) return Math.round(amount * 100) / 100;
-    return Math.round(Math.min(amount, Math.max(0, grossTotal)) * 100) / 100;
-}
-
-function getSingleServiceChipHtml(item) {
-    return item?.tek_servis
-        ? '<span class="order-unit-chip">Tek servis</span>'
-        : '';
 }
 
 function getPayableTotal(items = currentItems) {
@@ -1425,11 +1405,6 @@ function updateOrderDisplay() {
                 ? '<span style="color: #2ecc71; font-weight: bold; font-size: 10px;">[HAZIR] </span>'
                 : (isServed ? '<span style="color: #7f8c8d; font-weight: bold; font-size: 10px;">[SERVİS EDİLDİ] </span>' : '');
             const itemNote = item.not || '';
-            const grossTotal = getLineGrossTotal(displayItem);
-            const serviceDiscount = getServiceDiscountAmount(displayItem, grossTotal);
-            const serviceDiscountMeta = serviceDiscount > 0
-                ? `<div style="font-size: 10px; color: #16a34a; margin-top: 3px;">Tek servis indirimi: -${serviceDiscount.toFixed(2)} TL</div>`
-                : '';
             const unitChip = row.isSplitUnit
                 ? `<span class="order-unit-chip">${row.unitNumber}/${row.unitCount}</span>`
                 : '';
@@ -1443,10 +1418,9 @@ function updateOrderDisplay() {
                 <div class="order-item-info" style="flex-grow: 1;">
                     <div class="order-item-name">
                         ${statusBadge}
-                        ${formatOrderQuantity(row.quantity)}x ${escapeHtml(item.urun)}${unitChip}${getSingleServiceChipHtml(item)}${isIkram ? ' (İKRAM)' : ''}
+                        ${formatOrderQuantity(row.quantity)}x ${escapeHtml(item.urun)}${unitChip}${isIkram ? ' (İKRAM)' : ''}
                     </div>
                     <div style="font-size: 10px; color: #777;">${escapeHtml(item.garson || 'Bilinmiyor')} - ${escapeHtml(item.saat || '')}</div>
-                    ${serviceDiscountMeta}
                     ${itemNote ? `<div style="font-size: 11px; color: #b7791f; margin-top: 3px;">Not: ${escapeHtml(itemNote)}</div>` : ''}
                 </div>
                 <div style="display: flex; align-items: center; gap: 10px;">
