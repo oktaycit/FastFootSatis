@@ -1452,7 +1452,11 @@
         }
 
         function parsePortionVariantName(name) {
-            const match = String(name || '').trim().match(/^(tam|yarım|yarim)\s+porsiyon\s+(.+)$/i);
+            const rawName = String(name || '').trim();
+            let match = rawName.match(/^(tam|yarım|yarim)\s+porsiyon\s+(.+)$/i);
+            if (!match) {
+                match = rawName.match(/^(tam|yarım|yarim)\s+(.+)$/i);
+            }
             if (!match) return null;
             const type = normalizeMenuText(match[1]).startsWith('yar') ? 'half' : 'full';
             return {
@@ -1520,9 +1524,32 @@
         function buildWaiterMenuCards(items) {
             const cards = [];
             const groupedPortions = new Map();
+            const portionBaseInfo = new Map();
 
             (items || []).forEach(item => {
                 const parsed = parsePortionVariantName(item?.[0]);
+                if (!parsed) return;
+                const key = normalizeMenuText(parsed.baseName);
+                const info = portionBaseInfo.get(key) || { hasFull: false, hasHalf: false };
+                if (parsed.type === 'full') info.hasFull = true;
+                if (parsed.type === 'half') info.hasHalf = true;
+                portionBaseInfo.set(key, info);
+            });
+
+            (items || []).forEach(item => {
+                let parsed = parsePortionVariantName(item?.[0]);
+                if (!parsed) {
+                    const name = String(item?.[0] || '').trim();
+                    const info = portionBaseInfo.get(normalizeMenuText(name));
+                    if (name && info?.hasHalf && !info.hasFull) {
+                        parsed = {
+                            type: 'full',
+                            baseName: name,
+                            label: 'Tam Porsiyon',
+                            implicit: true
+                        };
+                    }
+                }
                 if (!parsed) {
                     cards.push({ type: 'item', item });
                     return;
@@ -2355,7 +2382,10 @@
 
         function getPortionLabelFromName(name) {
             const rawName = String(name || '').trim();
-            const prefixMatch = rawName.match(/^(tam|yarım|yarim)\s+porsiyon\s+/i);
+            let prefixMatch = rawName.match(/^(tam|yarım|yarim)\s+porsiyon\s+/i);
+            if (!prefixMatch) {
+                prefixMatch = rawName.match(/^(tam|yarım|yarim)\s+/i);
+            }
             if (prefixMatch) {
                 return normalizeMenuText(prefixMatch[1]).startsWith('yar') ? 'Yarım Porsiyon' : 'Tam Porsiyon';
             }
@@ -2427,6 +2457,7 @@
             return String(name || '')
                 .trim()
                 .replace(/^(tam|yarım|yarim)\s+porsiyon\s+/i, '')
+                .replace(/^(tam|yarım|yarim)\s+/i, '')
                 .replace(/\(\s*\d+(?:[,.]\d+)?\s*porsiyon\s*\)\s*$/i, '')
                 .trim();
         }
@@ -2434,6 +2465,7 @@
         function getPortionMultiplierFromName(name) {
             const normalized = String(name || '').trim().toLocaleLowerCase('tr-TR');
             if (/^(yarım|yarim)\s+porsiyon\s+/.test(normalized)) return 0.5;
+            if (/^(yarım|yarim)\s+/.test(normalized)) return 0.5;
             const trailing = String(name || '').trim().match(/\(\s*(\d+(?:[,.]\d+)?)\s*porsiyon\s*\)\s*$/i);
             if (trailing) {
                 const parsed = Number(trailing[1].replace(',', '.'));
