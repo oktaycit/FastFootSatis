@@ -889,6 +889,29 @@ function orderQuantitiesMatch(left, right) {
     return Math.abs(Number(left || 0) - Number(right || 0)) < 0.001;
 }
 
+function getOrderGroupName(item) {
+    const parts = [];
+    const plateGroup = item?.plate_group;
+
+    if (plateGroup && typeof plateGroup === 'object') {
+        const plateLabel = String(plateGroup.label || '').trim();
+        const plateId = String(plateGroup.id || '').trim();
+
+        if (plateLabel && plateId) {
+            parts.push(`${plateLabel} #${plateId}`);
+        } else if (plateLabel) {
+            parts.push(plateLabel);
+        } else if (plateId) {
+            parts.push(`Tabak #${plateId}`);
+        }
+    }
+
+    const category = String(item?.kategori || item?.category || '').trim();
+    if (category) parts.push(category);
+
+    return parts.join(' / ');
+}
+
 function getOrderDisplayRows(items = currentItems) {
     const rows = [];
 
@@ -1405,6 +1428,7 @@ function updateOrderDisplay() {
                 ? '<span style="color: #2ecc71; font-weight: bold; font-size: 10px;">[HAZIR] </span>'
                 : (isServed ? '<span style="color: #7f8c8d; font-weight: bold; font-size: 10px;">[SERVİS EDİLDİ] </span>' : '');
             const itemNote = item.not || '';
+            const groupName = getOrderGroupName(item);
             const unitChip = row.isSplitUnit
                 ? `<span class="order-unit-chip">${row.unitNumber}/${row.unitCount}</span>`
                 : '';
@@ -1415,15 +1439,16 @@ function updateOrderDisplay() {
             }
 
             orderItem.innerHTML = `
-                <div class="order-item-info" style="flex-grow: 1;">
+                <div class="order-item-info">
+                    ${groupName ? `<div class="order-item-group">${escapeHtml(groupName)}</div>` : ''}
                     <div class="order-item-name">
                         ${statusBadge}
                         ${formatOrderQuantity(row.quantity)}x ${escapeHtml(item.urun)}${unitChip}${isIkram ? ' (İKRAM)' : ''}
                     </div>
-                    <div style="font-size: 10px; color: #777;">${escapeHtml(item.garson || 'Bilinmiyor')} - ${escapeHtml(item.saat || '')}</div>
-                    ${itemNote ? `<div style="font-size: 11px; color: #b7791f; margin-top: 3px;">Not: ${escapeHtml(itemNote)}</div>` : ''}
+                    <div class="order-item-meta">${escapeHtml(item.garson || 'Bilinmiyor')} - ${escapeHtml(item.saat || '')}</div>
+                    ${itemNote ? `<div class="order-item-note">Not: ${escapeHtml(itemNote)}</div>` : ''}
                 </div>
-                <div style="display: flex; align-items: center; gap: 10px;">
+                <div class="order-item-actions">
                     <div class="order-item-price">${isIkram ? `İKRAM<br><small>${listTotal.toFixed(2)} TL</small>` : `${itemTotal.toFixed(2)} TL`}</div>
                     ${canCancelFromRow ? `
                         <button class="btn-cancel-small" onclick="cancelItem('${item.uid}', event)" 

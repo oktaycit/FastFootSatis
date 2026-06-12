@@ -604,6 +604,21 @@
             };
         }
 
+        function getPlateGroupLabel(data) {
+            const plate = data?.plate_group;
+            if (!plate || typeof plate !== 'object') return '';
+            const label = String(plate.label || '').trim();
+            const id = String(plate.id || '').trim();
+            if (label && id) return `${label} #${id}`;
+            return label || (id ? `Tabak #${id}` : '');
+        }
+
+        function getPlateGroupNote(data) {
+            const plate = data?.plate_group;
+            if (!plate || typeof plate !== 'object') return '';
+            return String(plate.note || '').trim();
+        }
+
         function getPortionStockName(name) {
             return String(name ?? '').trim().replace(/^(tam|yarım|yarim)\s+porsiyon\s+/i, '').trim();
         }
@@ -687,6 +702,28 @@
 
         socket.on('kitchen_new_order', (data) => {
             console.log('New order received:', data);
+            if (Array.isArray(data?.items) && data.items.length) {
+                const panelItems = data.items
+                    .map(item => ({
+                        ...data,
+                        ...item,
+                        items: undefined,
+                        plate_group: item.plate_group || data.plate_group
+                    }))
+                    .filter(item => shouldShowOrder(item));
+                if (!panelItems.length) return;
+
+                panelItems.forEach(item => addOrderToGrid(item));
+                if (autoPrintToggle.checked && shouldPrintPrepTicket(data)) {
+                    queuePrepTicketPrint({
+                        ...data,
+                        panel: currentPanelId,
+                        items: panelItems
+                    });
+                }
+                playNotificationSound();
+                return;
+            }
             if (!shouldShowOrder(data)) {
                 return;
             }
@@ -755,6 +792,7 @@
                                 garson: item.garson,
                                 not: item.not || '',
                                 prep_ticket_skipped: item.prep_ticket_skipped || false,
+                                plate_group: item.plate_group || null,
                                 saat: item.saat || '--:--:--',
                                 created_at: item.created_at || item.createdAt || item.tarih_saat || item.Tarih_Saat || ''
                             };
@@ -965,7 +1003,13 @@
             const displayInfo = getOrderDisplayInfo(data);
             const mealName = extractMealNameFromNote(data.not, data.urun);
             const ticketProductName = mealName || displayInfo.productName;
-            const remainingNote = mealName ? '' : (data.not || '');
+            const noteParts = [];
+            const plateLabel = getPlateGroupLabel(data);
+            if (plateLabel) noteParts.push(plateLabel);
+            const plateNote = getPlateGroupNote(data);
+            if (plateNote) noteParts.push(plateNote);
+            if (!mealName && data.not) noteParts.push(data.not);
+            const remainingNote = noteParts.join(' / ');
             const safeUid = escapeHtml(data.uid);
             const safeAdet = escapeHtml(formatOrderQuantity(data.adet));
             const safeDisplayAdet = escapeHtml(formatOrderQuantity(displayInfo.quantity));
@@ -1298,7 +1342,11 @@
             const displayInfo = getOrderDisplayInfo(data);
             const mealName = extractMealNameFromNote(data.not, data.urun);
             const productName = mealName || displayInfo.productName;
-            const note = mealName ? '' : cleanPrepTicketNote(data.not);
+            const note = [
+                getPlateGroupLabel(data),
+                getPlateGroupNote(data),
+                mealName ? '' : cleanPrepTicketNote(data.not)
+            ].filter(Boolean).join(' / ');
             const parsedQuantity = parseOrderQuantity(displayInfo.quantity, 1);
             const quantity = parsedQuantity > 0 ? parsedQuantity : 1;
             const key = [

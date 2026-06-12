@@ -515,6 +515,10 @@
             border-bottom: 1px solid #222;
         }
 
+        .basket-item > div:first-child {
+            min-width: 0;
+        }
+
         .basket-item-note {
             display: inline-block;
             margin-top: 4px;
@@ -560,12 +564,41 @@
             color: #ffe08a;
         }
 
+        .basket-select {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 6px;
+            color: #b7c7d9;
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        .basket-select input {
+            width: auto;
+            margin: 0;
+            padding: 0;
+            accent-color: var(--primary);
+        }
+
+        .plate-badge {
+            display: inline-flex;
+            margin-top: 5px;
+            padding: 3px 7px;
+            border-radius: 999px;
+            background: #243447;
+            color: #d7ecff;
+            font-size: 10px;
+            font-weight: 900;
+        }
+
         .basket-item-actions {
             display: flex;
             flex-direction: column;
             align-items: flex-end;
             gap: 6px;
             min-height: 28px;
+            flex-shrink: 0;
         }
 
         .basket-item .remove {
@@ -637,6 +670,26 @@
 
         .btn-transfer-table:active {
             transform: scale(0.98);
+        }
+
+        .btn-plate-combine {
+            background: #7c3aed;
+            color: #fff;
+            border: none;
+            padding: 12px 14px;
+            border-radius: 8px;
+            font-weight: 900;
+            font-size: 13px;
+            min-height: 48px;
+            white-space: nowrap;
+            cursor: pointer;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-plate-combine:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
         }
 
         .screen {
@@ -861,9 +914,79 @@
             text-align: center;
         }
 
+        .plate-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.68);
+            z-index: 2160;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            padding: 15px;
+        }
+
+        .plate-card {
+            width: 100%;
+            max-width: 520px;
+            background: #171717;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 14px;
+            box-sizing: border-box;
+        }
+
+        .plate-card h3 {
+            margin: 0 0 10px;
+            font-size: 18px;
+        }
+
+        .plate-card label {
+            display: block;
+            color: #94a3b8;
+            font-size: 11px;
+            font-weight: 900;
+            margin: 10px 0 5px;
+            text-transform: uppercase;
+        }
+
+        .plate-summary {
+            margin-top: 10px;
+            padding: 9px;
+            border-radius: 8px;
+            background: #101820;
+            color: #d7ecff;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .plate-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
         @media (max-width: 720px) {
             .tools-grid {
                 grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 420px) {
+            .basket-item {
+                flex-direction: column;
+            }
+
+            .basket-item-actions {
+                width: 100%;
+                flex-direction: row;
+                flex-wrap: wrap;
+                justify-content: space-between;
+                align-items: flex-end;
+            }
+
+            .basket-control-group {
+                flex: 1 1 124px;
             }
         }
 
@@ -1004,6 +1127,7 @@
                 <div class="total" id="basketTotal">0.00 TL</div>
                 <button class="btn-transfer-table" id="btnTransferTable" onclick="openTransferModal()" style="display: none;">MASA TAŞI</button>
                 <button class="btn-served" id="btnMarkServed" onclick="markReadyItemsServed()" style="display: none;">SERVİS EDİLDİ</button>
+                <button class="btn-plate-combine" id="btnPlateCombine" onclick="openPlateModal()" disabled>TABAKTA BİRLEŞTİR</button>
                 <button class="btn-send" onclick="sendOrder()">GÖNDER</button>
             </div>
         </div>
@@ -1052,6 +1176,23 @@
         </div>
     </div>
 
+    <div id="plateModal" class="plate-modal">
+        <div class="plate-card">
+            <h3>Tabakta Birleştir</h3>
+            <label for="plateTypeSelect">Tabak Tipi</label>
+            <select id="plateTypeSelect" onchange="onPlateTypeChange()"></select>
+            <label for="plateServiceSelect">Servis Ücreti</label>
+            <select id="plateServiceSelect"></select>
+            <label for="plateNoteInput">Tabak Notu</label>
+            <input id="plateNoteInput" type="text" maxlength="120" placeholder="Örn: tek tabakta, ortaya servis">
+            <div class="plate-summary" id="plateSummary"></div>
+            <div class="plate-actions">
+                <button class="btn-cancel" type="button" onclick="closePlateModal()">Vazgeç</button>
+                <button class="btn-ok" type="button" onclick="applyPlateCombination()">Birleştir</button>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     <script>
@@ -1085,6 +1226,7 @@
         let loggedWaiter = null;
         let loggedPin = null;
         let pendingTransfer = null;
+        let plateGroupCounter = 1;
         const sharedTerminalMode = isSharedTerminalMode();
 
         function isSharedTerminalMode() {
@@ -1185,6 +1327,13 @@
             'dondurma': 'Dond.'
         };
         const GRILL_PORTION_VALUES = [0.5, 1, 1.5];
+        const PLATE_TYPES = [
+            { value: 'Tek Tabak', label: 'Tek Tabak', autoService: false },
+            { value: 'İlave Servis Tabağı', label: 'İlave Servis Tabağı', autoService: true },
+            { value: 'Büyük Servis Tabağı', label: 'Büyük Servis Tabağı', autoService: true },
+            { value: 'Çocuk Tabağı', label: 'Çocuk Tabağı', autoService: false },
+            { value: 'Ortaya Servis', label: 'Ortaya Servis', autoService: true }
+        ];
 
         function normalizeMenuText(value) {
             return String(value || '').trim().toLocaleLowerCase('tr-TR');
@@ -1282,6 +1431,10 @@
         function appendReadyNoteButtons(row, index, item) {
             const container = row.querySelector('.ready-note-buttons');
             if (!container) return;
+            if (item?.plateServiceFee) {
+                container.remove();
+                return;
+            }
             const notes = getQuickNotesForBasketItem(item);
             if (!notes.length) {
                 container.remove();
@@ -1304,6 +1457,170 @@
                 .filter(Boolean)
                 .join('\n')
                 .slice(0, 160);
+        }
+
+        function getPlateGroupLabel(plateGroup) {
+            if (!plateGroup || typeof plateGroup !== 'object') return '';
+            const label = String(plateGroup.label || '').trim();
+            const id = String(plateGroup.id || '').trim();
+            if (label && id) return `${label} #${id}`;
+            return label || (id ? `Tabak #${id}` : '');
+        }
+
+        function getSelectedBasketIndices() {
+            return basket
+                .map((item, index) => ({ item, index }))
+                .filter(entry => entry.item?.plateSelected && !entry.item?.plateServiceFee)
+                .map(entry => entry.index);
+        }
+
+        function toggleBasketPlateSelection(index, checked) {
+            if (!basket[index] || basket[index].plateServiceFee) return;
+            basket[index].plateSelected = !!checked;
+            updateBasketDisplay();
+        }
+
+        function updatePlateCombineButton() {
+            const button = document.getElementById('btnPlateCombine');
+            if (!button) return;
+            const count = getSelectedBasketIndices().length;
+            button.disabled = count < 2;
+            button.textContent = count >= 2 ? `TABAKTA BİRLEŞTİR (${count})` : 'TABAKTA BİRLEŞTİR';
+        }
+
+        function getPlateServiceProducts() {
+            const products = [];
+            const seen = new Set();
+            Object.entries(menuData || {}).forEach(([category, items]) => {
+                (items || []).forEach(item => {
+                    if (!Array.isArray(item) || !item[0]) return;
+                    if (!isMenuItemVisible(item)) return;
+                    const name = String(item[0]).trim();
+                    const key = normalizePrepText(name);
+                    const isService = key.includes('tabak')
+                        || key.includes('servis')
+                        || key.includes('kuvor')
+                        || key.includes('kuver');
+                    if (!isService) return;
+                    const dedupe = normalizeMenuText(`${category}|${name}`);
+                    if (seen.has(dedupe)) return;
+                    seen.add(dedupe);
+                    products.push({
+                        name,
+                        price: roundMoney(item[1] || 0),
+                        category
+                    });
+                });
+            });
+            return products;
+        }
+
+        function selectedPlateItemsSummary(indices) {
+            return indices.map(index => {
+                const item = basket[index];
+                return `${formatPortionAmount(getBasketQuantity(item))}x ${getBasketDisplayName(item)}`;
+            }).join('<br>');
+        }
+
+        function openPlateModal() {
+            const indices = getSelectedBasketIndices();
+            if (indices.length < 2) {
+                alert('Aynı tabakta hazırlanacak en az 2 kalem seçin.');
+                return;
+            }
+
+            const typeSelect = document.getElementById('plateTypeSelect');
+            const serviceSelect = document.getElementById('plateServiceSelect');
+            const noteInput = document.getElementById('plateNoteInput');
+            const summary = document.getElementById('plateSummary');
+            if (!typeSelect || !serviceSelect || !summary) return;
+
+            typeSelect.innerHTML = PLATE_TYPES.map(type => (
+                `<option value="${escapeHtml(type.value)}">${escapeHtml(type.label)}</option>`
+            )).join('');
+
+            const services = getPlateServiceProducts();
+            serviceSelect.innerHTML = '<option value="">Servis ücreti ekleme</option>' + services.map((product, index) => (
+                `<option value="${index}">${escapeHtml(product.name)} - ${formatMenuPrice(product.price)} TL</option>`
+            )).join('');
+            serviceSelect.dataset.products = JSON.stringify(services);
+            if (noteInput) noteInput.value = '';
+            summary.innerHTML = selectedPlateItemsSummary(indices);
+            onPlateTypeChange();
+            document.getElementById('plateModal').style.display = 'flex';
+        }
+
+        function closePlateModal() {
+            const modal = document.getElementById('plateModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function onPlateTypeChange() {
+            const typeSelect = document.getElementById('plateTypeSelect');
+            const serviceSelect = document.getElementById('plateServiceSelect');
+            if (!typeSelect || !serviceSelect) return;
+            const selectedType = PLATE_TYPES.find(type => type.value === typeSelect.value);
+            if (selectedType?.autoService && serviceSelect.options.length > 1) {
+                serviceSelect.value = '0';
+            } else {
+                serviceSelect.value = '';
+            }
+        }
+
+        function addPlateServiceFeeItem(product, plateGroup) {
+            if (!product || !plateGroup) return;
+            basket.push({
+                name: product.name,
+                price: roundMoney(product.price),
+                basePrice: roundMoney(product.price),
+                quantity: 1,
+                adet: 1,
+                portionAmount: 1,
+                baseNote: '',
+                note: '',
+                stockName: '',
+                category: product.category || '',
+                panelId: getPrepPanelForOrderItem(product.name, product.category || ''),
+                portionSelectable: false,
+                portionPrices: {},
+                portionNames: {},
+                plateGroup,
+                plateServiceFee: true,
+                skipPrepTicket: true
+            });
+        }
+
+        function applyPlateCombination() {
+            const indices = getSelectedBasketIndices();
+            if (indices.length < 2) return;
+
+            const typeSelect = document.getElementById('plateTypeSelect');
+            const serviceSelect = document.getElementById('plateServiceSelect');
+            const noteInput = document.getElementById('plateNoteInput');
+            const plateGroup = {
+                id: String(plateGroupCounter++),
+                label: typeSelect?.value || 'Tek Tabak',
+                note: String(noteInput?.value || '').trim().slice(0, 120)
+            };
+
+            indices.forEach(index => {
+                if (!basket[index]) return;
+                basket[index].plateGroup = plateGroup;
+                basket[index].plateSelected = false;
+            });
+
+            const serviceIndex = serviceSelect?.value || '';
+            if (serviceIndex !== '') {
+                try {
+                    const products = JSON.parse(serviceSelect.dataset.products || '[]');
+                    addPlateServiceFeeItem(products[Number(serviceIndex)], plateGroup);
+                } catch (e) {
+                    // Servis ürünü opsiyoneldir; parse edilemezse tabak yine oluşturulur.
+                }
+            }
+
+            closePlateModal();
+            updateBasketDisplay();
         }
 
         function isGrillCategory(category) {
@@ -1511,6 +1828,12 @@
             return String(variant?.item?.[0] || '').trim();
         }
 
+        function getPortionVariantBaseName(name) {
+            const parsed = parsePortionVariantName(name);
+            if (parsed?.baseName) return parsed.baseName;
+            return parseTrailingPortionName(name).name;
+        }
+
         function buildPortionBasketOptions(selectedVariant, variants, fallbackName = '', fallbackFullPrice = 0) {
             const selectedAmount = getPortionVariantUnitMultiplier(selectedVariant);
             const selectedPrice = getPortionVariantPrice(selectedVariant);
@@ -1551,6 +1874,45 @@
                 portionNames,
                 portionSelectable: knownChoiceCount > 1
             };
+        }
+
+        function findMenuPortionVariantsForBasketItem(item) {
+            const category = item?.category || currentCategory || '';
+            const baseName = getPortionVariantBaseName(item?.name || '');
+            const baseKey = normalizeMenuText(baseName);
+            const categories = category && waiterMenuData[category]
+                ? [category]
+                : Object.keys(waiterMenuData || {});
+
+            for (const cat of categories) {
+                const cards = buildWaiterMenuCards(waiterMenuData[cat] || [], { separateHalfPortions: false });
+                const card = cards.find(entry => {
+                    return entry.type === 'portion-group' && normalizeMenuText(entry.name) === baseKey;
+                });
+                if (card) return buildPortionChoiceVariants(card.name, card.variants);
+            }
+            return [];
+        }
+
+        function buildSyntheticGrillVariantsForBasketItem(item) {
+            if (!isGrillCategory(item?.category)) return [];
+            const baseName = getPortionVariantBaseName(item?.name || '');
+            if (!baseName || isFixedGrillServingName(baseName)) return [];
+
+            const amount = getPortionMultiplierFromName(item?.name || '') || getBasketPortionAmount(item);
+            const price = Number(item?.price || item?.basePrice || 0);
+            const basePrice = amount > 0 ? roundMoney(price / amount) : price;
+            if (!Number.isFinite(basePrice) || basePrice <= 0) return [];
+
+            return GRILL_PORTION_VALUES.map(value => ({
+                type: Math.abs(value - 0.5) < 0.001 ? 'half' : (Math.abs(value - 1.5) < 0.001 ? 'onehalf' : 'full'),
+                baseName,
+                synthetic: true,
+                item: [
+                    value === 1 ? baseName : `${baseName} (${formatPortionAmount(value)} porsiyon)`,
+                    roundMoney(basePrice * value)
+                ]
+            }));
         }
 
         function buildPortionChoiceVariants(name, variants) {
@@ -2393,6 +2755,62 @@
             return normalizeBasketQuantity(item?.portionAmount ?? 1);
         }
 
+        function getBasketPortionChoiceCount(item) {
+            const choices = new Set();
+            Object.keys(item?.portionPrices || {}).forEach(key => choices.add(key));
+            Object.keys(item?.portionNames || {}).forEach(key => choices.add(key));
+            return choices.size;
+        }
+
+        function selectBasketPortionVariant(item, variants) {
+            const nameKey = normalizeMenuText(item?.name || '');
+            const amount = getPortionMultiplierFromName(item?.name || '') || getBasketPortionAmount(item);
+            return variants.find(variant => normalizeMenuText(getPortionVariantName(variant)) === nameKey)
+                || variants.find(variant => Math.abs(getPortionVariantUnitMultiplier(variant) - amount) < 0.001)
+                || variants.find(variant => Math.abs(getPortionVariantUnitMultiplier(variant) - getBasketPortionAmount(item)) < 0.001)
+                || variants.find(variant => variant.type === 'full')
+                || variants[0];
+        }
+
+        function hydrateBasketPortionItem(item) {
+            if (!item || item._portionHydrated) return;
+            if (item.portionSelectable && getBasketPortionChoiceCount(item) > 1) {
+                item._portionHydrated = true;
+                return;
+            }
+
+            const variants = findMenuPortionVariantsForBasketItem(item);
+            const choices = variants.length ? variants : buildSyntheticGrillVariantsForBasketItem(item);
+            if (!choices.length) {
+                item._portionHydrated = true;
+                return;
+            }
+
+            const selectedVariant = selectBasketPortionVariant(item, choices);
+            const options = buildPortionBasketOptions(
+                selectedVariant,
+                choices,
+                selectedVariant?.baseName || getPortionVariantBaseName(item.name),
+                item.basePrice || item.price
+            );
+
+            item.name = selectedVariant?.baseName || getPortionVariantBaseName(item.name);
+            item.portionAmount = options.portionAmount;
+            item.basePrice = options.basePrice;
+            item.portionPrices = options.portionPrices;
+            item.portionNames = options.portionNames;
+            item.portionSelectable = true;
+            item.price = getBasketUnitPrice(item);
+            item._portionHydrated = true;
+        }
+
+        function isBasketPortionAdjustable(item) {
+            if (!item) return false;
+            if (item.portionSelectable) return true;
+            if (getBasketPortionChoiceCount(item) > 1) return true;
+            return Math.abs(getPortionMultiplierFromName(item.name) - 1) > 0.001;
+        }
+
         function getMappedPortionValue(item, values, amount) {
             if (!values || typeof values !== 'object') return undefined;
             const key = getPortionAmountKey(amount);
@@ -2406,7 +2824,7 @@
         }
 
         function getBasketUnitPrice(item) {
-            if (item?.portionSelectable) {
+            if (isBasketPortionAdjustable(item)) {
                 const mappedPrice = getBasketPortionPrice(item);
                 if (mappedPrice !== null) return mappedPrice;
                 const basePrice = Number(item.basePrice ?? item.price ?? 0);
@@ -2448,7 +2866,8 @@
 
         function adjustBasketPortion(index, direction) {
             const item = basket[index];
-            if (!item || !item.portionSelectable) return;
+            hydrateBasketPortionItem(item);
+            if (!item || !isBasketPortionAdjustable(item)) return;
             const currentIndex = getGrillPortionIndex(getBasketPortionAmount(item));
             const nextIndex = Math.max(0, Math.min(GRILL_PORTION_VALUES.length - 1, currentIndex + direction));
             const candidate = { ...item, portionAmount: GRILL_PORTION_VALUES[nextIndex] };
@@ -2463,7 +2882,7 @@
         }
 
         function getBasketSendName(item) {
-            if (!item?.portionSelectable) return item?.name || '';
+            if (!isBasketPortionAdjustable(item)) return item?.name || '';
             const amount = getBasketPortionAmount(item);
             const mappedName = getMappedPortionValue(item, item?.portionNames, amount);
             if (mappedName) return mappedName;
@@ -2506,12 +2925,12 @@
 
         function getBasketDisplayName(item) {
             const mealName = getMealNameFromBaseNote(item?.baseNote);
-            if (item?.portionSelectable && mealName) {
+            if (isBasketPortionAdjustable(item) && mealName) {
                 const portionLabel = getPortionLabelFromName(getBasketSendName(item))
                     || getPortionLabelFromAmount(getBasketPortionAmount(item));
                 return portionLabel ? `${portionLabel} ${mealName}` : mealName;
             }
-            if (item?.portionSelectable) return getBasketSendName(item);
+            if (isBasketPortionAdjustable(item)) return getBasketSendName(item);
             if (mealName) {
                 const portionLabel = getPortionLabelFromName(item?.name);
                 return portionLabel ? `${portionLabel} ${mealName}` : mealName;
@@ -2592,7 +3011,7 @@
 
         function getBasketPortionUnits(item) {
             const quantity = getBasketQuantity(item);
-            if (item?.portionSelectable) {
+            if (isBasketPortionAdjustable(item)) {
                 return quantity * getBasketPortionAmount(item);
             }
             return getPortionUnits(item?.name, quantity);
@@ -2710,12 +3129,24 @@
 
             // 2. Yeni Siparişler (Sepettekiler)
             basket.forEach((item, index) => {
+                hydrateBasketPortionItem(item);
                 const div = document.createElement('div');
                 div.className = 'basket-item';
                 div.style.borderLeft = '3px solid #3498db';
                 const quantity = getBasketQuantity(item);
                 const portionIndex = getGrillPortionIndex(getBasketPortionAmount(item));
                 const baseNoteLabel = formatOrderNote(item.baseNote || '');
+                const portionAdjustable = isBasketPortionAdjustable(item);
+                const plateLabel = getPlateGroupLabel(item.plateGroup);
+                const plateBadge = plateLabel
+                    ? `<br><span class="plate-badge">${escapeHtml(plateLabel)}${item.plateServiceFee ? ' • Servis' : ''}</span>`
+                    : '';
+                const plateSelect = item.plateServiceFee
+                    ? ''
+                    : `<label class="basket-select">
+                            <input type="checkbox" ${item.plateSelected ? 'checked' : ''} onchange="toggleBasketPlateSelection(${index}, this.checked)">
+                            <span>Tabakta birleştir</span>
+                        </label>`;
                 const quantityControls = `<div class="basket-control-group">
                             <span class="basket-control-label">Adet</span>
                             <div class="quantity-stepper">
@@ -2724,7 +3155,7 @@
                                 <button type="button" onclick="adjustBasketQuantity(${index}, 1)">+</button>
                             </div>
                         </div>`;
-                const portionControls = item.portionSelectable
+                const portionControls = portionAdjustable
                     ? `<div class="basket-control-group">
                             <span class="basket-control-label">Porsiyon</span>
                             <div class="portion-stepper">
@@ -2738,6 +3169,7 @@
                     <div style="flex-grow: 1;">
                         <span style="color: #3498db; font-size: 10px; font-weight: bold;">[YENİ]</span>
                         <span class="basket-item-name">${escapeHtml(getBasketDisplayName(item))}</span>
+                        ${plateBadge}
                         <br/><span class="basket-line-meta">${getBasketPriceMeta(item)}</span>
                         ${baseNoteLabel ? `<br/><span class="basket-item-note">${escapeHtml(baseNoteLabel)}</span>` : ''}
                         <input
@@ -2748,6 +3180,7 @@
                             value="${escapeHtml(item.note || '')}"
                             oninput="updateBasketNote(${index}, this.value)"
                         >
+                        ${plateSelect}
                         <div class="ready-note-buttons"></div>
                     </div>
                     <div class="basket-item-actions">
@@ -2763,6 +3196,7 @@
 
             if (totalEl) totalEl.textContent = total.toFixed(2) + ' TL';
             if (countEl) countEl.textContent = serverItems.length + basket.length;
+            updatePlateCombineButton();
         }
 
         function cancelItem(uid) {
@@ -2782,9 +3216,36 @@
             });
         }
 
+        function basketItemPayload(item) {
+            hydrateBasketPortionItem(item);
+            const payload = {
+                urun: getBasketSendName(item),
+                fiyat: getBasketUnitPrice(item),
+                adet: getBasketQuantity(item),
+                kategori: item.category || '',
+                garson: loggedWaiter,
+                not: composeBasketItemNote(item),
+                tip: item.tip || 'normal'
+            };
+            if (item.plateGroup) payload.plate_group = item.plateGroup;
+            if (item.skipPrepTicket || item.plateServiceFee) payload.prep_ticket_skipped = true;
+            return payload;
+        }
+
         function sendOrder() {
             if (!currentTable || basket.length === 0) return;
             if (!canSendBasket()) return;
+            const hasPlateItems = basket.some(item => item.plateGroup || item.plateServiceFee || item.skipPrepTicket);
+            if (hasPlateItems) {
+                socket.emit('add_items', {
+                    masa: currentTable,
+                    garson: loggedWaiter,
+                    items: basket.map(basketItemPayload)
+                });
+                basket = [];
+                updateBasketDisplay();
+                return;
+            }
             basket.forEach(item => {
                 socket.emit('add_item', {
                     masa: currentTable, // Masayı açıkça gönder

@@ -1228,7 +1228,8 @@ class RestaurantServer:
 
     def add_order_item(self, masa_adi, urun, fiyat, garson='Bilinmiyor', adet=1,
                        not_bilgisi='', tip='normal', terminal_id=None, kategori=None,
-                       return_error=False):
+                       return_error=False, emit_updates=True, emit_ticket=True,
+                       extra_fields=None, prep_ticket_skipped=None):
         if masa_adi not in self.adisyonlar:
             return (None, 'Masa bulunamadı') if return_error else None
 
@@ -1251,7 +1252,11 @@ class RestaurantServer:
         kategori = self.resolve_order_category(urun, kategori)
         panel = self.get_preparation_panel_for_product(urun, kategori)
         panel_info = self.get_prep_panel_info(panel)
-        skip_prep_ticket = self.should_skip_prep_ticket_for_product(urun)
+        skip_prep_ticket = (
+            bool(prep_ticket_skipped)
+            if prep_ticket_skipped is not None
+            else self.should_skip_prep_ticket_for_product(urun)
+        )
         siparis = {
             'uid': siparis_id,
             'urun': urun,
@@ -1267,8 +1272,16 @@ class RestaurantServer:
             'saat': created_at.strftime("%H:%M:%S"),
             'created_at': created_at.isoformat(timespec='seconds')
         }
+        if isinstance(extra_fields, dict):
+            allowed_extra_fields = {'plate_group'}
+            for key in allowed_extra_fields:
+                if key in extra_fields:
+                    siparis[key] = extra_fields[key]
         self.adisyonlar[masa_adi].append(siparis)
         self.save_active_adisyonlar()
+
+        if not emit_updates:
+            return (siparis, None) if return_error else siparis
 
         items = self.adisyonlar[masa_adi]
         totals = self.calculate_adisyon_totals(items)
@@ -1292,14 +1305,158 @@ class RestaurantServer:
             'prep_ticket_skipped': skip_prep_ticket,
             'terminal_id': terminal_id or f"public:{masa_adi}"
         }
+        if siparis.get('plate_group'):
+            ticket_payload['plate_group'] = siparis.get('plate_group')
         socketio.emit('kitchen_new_order', ticket_payload)
         if skip_prep_ticket:
             logger.info(f"🧾 Reyon fişi atlandı: {urun} -> {masa_adi} ({panel})")
-        else:
+        elif emit_ticket:
             self.send_prep_ticket_to_printer(panel, ticket_payload)
         if panel == "mutfak":
             self.send_to_kitchen_legacy(masa_adi, f"{urun} ({not_bilgisi})" if not_bilgisi else urun, adet)
         return (siparis, None) if return_error else siparis
+
+    def plate_group_label(self, plate_group):
+        if not isinstance(plate_group, dict):
+            return ""
+        label = str(plate_group.get("label") or "").strip()
+        group_id = str(plate_group.get("id") or "").strip()
+        if label and group_id:
+            return f"{label} #{group_id}"
+        return label or (f"Tabak #{group_id}" if group_id else "")
+
+    def order_item_ticket_payload(self, masa_adi, item, terminal_id=None):
+        panel = item.get('panel') or self.get_preparation_panel_for_product(
+            item.get('urun'),
+            item.get('kategori', '')
+        )
+        panel_info = self.get_prep_panel_info(panel)
+        payload = {
+            'uid': item.get('uid'),
+            'masa': masa_adi,
+            'urun': item.get('urun'),
+            'kategori': item.get('kategori'),
+            'panel': panel,
+            'panel_adi': panel_info['name'],
+            'adet': item.get('adet', 1),
+            'not': item.get('not') or '',
+            'saat': item.get('saat') or '',
+            'created_at': item.get('created_at') or '',
+            'garson': item.get('garson') or '',
+            'prep_ticket_skipped': bool(item.get('prep_ticket_skipped')),
+            'terminal_id': terminal_id or f"public:{masa_adi}"
+        }
+        if item.get('plate_group'):
+            payload['plate_group'] = item.get('plate_group')
+        return payload
+
+    def emit_order_batch_updates(self, masa_adi, added_items, terminal_id=None):
+        items = self.adisyonlar.get(masa_adi, [])
+        totals = self.calculate_adisyon_totals(items)
+        socketio.emit('masa_update', {
+            'masa': masa_adi,
+            'items': items,
+            **totals
+        })
+
+        grouped = defaultdict(list)
+        for item in added_items:
+            if item.get('prep_ticket_skipped'):
+                continue
+            payload = self.order_item_ticket_payload(masa_adi, item, terminal_id)
+            group_id = ''
+            if isinstance(payload.get('plate_group'), dict):
+                group_id = str(payload['plate_group'].get('id') or '')
+            grouped[(payload.get('panel') or '', group_id)].append(payload)
+
+        for (panel, group_id), payload_items in grouped.items():
+            if not panel or not payload_items:
+                continue
+            first = payload_items[0]
+            plate_label = self.plate_group_label(first.get('plate_group'))
+            batch_payload = {
+                **first,
+                'uid': first.get('uid'),
+                'urun': plate_label or first.get('urun'),
+                'not': plate_label or first.get('not') or '',
+                'items': payload_items
+            }
+            socketio.emit('kitchen_new_order', batch_payload)
+            self.send_prep_ticket_to_printer(panel, batch_payload)
+
+            if panel == "mutfak":
+                legacy_items = ", ".join(
+                    self.prep_ticket_item_title({
+                        "urun": entry.get("urun"),
+                        "adet": entry.get("adet", 1),
+                        "not": entry.get("not") or ""
+                    })
+                    for entry in payload_items
+                )
+                self.send_to_kitchen_legacy(masa_adi, legacy_items, 1)
+
+    def add_order_items(self, masa_adi, order_items, garson='Bilinmiyor', terminal_id=None,
+                        return_error=False):
+        if masa_adi not in self.adisyonlar:
+            return ([], 'Masa bulunamadı') if return_error else []
+
+        if not isinstance(order_items, list) or not order_items:
+            return ([], 'Sipariş kalemi bulunamadı') if return_error else []
+
+        stock_ok, stock_error = self.validate_portion_stock_for_order(order_items)
+        if not stock_ok:
+            return ([], stock_error) if return_error else []
+
+        added = []
+        try:
+            for raw in order_items:
+                if not isinstance(raw, dict):
+                    continue
+                urun = str(raw.get('urun') or raw.get('name') or '').strip()
+                if not urun:
+                    continue
+                plate_group = raw.get('plate_group')
+                if not isinstance(plate_group, dict):
+                    plate_group = None
+                prep_ticket_skipped = None
+                if 'prep_ticket_skipped' in raw or 'skip_prep_ticket' in raw:
+                    prep_ticket_skipped = bool(raw.get('prep_ticket_skipped') or raw.get('skip_prep_ticket'))
+                siparis, err = self.add_order_item(
+                    masa_adi=masa_adi,
+                    urun=urun,
+                    fiyat=raw.get('fiyat', raw.get('price', 0)),
+                    garson=raw.get('garson') or garson,
+                    adet=raw.get('adet', raw.get('quantity', 1)),
+                    not_bilgisi=raw.get('not') or raw.get('not_bilgisi') or '',
+                    tip=raw.get('tip', 'normal'),
+                    terminal_id=terminal_id,
+                    kategori=raw.get('kategori') or raw.get('category'),
+                    return_error=True,
+                    emit_updates=False,
+                    emit_ticket=False,
+                    prep_ticket_skipped=prep_ticket_skipped,
+                    extra_fields={'plate_group': plate_group} if plate_group else None
+                )
+                if not siparis:
+                    raise ValueError(err or 'Sipariş eklenemedi')
+                added.append(siparis)
+        except Exception as e:
+            for item in added:
+                try:
+                    if item in self.adisyonlar.get(masa_adi, []):
+                        self.adisyonlar[masa_adi].remove(item)
+                    self.restore_portion_stock(item.get('urun'), item.get('adet', 1), item.get('not', ''))
+                except Exception:
+                    pass
+            self.save_active_adisyonlar()
+            return ([], str(e) or 'Sipariş eklenemedi') if return_error else []
+
+        if not added:
+            return ([], 'Geçerli sipariş kalemi bulunamadı') if return_error else []
+
+        self.save_active_adisyonlar()
+        self.emit_order_batch_updates(masa_adi, added, terminal_id)
+        return (added, None) if return_error else added
     
     def load_settings(self):
         """Ayarları dosyadan yükle"""
@@ -2397,6 +2554,7 @@ class RestaurantServer:
         raw_items = order_data.get("items")
         if not isinstance(raw_items, list) or not raw_items:
             raw_items = [order_data]
+        parent_plate_label = self.plate_group_label(order_data.get("plate_group"))
 
         grouped = []
         grouped_index = {}
@@ -2430,6 +2588,14 @@ class RestaurantServer:
             else:
                 display_urun, display_adet = self.prep_ticket_display_item(raw_with_context, urun, adet)
                 note = self.clean_prep_ticket_note(raw_note)
+
+            plate_label = self.plate_group_label(raw.get("plate_group")) or parent_plate_label
+            plate_note = ""
+            raw_plate = raw.get("plate_group") if isinstance(raw.get("plate_group"), dict) else order_data.get("plate_group")
+            if isinstance(raw_plate, dict):
+                plate_note = str(raw_plate.get("note") or "").strip()
+            if plate_label:
+                note = " / ".join(part for part in [plate_label, plate_note, note] if part)
 
             key = self.prep_ticket_item_group_key(raw_with_context, display_urun, note)
             if key in grouped_index:
@@ -6986,6 +7152,65 @@ def handle_add_item(data):
         return_error=True
     )
     if not order_item:
+        emit('error', {'message': err or 'Sipariş eklenemedi'})
+
+@socketio.on('add_items')
+def handle_add_items(data):
+    """Birden çok sipariş kalemini tek akışta ekle."""
+    sid = request.sid
+    user = require_socket_permission(['dashboard', 'waiter'])
+    if not user:
+        return
+
+    masa_adi = data.get('masa') or server.current_selections.get(sid)
+    if not masa_adi or masa_adi not in server.adisyonlar:
+        emit('error', {'message': 'Lütfen önce masa seçiniz'})
+        return
+
+    raw_items = data.get('items')
+    if not isinstance(raw_items, list) or not raw_items:
+        emit('error', {'message': 'Sipariş kalemi bulunamadı'})
+        return
+
+    order_items = []
+    for raw in raw_items[:50]:
+        if not isinstance(raw, dict):
+            continue
+        urun = str(raw.get('urun') or raw.get('name') or '').strip()
+        if not urun:
+            continue
+        try:
+            fiyat = float(raw.get('fiyat', raw.get('price', 0)))
+        except Exception:
+            fiyat = 0
+        item = {
+            'urun': urun,
+            'fiyat': fiyat,
+            'adet': raw.get('adet', raw.get('quantity', 1)),
+            'not': str(raw.get('not') or raw.get('not_bilgisi') or '').strip()[:160],
+            'tip': raw.get('tip', 'normal'),
+            'kategori': str(raw.get('kategori') or raw.get('category') or '').strip()[:80],
+            'garson': raw.get('garson') or data.get('garson', 'Bilinmiyor')
+        }
+        if 'prep_ticket_skipped' in raw or 'skip_prep_ticket' in raw:
+            item['prep_ticket_skipped'] = bool(raw.get('prep_ticket_skipped') or raw.get('skip_prep_ticket'))
+        plate_group = raw.get('plate_group')
+        if isinstance(plate_group, dict):
+            item['plate_group'] = {
+                'id': str(plate_group.get('id') or '').strip()[:16],
+                'label': str(plate_group.get('label') or '').strip()[:60],
+                'note': str(plate_group.get('note') or '').strip()[:120]
+            }
+        order_items.append(item)
+
+    added, err = server.add_order_items(
+        masa_adi=masa_adi,
+        order_items=order_items,
+        garson=data.get('garson', 'Bilinmiyor'),
+        terminal_id=f"waiter:{sid}",
+        return_error=True
+    )
+    if not added:
         emit('error', {'message': err or 'Sipariş eklenemedi'})
 
 @socketio.on('kitchen_order_ready')
