@@ -1373,12 +1373,9 @@ class RestaurantServer:
             if not panel or not payload_items:
                 continue
             first = payload_items[0]
-            plate_label = self.plate_group_label(first.get('plate_group'))
             batch_payload = {
                 **first,
                 'uid': first.get('uid'),
-                'urun': plate_label or first.get('urun'),
-                'not': plate_label or first.get('not') or '',
                 'items': payload_items
             }
             socketio.emit('kitchen_new_order', batch_payload)
@@ -2539,6 +2536,9 @@ class RestaurantServer:
         )
 
     def prep_ticket_item_title(self, item):
+        heading = str(item.get("heading") or "").strip()
+        if heading:
+            return heading
         adet = self.format_order_quantity(item.get("adet", 1))
         urun = str(item.get("urun") or "").strip()
         note = str(item.get("not") or "").strip()
@@ -2556,13 +2556,37 @@ class RestaurantServer:
             raw_items = [order_data]
         parent_plate_label = self.plate_group_label(order_data.get("plate_group"))
 
+        ticket_plate_heading = ""
+        for raw in raw_items:
+            if not isinstance(raw, dict):
+                continue
+            raw_plate = raw.get("plate_group") if isinstance(raw.get("plate_group"), dict) else order_data.get("plate_group")
+            plate_label = self.plate_group_label(raw_plate) or parent_plate_label
+            if not plate_label:
+                continue
+            plate_note = str(raw_plate.get("note") or "").strip() if isinstance(raw_plate, dict) else ""
+            ticket_plate_heading = " / ".join(part for part in [plate_label, plate_note] if part)
+            break
+
         grouped = []
         grouped_index = {}
+        if ticket_plate_heading:
+            grouped.append({"heading": ticket_plate_heading})
+
         for raw in raw_items:
             if not isinstance(raw, dict):
                 continue
             urun = str(raw.get("urun") or "").strip()
             if not urun:
+                continue
+            raw_plate = raw.get("plate_group") if isinstance(raw.get("plate_group"), dict) else order_data.get("plate_group")
+            plate_label = self.plate_group_label(raw_plate) or parent_plate_label
+            if (
+                ticket_plate_heading
+                and plate_label
+                and self.prep_ticket_group_value(urun) == self.prep_ticket_group_value(plate_label)
+                and not str(raw.get("not") or "").strip()
+            ):
                 continue
             raw_note = str(raw.get("not") or "").strip()
             meal_name, extra_note = self.split_order_note_details(raw_note)
@@ -2588,14 +2612,6 @@ class RestaurantServer:
             else:
                 display_urun, display_adet = self.prep_ticket_display_item(raw_with_context, urun, adet)
                 note = self.clean_prep_ticket_note(raw_note)
-
-            plate_label = self.plate_group_label(raw.get("plate_group")) or parent_plate_label
-            plate_note = ""
-            raw_plate = raw.get("plate_group") if isinstance(raw.get("plate_group"), dict) else order_data.get("plate_group")
-            if isinstance(raw_plate, dict):
-                plate_note = str(raw_plate.get("note") or "").strip()
-            if plate_label:
-                note = " / ".join(part for part in [plate_label, plate_note, note] if part)
 
             key = self.prep_ticket_item_group_key(raw_with_context, display_urun, note)
             if key in grouped_index:
@@ -2895,16 +2911,40 @@ class RestaurantServer:
         if not key[0] or not key[1]:
             return False
 
-        item = {
-            "uid": order_data.get("uid"),
-            "urun": order_data.get("urun"),
-            "kategori": order_data.get("kategori"),
-            "panel": order_data.get("panel") or panel_id,
-            "adet": order_data.get("adet", 1),
-            "not": order_data.get("not") or "",
-            "saat": order_data.get("saat") or "",
-            "garson": order_data.get("garson") or "",
-        }
+        raw_items = order_data.get("items")
+        if isinstance(raw_items, list) and raw_items:
+            queued_items = []
+            for raw in raw_items:
+                if not isinstance(raw, dict):
+                    continue
+                queued_item = {
+                    "uid": raw.get("uid"),
+                    "urun": raw.get("urun"),
+                    "kategori": raw.get("kategori") or order_data.get("kategori"),
+                    "panel": raw.get("panel") or order_data.get("panel") or panel_id,
+                    "adet": raw.get("adet", 1),
+                    "not": raw.get("not") or "",
+                    "saat": raw.get("saat") or order_data.get("saat") or "",
+                    "garson": raw.get("garson") or order_data.get("garson") or "",
+                }
+                if raw.get("plate_group") or order_data.get("plate_group"):
+                    queued_item["plate_group"] = raw.get("plate_group") or order_data.get("plate_group")
+                queued_items.append(queued_item)
+        else:
+            queued_items = [{
+                "uid": order_data.get("uid"),
+                "urun": order_data.get("urun"),
+                "kategori": order_data.get("kategori"),
+                "panel": order_data.get("panel") or panel_id,
+                "adet": order_data.get("adet", 1),
+                "not": order_data.get("not") or "",
+                "saat": order_data.get("saat") or "",
+                "garson": order_data.get("garson") or "",
+                "plate_group": order_data.get("plate_group")
+            }]
+        queued_items = [item for item in queued_items if item.get("urun")]
+        if not queued_items:
+            return False
 
         with self.prep_printer_batch_lock:
             batch = self.prep_printer_batches.get(key)
@@ -2919,7 +2959,7 @@ class RestaurantServer:
                 }
                 self.prep_printer_batches[key] = batch
 
-            batch["payload"]["items"].append(item)
+            batch["payload"]["items"].extend(queued_items)
             batch["payload"]["saat"] = order_data.get("saat") or batch["payload"].get("saat", "")
             if order_data.get("garson"):
                 current_garson = batch["payload"].get("garson")

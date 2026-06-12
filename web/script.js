@@ -889,6 +889,43 @@ function orderQuantitiesMatch(left, right) {
     return Math.abs(Number(left || 0) - Number(right || 0)) < 0.001;
 }
 
+function splitOrderNoteDetails(note) {
+    const lines = String(note || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    if (!lines.length || !/^Yemek:\s*/i.test(lines[0])) {
+        return { mealName: '', note: String(note || '').trim() };
+    }
+
+    return {
+        mealName: lines[0].replace(/^Yemek:\s*/i, '').trim(),
+        note: lines.slice(1).join('\n')
+    };
+}
+
+function getOrderPortionLabel(name) {
+    const rawName = String(name || '').trim();
+    let prefixMatch = rawName.match(/^(tam|yarım|yarim)\s+porsiyon\s+/i);
+    if (!prefixMatch) {
+        prefixMatch = rawName.match(/^(tam|yarım|yarim)\s+/i);
+    }
+    if (prefixMatch) {
+        return normalizeDailyText(prefixMatch[1]).startsWith('yar') ? 'Yarım Porsiyon' : 'Tam Porsiyon';
+    }
+
+    const trailing = rawName.match(/\(\s*(\d+(?:[,.]\d+)?)\s*porsiyon\s*\)\s*$/i);
+    if (!trailing) return '';
+
+    const parsed = Number(trailing[1].replace(',', '.'));
+    return Number.isFinite(parsed) && parsed > 0 ? `${formatPortionAmount(parsed)} Porsiyon` : '';
+}
+
+function getOrderDisplayName(item) {
+    const { mealName } = splitOrderNoteDetails(item?.not);
+    if (!mealName) return item?.urun || '';
+
+    const portionLabel = getOrderPortionLabel(item?.urun);
+    return portionLabel ? `${portionLabel} ${mealName}` : mealName;
+}
+
 function getOrderGroupName(item) {
     const parts = [];
     const plateGroup = item?.plate_group;
@@ -1427,7 +1464,8 @@ function updateOrderDisplay() {
             const statusBadge = isHazir
                 ? '<span style="color: #2ecc71; font-weight: bold; font-size: 10px;">[HAZIR] </span>'
                 : (isServed ? '<span style="color: #7f8c8d; font-weight: bold; font-size: 10px;">[SERVİS EDİLDİ] </span>' : '');
-            const itemNote = item.not || '';
+            const displayName = getOrderDisplayName(item);
+            const itemNote = splitOrderNoteDetails(item.not).note;
             const groupName = getOrderGroupName(item);
             const unitChip = row.isSplitUnit
                 ? `<span class="order-unit-chip">${row.unitNumber}/${row.unitCount}</span>`
@@ -1443,7 +1481,7 @@ function updateOrderDisplay() {
                     ${groupName ? `<div class="order-item-group">${escapeHtml(groupName)}</div>` : ''}
                     <div class="order-item-name">
                         ${statusBadge}
-                        ${formatOrderQuantity(row.quantity)}x ${escapeHtml(item.urun)}${unitChip}${isIkram ? ' (İKRAM)' : ''}
+                        ${formatOrderQuantity(row.quantity)}x ${escapeHtml(displayName)}${unitChip}${isIkram ? ' (İKRAM)' : ''}
                     </div>
                     <div class="order-item-meta">${escapeHtml(item.garson || 'Bilinmiyor')} - ${escapeHtml(item.saat || '')}</div>
                     ${itemNote ? `<div class="order-item-note">Not: ${escapeHtml(itemNote)}</div>` : ''}

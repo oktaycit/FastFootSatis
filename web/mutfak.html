@@ -1343,8 +1343,6 @@
             const mealName = extractMealNameFromNote(data.not, data.urun);
             const productName = mealName || displayInfo.productName;
             const note = [
-                getPlateGroupLabel(data),
-                getPlateGroupNote(data),
                 mealName ? '' : cleanPrepTicketNote(data.not)
             ].filter(Boolean).join(' / ');
             const parsedQuantity = parseOrderQuantity(displayInfo.quantity, 1);
@@ -1368,10 +1366,22 @@
             const rawItems = Array.isArray(data.items) && data.items.length ? data.items : [data];
             const grouped = [];
             const groupedIndex = new Map();
+            const plateHeading = rawItems
+                .map(raw => {
+                    const merged = { ...data, ...raw };
+                    return [getPlateGroupLabel(merged), getPlateGroupNote(merged)].filter(Boolean).join(' / ');
+                })
+                .find(Boolean);
+            if (plateHeading) {
+                grouped.push({ heading: plateHeading });
+            }
 
             rawItems.forEach(raw => {
                 const item = getPrepPrintItemParts(raw, data);
                 if (!item.productName) return;
+                if (plateHeading && prepPrintGroupValue(item.productName) === prepPrintGroupValue(getPlateGroupLabel({ ...data, ...raw }))) {
+                    return;
+                }
                 if (groupedIndex.has(item.key)) {
                     grouped[groupedIndex.get(item.key)].quantity += item.quantity;
                     return;
@@ -1384,6 +1394,7 @@
         }
 
         function formatPrepPrintItemLine(item) {
+            if (item.heading) return item.heading;
             const noteText = item.note ? ` ${item.note}` : '';
             return `${formatOrderQuantity(item.quantity)} x ${item.productName}${noteText}`;
         }
