@@ -1350,6 +1350,96 @@ class RestaurantServer:
             payload['plate_group'] = item.get('plate_group')
         return payload
 
+    def plate_group_key(self, plate_group):
+        if not isinstance(plate_group, dict):
+            return ""
+        return str(plate_group.get("id") or plate_group.get("label") or "").strip()
+
+    def daily_meal_portion_price(self, category, portion_amount):
+        canonical = self.get_canonical_daily_meal_category(category) or str(category or "").strip()
+        if not canonical:
+            return 0.0
+
+        target_amount = round(float(portion_amount or 0), 3)
+        full_price = 0.0
+        half_price = 0.0
+        category_key = self._normalize_product_key(canonical)
+        for item in self.menu_data.get(canonical, []):
+            if not isinstance(item, (list, tuple)) or len(item) < 2:
+                continue
+            name = str(item[0] or "").strip()
+            if self._normalize_product_key(self._strip_portion_variant_prefix(name)) != category_key:
+                continue
+            try:
+                price = float(item[1])
+            except Exception:
+                continue
+            normalized = self._normalize_text_for_match(name)
+            if normalized.startswith("tam porsiyon "):
+                full_price = price
+            elif normalized.startswith("yarim porsiyon "):
+                half_price = price
+
+        if abs(target_amount - 1) < 0.001 and full_price > 0:
+            return round(full_price, 2)
+        if abs(target_amount - 0.5) < 0.001 and half_price > 0:
+            return round(half_price, 2)
+        if full_price > 0:
+            return round(full_price * target_amount, 2)
+        return 0.0
+
+    def normalize_plate_combo_pricing(self, order_items):
+        normalized_items = [dict(item) if isinstance(item, dict) else item for item in (order_items or [])]
+        grouped = defaultdict(list)
+
+        for item in normalized_items:
+            if not isinstance(item, dict) or item.get('prep_ticket_skipped'):
+                continue
+            plate_key = self.plate_group_key(item.get('plate_group'))
+            if not plate_key:
+                continue
+            urun = str(item.get('urun') or item.get('name') or '').strip()
+            category = self.get_canonical_daily_meal_category(item.get('kategori') or item.get('category')) \
+                or self.get_daily_meal_group_for_product(urun, item.get('kategori') or item.get('category'))
+            if not category:
+                continue
+            portions = self.get_portion_units_for_order(urun, item.get('adet', item.get('quantity', 1)))
+            if portions <= 0:
+                continue
+            grouped[(plate_key, self._normalize_product_key(category))].append({
+                'item': item,
+                'category': category,
+                'portions': portions
+            })
+
+        for entries in grouped.values():
+            if len(entries) < 2:
+                continue
+            total_portions = round(sum(entry['portions'] for entry in entries), 3)
+            if total_portions <= 0.5:
+                continue
+            target_total = self.daily_meal_portion_price(entries[0]['category'], total_portions)
+            if target_total <= 0:
+                continue
+
+            target_cents = int(round(target_total * 100))
+            allocated_cents = 0
+            for index, entry in enumerate(entries):
+                item = entry['item']
+                try:
+                    adet = self.coerce_order_quantity(item.get('adet', item.get('quantity', 1)))
+                except Exception:
+                    adet = 1
+                if index == len(entries) - 1:
+                    line_cents = target_cents - allocated_cents
+                else:
+                    line_cents = int(round(target_cents * (entry['portions'] / total_portions)))
+                    allocated_cents += line_cents
+                line_total = line_cents / 100
+                item['fiyat'] = round(line_total / max(float(adet), 0.001), 2)
+
+        return normalized_items
+
     def emit_order_batch_updates(self, masa_adi, added_items, terminal_id=None):
         items = self.adisyonlar.get(masa_adi, [])
         totals = self.calculate_adisyon_totals(items)
@@ -1399,6 +1489,8 @@ class RestaurantServer:
 
         if not isinstance(order_items, list) or not order_items:
             return ([], 'Sipariş kalemi bulunamadı') if return_error else []
+
+        order_items = self.normalize_plate_combo_pricing(order_items)
 
         stock_ok, stock_error = self.validate_portion_stock_for_order(order_items)
         if not stock_ok:
@@ -1628,9 +1720,37 @@ class RestaurantServer:
             logger.error(f"Ayar kaydetme hatası: {e}")
             return False
 
+    def get_staffing_status(self):
+        """Aktif garson oturumlarını yönetici ekranı için özetle."""
+        ignored_names = {
+            "",
+            "kasa",
+            "bilinmiyor",
+            "ortak terminal",
+            "musteri qr",
+            "müşteri qr",
+            "online siparis",
+            "online sipariş",
+        }
+        active_waiters = []
+        for waiter_name, sids in self.waiter_sessions.items():
+            clean_name = str(waiter_name or "").strip()
+            normalized = clean_name.casefold()
+            if not clean_name or not sids:
+                continue
+            if normalized in ignored_names or normalized.startswith("terminal "):
+                continue
+            active_waiters.append(clean_name)
+
+        active_waiters = sorted(set(active_waiters), key=lambda name: name.casefold())
+        return {
+            'active_waiters': active_waiters,
+            'active_waiter_count': len(active_waiters)
+        }
+
     def get_system_info(self):
         """Sistem bilgilerini döndür"""
-        return {
+        info = {
             'company_name': self.company_name,
             'terminal_id': self.terminal_id,
             'ip': get_local_ip(),
@@ -1646,6 +1766,8 @@ class RestaurantServer:
             'default_payment_method': self.default_payment_method,
             'receipt_printer_enabled': self.receipt_printer.get("enabled", False)
         }
+        info.update(self.get_staffing_status())
+        return info
 
     def get_initial_payload(self, sid=None):
         """İstemcilere gönderilen tam ekran durumunu hazırla."""
@@ -7106,13 +7228,17 @@ def handle_disconnect():
     sid = request.sid
     if sid in server.active_connections:
         info = server.active_connections.pop(sid)
+        staffing_changed = False
         # Garson session'larından temizle
         for waiter_name in list(server.waiter_sessions.keys()):
             if sid in server.waiter_sessions[waiter_name]:
                 server.waiter_sessions[waiter_name].remove(sid)
+                staffing_changed = True
                 if not server.waiter_sessions[waiter_name]:
                     del server.waiter_sessions[waiter_name]
         logger.info(f"❌ Client ayrıldı: {info['ip']} ({sid})")
+        if staffing_changed:
+            socketio.emit('staffing_update', server.get_staffing_status())
 
 @socketio.on('waiter_init')
 def handle_waiter_init(data):
@@ -7121,10 +7247,11 @@ def handle_waiter_init(data):
     user = require_socket_permission(['waiter', 'dashboard'])
     if not user:
         return
-    waiter_name = data.get('name')
+    waiter_name = str(data.get('name') or '').strip()
     if waiter_name:
         server.waiter_sessions[waiter_name].add(sid)
         logger.info(f"🤵 Garson oturumu kaydedildi: {waiter_name} ({sid})")
+        socketio.emit('staffing_update', server.get_staffing_status())
 
 @socketio.on('set_kasa')
 def handle_set_kasa(data):

@@ -1522,6 +1522,72 @@
             }).join('<br>');
         }
 
+        function getPlateGroupKey(plateGroup) {
+            if (!plateGroup || typeof plateGroup !== 'object') return '';
+            return String(plateGroup.id || plateGroup.label || '').trim();
+        }
+
+        function clearPlateComboPricing(item) {
+            if (!item) return;
+            delete item.plateComboUnitPrice;
+            delete item.plateComboTotalPrice;
+            delete item.plateComboTotalPortions;
+        }
+
+        function isDailyMealPlateComboItem(item) {
+            return item
+                && item.plateGroup
+                && !item.plateServiceFee
+                && isDailyMealCategory(item.category)
+                && getBasketPortionAmount(item) > 0
+                && getBasketQuantity(item) > 0;
+        }
+
+        function getPlateComboTargetPrice(item, totalPortions) {
+            const exactPrice = getBasketPortionPrice(item, totalPortions);
+            if (exactPrice !== null) return exactPrice;
+            const fullPrice = getBasketPortionPrice(item, 1) || Number(item?.basePrice || 0);
+            if (Number.isFinite(fullPrice) && fullPrice > 0) {
+                return roundMoney(fullPrice * totalPortions);
+            }
+            return 0;
+        }
+
+        function refreshPlateComboPricing() {
+            basket.forEach(clearPlateComboPricing);
+
+            const groups = new Map();
+            basket.forEach(item => {
+                if (!isDailyMealPlateComboItem(item)) return;
+                const plateKey = getPlateGroupKey(item.plateGroup);
+                const categoryKey = normalizeMenuText(item.category || item.name || '');
+                if (!plateKey || !categoryKey) return;
+                const key = `${plateKey}|${categoryKey}`;
+                if (!groups.has(key)) groups.set(key, []);
+                groups.get(key).push(item);
+            });
+
+            groups.forEach(items => {
+                if (items.length < 2) return;
+                const totalPortions = roundMoney(items.reduce((sum, item) => {
+                    return sum + (getBasketQuantity(item) * getBasketPortionAmount(item));
+                }, 0));
+                if (totalPortions <= 0.5) return;
+
+                const targetTotal = getPlateComboTargetPrice(items[0], totalPortions);
+                if (!targetTotal) return;
+
+                items.forEach(item => {
+                    const linePortions = getBasketQuantity(item) * getBasketPortionAmount(item);
+                    const lineTotal = roundMoney(targetTotal * (linePortions / totalPortions));
+                    const unitPrice = roundMoney(lineTotal / getBasketQuantity(item));
+                    item.plateComboUnitPrice = unitPrice;
+                    item.plateComboTotalPrice = targetTotal;
+                    item.plateComboTotalPortions = totalPortions;
+                });
+            });
+        }
+
         function openPlateModal() {
             const indices = getSelectedBasketIndices();
             if (indices.length < 2) {
@@ -2824,6 +2890,10 @@
         }
 
         function getBasketUnitPrice(item) {
+            const plateComboUnitPrice = Number(item?.plateComboUnitPrice);
+            if (Number.isFinite(plateComboUnitPrice) && plateComboUnitPrice >= 0) {
+                return roundMoney(plateComboUnitPrice);
+            }
             if (isBasketPortionAdjustable(item)) {
                 const mappedPrice = getBasketPortionPrice(item);
                 if (mappedPrice !== null) return mappedPrice;
@@ -3080,6 +3150,7 @@
             const totalEl = document.getElementById('basketTotal');
             const countEl = document.getElementById('basketCount');
             if (!list) return;
+            refreshPlateComboPricing();
             list.innerHTML = '';
             let total = 0;
             const readyCount = serverItems.filter(isReadyItem).length;
@@ -3234,6 +3305,7 @@
 
         function sendOrder() {
             if (!currentTable || basket.length === 0) return;
+            refreshPlateComboPricing();
             if (!canSendBasket()) return;
             const hasPlateItems = basket.some(item => item.plateGroup || item.plateServiceFee || item.skipPrepTicket);
             if (hasPlateItems) {

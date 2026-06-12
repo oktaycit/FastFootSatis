@@ -24,6 +24,17 @@ const PAYMENT_METHODS = ['Nakit', 'Kredi Kartı', 'Açık Hesap'];
 const Z_REPORT_HOLD_MS = 5000;
 const FINALIZE_PAYMENT_LABEL = '✅ Ödemeyi Tamamla';
 const PAYMENT_WAIT_TIMEOUT_MS = 150000;
+const STAFF_TABLES_PER_WAITER = 4;
+const STAFFING_IGNORED_WAITER_NAMES = new Set([
+    '',
+    'kasa',
+    'bilinmiyor',
+    'ortak terminal',
+    'musteri qr',
+    'müşteri qr',
+    'online siparis',
+    'online sipariş'
+]);
 
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -141,6 +152,7 @@ async function refreshCurrentMasaFromServer() {
             updateQuickSaleUI();
         }
         updateTableButton(data.masa);
+        updateStaffingSummary();
     } catch (err) {
         console.error('Masa refresh failed:', err);
     }
@@ -203,6 +215,14 @@ const elements = {
     paketGrid: null,
     masaSection: null,
     masaGrid: null,
+    staffingSummary: null,
+    staffingStatusDot: null,
+    staffingRecommendation: null,
+    staffingDetail: null,
+    staffingActiveTables: null,
+    staffingOccupancy: null,
+    staffingActiveWaiters: null,
+    staffingNeededWaiters: null,
     currentMasaLabel: null,
     orderList: null,
     totalAmount: null,
@@ -335,6 +355,7 @@ function connectToServer() {
     socket.on('initial_data', onInitialData);
     socket.on('system_info', onSystemInfo);
     socket.on('system_update', onSystemUpdate);
+    socket.on('staffing_update', onStaffingUpdate);
     socket.on('adisyonlar_update', onAdisyonlarUpdate);
     socket.on('masa_selected', onMasaSelected);
     socket.on('masa_update', onMasaUpdate);
@@ -433,6 +454,12 @@ function onSystemUpdate(data) {
     systemInfo = { ...systemInfo, ...data };
     updateSystemInfo();
     renderTables();
+}
+
+function onStaffingUpdate(data) {
+    console.log('👥 Staffing update:', data);
+    systemInfo = { ...systemInfo, ...(data || {}) };
+    updateStaffingSummary();
 }
 
 function hasSystemLayoutPayload(data) {
@@ -660,6 +687,7 @@ function onMasaUpdate(data) {
 
     // Update table buttons
     updateTableButton(data.masa);
+    updateStaffingSummary();
 }
 
 function onPaymentCompleted(data) {
@@ -689,11 +717,12 @@ function onPaymentCompleted(data) {
 
     // Update table button
     updateTableButton(data.masa);
+    updateStaffingSummary();
 }
 
 function onAdisyonlarUpdate(data) {
     console.log('🔄 Global adisyonlar update:', data);
-    adisyonlar = data;
+    adisyonlar = data || {};
 
     // Update all table buttons
     Object.keys(adisyonlar).forEach(masa => {
@@ -706,6 +735,7 @@ function onAdisyonlarUpdate(data) {
         refreshCurrentTotal();
         updateOrderDisplay();
     }
+    updateStaffingSummary();
 }
 
 function onNewOnlineOrder(data) {
@@ -1235,6 +1265,192 @@ function updateSystemInfo() {
 
     updateVardiyaUI();
     applyRoleProfile(getTerminalRole());
+    updateStaffingSummary();
+}
+
+function normalizeStaffingName(value) {
+    return String(value || '').trim().toLocaleLowerCase('tr-TR');
+}
+
+function isIgnoredStaffingWaiter(name) {
+    const normalized = normalizeStaffingName(name);
+    return !normalized
+        || STAFFING_IGNORED_WAITER_NAMES.has(normalized)
+        || normalized.startsWith('terminal ');
+}
+
+function addStaffingWaiterName(waiterMap, name) {
+    const cleanName = String(name || '').trim();
+    if (isIgnoredStaffingWaiter(cleanName)) return;
+    waiterMap.set(normalizeStaffingName(cleanName), cleanName);
+}
+
+function getSalonTableNames() {
+    const salons = Array.isArray(systemInfo.salons) ? systemInfo.salons : [];
+    const tableNames = [];
+
+    if (salons.length > 0) {
+        salons.forEach(salon => {
+            (salon.tables || []).forEach(table => {
+                const name = String(table || '').trim();
+                if (name) tableNames.push(name);
+            });
+        });
+        return tableNames;
+    }
+
+    const masaCount = Number(systemInfo.masa_sayisi || 0);
+    for (let i = 1; i <= masaCount; i++) {
+        tableNames.push(`Masa ${i}`);
+    }
+    return tableNames;
+}
+
+function getActiveSalonTableNames(tableNames) {
+    return (tableNames || []).filter(tableName => {
+        const items = adisyonlar[tableName] || [];
+        return Array.isArray(items) && items.length > 0;
+    });
+}
+
+function getActiveWaiterNamesForStaffing(activeTableNames) {
+    const waiterMap = new Map();
+    if (Array.isArray(systemInfo.active_waiters)) {
+        systemInfo.active_waiters.forEach(name => addStaffingWaiterName(waiterMap, name));
+    }
+
+    (activeTableNames || []).forEach(tableName => {
+        const items = adisyonlar[tableName] || [];
+        items.forEach(item => {
+            addStaffingWaiterName(waiterMap, item?.garson);
+            addStaffingWaiterName(waiterMap, item?.servis_garson);
+        });
+    });
+
+    return Array.from(waiterMap.values()).sort((a, b) => a.localeCompare(b, 'tr-TR'));
+}
+
+function getStaffingLoadSnapshot() {
+    const tableNames = getSalonTableNames();
+    const activeTableNames = getActiveSalonTableNames(tableNames);
+    const activeWaiterNames = getActiveWaiterNamesForStaffing(activeTableNames);
+    const connectedWaiterCount = Number(systemInfo.active_waiter_count || 0) || 0;
+    const activeTables = activeTableNames.length;
+    const totalTables = tableNames.length;
+    const requiredWaiters = activeTables > 0
+        ? Math.max(1, Math.ceil(activeTables / STAFF_TABLES_PER_WAITER))
+        : 0;
+    const activeWaiterCount = Math.max(activeWaiterNames.length, connectedWaiterCount);
+
+    return {
+        activeTables,
+        totalTables,
+        occupancy: totalTables > 0 ? Math.round((activeTables / totalTables) * 100) : 0,
+        activeWaiterCount,
+        activeWaiterNames,
+        requiredWaiters,
+        deficit: Math.max(0, requiredWaiters - activeWaiterCount)
+    };
+}
+
+function getStaffingRecommendation(snapshot) {
+    if (snapshot.totalTables === 0) {
+        return {
+            level: 'idle',
+            title: 'Salon masası tanımlı değil',
+            detail: 'Ayarlar ekranından salon veya masa sayısı eklenmeli.'
+        };
+    }
+
+    if (snapshot.activeTables === 0) {
+        return {
+            level: 'idle',
+            title: 'Yoğunluk yok',
+            detail: 'Aktif salon masası bulunmuyor.'
+        };
+    }
+
+    if (snapshot.deficit > 0) {
+        return {
+            level: snapshot.deficit >= 2 || snapshot.occupancy >= 70 ? 'critical' : 'warning',
+            title: `${snapshot.deficit} garson takviyesi önerilir`,
+            detail: `${snapshot.activeTables} aktif masa için en az ${snapshot.requiredWaiters} garson gerekir.`
+        };
+    }
+
+    if (snapshot.occupancy >= 85) {
+        return {
+            level: 'warning',
+            title: 'Salon çok yoğun',
+            detail: 'Mevcut ekip yeterli görünüyor, takviye hazırda bekletilmeli.'
+        };
+    }
+
+    if (snapshot.occupancy >= 60) {
+        return {
+            level: 'busy',
+            title: 'Yoğunluk yükseliyor',
+            detail: 'Takviye gerekmiyor, servis temposu takip edilmeli.'
+        };
+    }
+
+    return {
+        level: 'ok',
+        title: 'Takviye gerekmiyor',
+        detail: 'Mevcut ekip aktif masa yükünü karşılıyor.'
+    };
+}
+
+function updateStaffingSummary() {
+    if (!elements.staffingSummary) return;
+
+    const snapshot = getStaffingLoadSnapshot();
+    const recommendation = getStaffingRecommendation(snapshot);
+    const classNames = [
+        'staffing-idle',
+        'staffing-ok',
+        'staffing-busy',
+        'staffing-warning',
+        'staffing-critical'
+    ];
+    const waiterNames = snapshot.activeWaiterNames;
+    const waiterText = waiterNames.length
+        ? `Aktif: ${waiterNames.slice(0, 3).join(', ')}${waiterNames.length > 3 ? '...' : ''}`
+        : (
+            snapshot.activeWaiterCount > 0
+                ? `${snapshot.activeWaiterCount} aktif garson`
+                : (snapshot.activeTables > 0 ? 'Aktif garson oturumu görünmüyor' : '')
+        );
+
+    elements.staffingSummary.classList.remove(...classNames);
+    elements.staffingSummary.classList.add(`staffing-${recommendation.level}`);
+
+    if (elements.staffingRecommendation) {
+        elements.staffingRecommendation.textContent = recommendation.title;
+    }
+    if (elements.staffingDetail) {
+        elements.staffingDetail.textContent = waiterText
+            ? `${recommendation.detail} ${waiterText}.`
+            : recommendation.detail;
+    }
+    if (elements.staffingActiveTables) {
+        elements.staffingActiveTables.textContent = `${snapshot.activeTables}/${snapshot.totalTables}`;
+    }
+    if (elements.staffingOccupancy) {
+        elements.staffingOccupancy.textContent = `${snapshot.occupancy}%`;
+    }
+    if (elements.staffingActiveWaiters) {
+        elements.staffingActiveWaiters.textContent = snapshot.activeWaiterCount;
+        elements.staffingActiveWaiters.parentElement.title = waiterNames.length
+            ? `Aktif garsonlar: ${waiterNames.join(', ')}`
+            : 'Aktif garson oturumu görünmüyor';
+    }
+    if (elements.staffingNeededWaiters) {
+        elements.staffingNeededWaiters.textContent = snapshot.requiredWaiters;
+    }
+    if (elements.staffingStatusDot) {
+        elements.staffingStatusDot.title = recommendation.title;
+    }
 }
 
 function renderMenu() {
@@ -1362,6 +1578,8 @@ function renderTables() {
     } else {
         elements.masaSection.style.display = 'none';
     }
+
+    updateStaffingSummary();
 }
 
 function createTableButton(masa, isPaket) {
