@@ -1498,6 +1498,61 @@
             return 1;
         }
 
+        function getPortionAmountKey(value) {
+            return String(roundMoney(value || 0));
+        }
+
+        function getPortionVariantPrice(variant) {
+            const price = Number(variant?.item?.[1]);
+            return Number.isFinite(price) ? roundMoney(price) : 0;
+        }
+
+        function getPortionVariantName(variant) {
+            return String(variant?.item?.[0] || '').trim();
+        }
+
+        function buildPortionBasketOptions(selectedVariant, variants, fallbackName = '', fallbackFullPrice = 0) {
+            const selectedAmount = getPortionVariantUnitMultiplier(selectedVariant);
+            const selectedPrice = getPortionVariantPrice(selectedVariant);
+            const portionPrices = {};
+            const portionNames = {};
+            const choices = buildPortionChoiceVariants(fallbackName, variants || []);
+
+            choices.forEach(variant => {
+                const amount = getPortionVariantUnitMultiplier(variant);
+                const key = getPortionAmountKey(amount);
+                const price = getPortionVariantPrice(variant);
+                if (price > 0) portionPrices[key] = price;
+
+                const variantName = getPortionVariantName(variant);
+                if (variantName && !variant.synthetic) {
+                    portionNames[key] = variantName;
+                }
+            });
+
+            const selectedKey = getPortionAmountKey(selectedAmount);
+            if (selectedPrice > 0 && !portionPrices[selectedKey]) {
+                portionPrices[selectedKey] = selectedPrice;
+            }
+            const selectedName = getPortionVariantName(selectedVariant);
+            if (selectedName && !selectedVariant?.synthetic && !portionNames[selectedKey]) {
+                portionNames[selectedKey] = selectedName;
+            }
+
+            const fullKey = getPortionAmountKey(1);
+            const fullPrice = Number(portionPrices[fullKey] ?? fallbackFullPrice ?? selectedPrice);
+            const knownChoiceCount = Object.keys(portionPrices).length;
+
+            return {
+                quantity: 1,
+                portionAmount: selectedAmount,
+                basePrice: roundMoney(Number.isFinite(fullPrice) && fullPrice > 0 ? fullPrice : selectedPrice),
+                portionPrices,
+                portionNames,
+                portionSelectable: knownChoiceCount > 1
+            };
+        }
+
         function buildPortionChoiceVariants(name, variants) {
             const ordered = sortPortionVariants(variants || []);
             const hasOneHalf = ordered.some(variant => Math.abs(getPortionVariantUnitMultiplier(variant) - 1.5) < 0.001);
@@ -1525,7 +1580,7 @@
             const cards = [];
             const groupedPortions = new Map();
             const portionBaseInfo = new Map();
-            const separateHalfPortions = options.separateHalfPortions !== false;
+            const separateHalfPortions = options.separateHalfPortions === true;
 
             (items || []).forEach(item => {
                 const parsed = parsePortionVariantName(item?.[0]);
@@ -2172,10 +2227,17 @@
             const selectedVariant = await choosePortionVariant(name, variants);
             if (!selectedVariant) return;
 
-            addToBasket(selectedVariant.item[0], selectedVariant.item[1], category, {
+            const portionOptions = buildPortionBasketOptions(
+                selectedVariant,
+                variants,
+                selectedVariant.baseName || name
+            );
+
+            addToBasket(selectedVariant.baseName || name, selectedVariant.item[1], category, {
                 note,
                 stockNameOverride,
-                skipDailyMealChoice: isDailyMealCategory(category)
+                skipDailyMealChoice: isDailyMealCategory(category),
+                ...portionOptions
             });
         }
 
@@ -2185,10 +2247,17 @@
             const selectedVariant = await choosePortionVariant(mealName, variants);
             if (!selectedVariant) return;
 
-            addToBasket(selectedVariant.item[0], selectedVariant.item[1], category, {
+            const portionOptions = buildPortionBasketOptions(
+                selectedVariant,
+                variants,
+                selectedVariant.baseName || category || mealName
+            );
+
+            addToBasket(selectedVariant.baseName || category || mealName, selectedVariant.item[1], category, {
                 note: `Yemek: ${mealName}`,
                 stockNameOverride: mealName,
-                skipDailyMealChoice: true
+                skipDailyMealChoice: true,
+                ...portionOptions
             });
         }
 
@@ -2206,11 +2275,14 @@
             const selectedVariant = await choosePortionVariant(grillOrderInfo.name, variants);
             if (!selectedVariant) return;
 
-            const portionAmount = getPortionVariantUnitMultiplier(selectedVariant);
+            const portionOptions = buildPortionBasketOptions(
+                selectedVariant,
+                variants,
+                grillOrderInfo.name,
+                grillOrderInfo.basePrice
+            );
             addToBasket(grillOrderInfo.name, grillOrderInfo.basePrice, category, {
-                quantity: 1,
-                portionAmount,
-                basePrice: grillOrderInfo.basePrice,
+                ...portionOptions,
                 portionSelectable: true
             });
         }
@@ -2244,7 +2316,9 @@
                 stockName: stockNameOverride,
                 category,
                 panelId: options.panelId || getPrepPanelForOrderItem(name, category),
-                portionSelectable: !!options.portionSelectable
+                portionSelectable: !!options.portionSelectable,
+                portionPrices: options.portionPrices || {},
+                portionNames: options.portionNames || {}
             };
 
             const mergeIndex = findMergeableBasketItem(nextItem);
@@ -2319,8 +2393,22 @@
             return normalizeBasketQuantity(item?.portionAmount ?? 1);
         }
 
+        function getMappedPortionValue(item, values, amount) {
+            if (!values || typeof values !== 'object') return undefined;
+            const key = getPortionAmountKey(amount);
+            return values[key];
+        }
+
+        function getBasketPortionPrice(item, amount = getBasketPortionAmount(item)) {
+            const mappedPrice = Number(getMappedPortionValue(item, item?.portionPrices, amount));
+            if (Number.isFinite(mappedPrice) && mappedPrice > 0) return roundMoney(mappedPrice);
+            return null;
+        }
+
         function getBasketUnitPrice(item) {
             if (item?.portionSelectable) {
+                const mappedPrice = getBasketPortionPrice(item);
+                if (mappedPrice !== null) return mappedPrice;
                 const basePrice = Number(item.basePrice ?? item.price ?? 0);
                 return roundMoney(Math.max(0, basePrice) * getBasketPortionAmount(item));
             }
@@ -2377,6 +2465,8 @@
         function getBasketSendName(item) {
             if (!item?.portionSelectable) return item?.name || '';
             const amount = getBasketPortionAmount(item);
+            const mappedName = getMappedPortionValue(item, item?.portionNames, amount);
+            if (mappedName) return mappedName;
             const baseName = String(item.name || '').trim();
             if (Math.abs(amount - 0.5) < 0.001) return `Yarım Porsiyon ${baseName}`;
             if (Math.abs(amount - 1) < 0.001) return `Tam Porsiyon ${baseName}`;
@@ -2406,9 +2496,22 @@
             return '';
         }
 
+        function getPortionLabelFromAmount(amount) {
+            const value = Number(amount || 0);
+            if (Math.abs(value - 0.5) < 0.001) return 'Yarım Porsiyon';
+            if (Math.abs(value - 1) < 0.001) return 'Tam Porsiyon';
+            if (Math.abs(value - 1.5) < 0.001) return '1.5 Porsiyon';
+            return value > 0 ? `${formatPortionAmount(value)} Porsiyon` : '';
+        }
+
         function getBasketDisplayName(item) {
-            if (item?.portionSelectable) return getBasketSendName(item);
             const mealName = getMealNameFromBaseNote(item?.baseNote);
+            if (item?.portionSelectable && mealName) {
+                const portionLabel = getPortionLabelFromName(getBasketSendName(item))
+                    || getPortionLabelFromAmount(getBasketPortionAmount(item));
+                return portionLabel ? `${portionLabel} ${mealName}` : mealName;
+            }
+            if (item?.portionSelectable) return getBasketSendName(item);
             if (mealName) {
                 const portionLabel = getPortionLabelFromName(item?.name);
                 return portionLabel ? `${portionLabel} ${mealName}` : mealName;
