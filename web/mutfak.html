@@ -1363,33 +1363,67 @@
         }
 
         function getPrepPrintItems(data) {
-            const rawItems = Array.isArray(data.items) && data.items.length ? data.items : [data];
-            const grouped = [];
-            const groupedIndex = new Map();
-            const plateHeading = rawItems
-                .map(raw => {
-                    const merged = { ...data, ...raw };
-                    return [getPlateGroupLabel(merged), getPlateGroupNote(merged)].filter(Boolean).join(' / ');
-                })
-                .find(Boolean);
-            if (plateHeading) {
-                grouped.push({ heading: plateHeading });
+            const hasChildItems = Array.isArray(data.items) && data.items.length;
+            const rawItems = hasChildItems ? data.items : [data];
+
+            function rawPlateGroup(raw) {
+                if (raw?.plate_group && typeof raw.plate_group === 'object') return raw.plate_group;
+                if (!hasChildItems && data?.plate_group && typeof data.plate_group === 'object') return data.plate_group;
+                return null;
             }
 
+            function rawPlateHeading(raw) {
+                const plate = rawPlateGroup(raw);
+                if (!plate) return '';
+                const label = getPlateGroupLabel({ plate_group: plate });
+                const note = getPlateGroupNote({ plate_group: plate });
+                return [label, note].filter(Boolean).join(' / ');
+            }
+
+            function samePlatePrintHeading(detail) {
+                const text = String(detail || '').trim();
+                const match = text.match(/^(?:tek\s+tabak|tabak)\s+(#\S+)$/i);
+                if (match) return `AYNI TABAK ${match[1]}`;
+                return text ? `AYNI TABAK: ${text}` : '';
+            }
+
+            const hasPlateItems = rawItems.some(raw => raw?.urun && rawPlateHeading(raw));
+            const sections = [];
+            const sectionMap = new Map();
+
             rawItems.forEach(raw => {
+                const plateHeading = rawPlateHeading(raw);
+                const sectionKey = plateHeading ? `plate:${prepPrintGroupValue(plateHeading)}` : 'normal';
+                if (!sectionMap.has(sectionKey)) {
+                    const heading = plateHeading ? samePlatePrintHeading(plateHeading) : (hasPlateItems ? 'AYRI SERVİS' : '');
+                    const section = {
+                        heading,
+                        items: [],
+                        groupedIndex: new Map()
+                    };
+                    sectionMap.set(sectionKey, section);
+                    sections.push(section);
+                }
+
                 const item = getPrepPrintItemParts(raw, data);
                 if (!item.productName) return;
-                if (plateHeading && prepPrintGroupValue(item.productName) === prepPrintGroupValue(getPlateGroupLabel({ ...data, ...raw }))) {
+                if (plateHeading && prepPrintGroupValue(item.productName) === prepPrintGroupValue(plateHeading) && !item.note) {
                     return;
                 }
-                if (groupedIndex.has(item.key)) {
-                    grouped[groupedIndex.get(item.key)].quantity += item.quantity;
+                const section = sectionMap.get(sectionKey);
+                if (section.groupedIndex.has(item.key)) {
+                    section.items[section.groupedIndex.get(item.key)].quantity += item.quantity;
                     return;
                 }
-                groupedIndex.set(item.key, grouped.length);
-                grouped.push(item);
+                section.groupedIndex.set(item.key, section.items.length);
+                section.items.push(item);
             });
 
+            const grouped = [];
+            sections.forEach(section => {
+                if (section.heading) grouped.push({ heading: section.heading });
+                grouped.push(...section.items);
+            });
             return grouped;
         }
 

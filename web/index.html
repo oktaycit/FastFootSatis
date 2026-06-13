@@ -8,7 +8,21 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 
-<body>
+<body class="cashier-terminal">
+    <script>
+        (function () {
+            try {
+                var params = new URLSearchParams(window.location.search);
+                var rawRole = params.has('role') ? params.get('role') : localStorage.getItem('terminal_role');
+                var role = String(rawRole || 'kasa').trim().toLocaleLowerCase('tr-TR');
+                var isOrderTerminal = ['terminal', 'garson', 'order', 'siparis'].indexOf(role) !== -1;
+                document.body.classList.toggle('order-terminal', isOrderTerminal);
+                document.body.classList.toggle('cashier-terminal', !isOrderTerminal);
+            } catch (error) {
+                document.body.classList.add('cashier-terminal');
+            }
+        })();
+    </script>
     <!-- Header -->
     <header class="header">
         <div class="header-content">

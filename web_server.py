@@ -2873,6 +2873,13 @@ class RestaurantServer:
         detail = f"{urun} {note}".strip() if note else urun
         return f"{adet} x {detail}".strip()
 
+    def prep_ticket_same_plate_heading(self, detail):
+        text = str(detail or "").strip()
+        match = re.match(r"^(?:tek\s+tabak|tabak)\s+(#\S+)$", text, flags=re.IGNORECASE)
+        if match:
+            return f"AYNI TABAK {match.group(1)}"
+        return f"AYNI TABAK: {text}" if text else ""
+
     def extract_meal_name_from_note(self, note):
         """Not alanında 'Yemek: xxx' formatı varsa yemek adını döndür."""
         meal_name, _ = self.split_order_note_details(note)
@@ -2880,26 +2887,32 @@ class RestaurantServer:
 
     def prep_ticket_items(self, order_data):
         raw_items = order_data.get("items")
-        if not isinstance(raw_items, list) or not raw_items:
+        has_child_items = isinstance(raw_items, list) and bool(raw_items)
+        if not has_child_items:
             raw_items = [order_data]
-        parent_plate_label = self.plate_group_label(order_data.get("plate_group"))
 
-        ticket_plate_heading = ""
-        for raw in raw_items:
-            if not isinstance(raw, dict):
-                continue
-            raw_plate = raw.get("plate_group") if isinstance(raw.get("plate_group"), dict) else order_data.get("plate_group")
-            plate_label = self.plate_group_label(raw_plate) or parent_plate_label
+        def raw_plate_group(raw):
+            if isinstance(raw.get("plate_group"), dict):
+                return raw.get("plate_group")
+            if not has_child_items and isinstance(order_data.get("plate_group"), dict):
+                return order_data.get("plate_group")
+            return None
+
+        def raw_plate_heading(raw):
+            plate = raw_plate_group(raw)
+            plate_label = self.plate_group_label(plate)
             if not plate_label:
-                continue
-            plate_note = str(raw_plate.get("note") or "").strip() if isinstance(raw_plate, dict) else ""
-            ticket_plate_heading = " / ".join(part for part in [plate_label, plate_note] if part)
-            break
+                return ""
+            plate_note = str(plate.get("note") or "").strip() if isinstance(plate, dict) else ""
+            return " / ".join(part for part in [plate_label, plate_note] if part)
 
-        grouped = []
-        grouped_index = {}
-        if ticket_plate_heading:
-            grouped.append({"heading": ticket_plate_heading})
+        has_plate_items = any(
+            isinstance(raw, dict) and str(raw.get("urun") or "").strip() and raw_plate_heading(raw)
+            for raw in raw_items
+        )
+
+        sections = []
+        section_map = {}
 
         for raw in raw_items:
             if not isinstance(raw, dict):
@@ -2907,15 +2920,17 @@ class RestaurantServer:
             urun = str(raw.get("urun") or "").strip()
             if not urun:
                 continue
-            raw_plate = raw.get("plate_group") if isinstance(raw.get("plate_group"), dict) else order_data.get("plate_group")
-            plate_label = self.plate_group_label(raw_plate) or parent_plate_label
-            if (
-                ticket_plate_heading
-                and plate_label
-                and self.prep_ticket_group_value(urun) == self.prep_ticket_group_value(plate_label)
-                and not str(raw.get("not") or "").strip()
-            ):
-                continue
+            plate_heading = raw_plate_heading(raw)
+            section_key = f"plate:{self.prep_ticket_group_value(plate_heading)}" if plate_heading else "normal"
+            if section_key not in section_map:
+                heading = self.prep_ticket_same_plate_heading(plate_heading) if plate_heading else ("AYRI SERVİS" if has_plate_items else "")
+                section_map[section_key] = {
+                    "heading": heading,
+                    "items": [],
+                    "grouped_index": {}
+                }
+                sections.append(section_map[section_key])
+
             raw_note = str(raw.get("not") or "").strip()
             meal_name, extra_note = self.split_order_note_details(raw_note)
             adet = self.coerce_order_quantity(raw.get("adet", 1))
@@ -2941,21 +2956,35 @@ class RestaurantServer:
                 display_urun, display_adet = self.prep_ticket_display_item(raw_with_context, urun, adet)
                 note = self.clean_prep_ticket_note(raw_note)
 
+            if (
+                plate_heading
+                and self.prep_ticket_group_value(display_urun) == self.prep_ticket_group_value(plate_heading)
+                and not note
+            ):
+                continue
+
+            section = section_map[section_key]
             key = self.prep_ticket_item_group_key(raw_with_context, display_urun, note)
-            if key in grouped_index:
-                existing = grouped[grouped_index[key]]
+            if key in section["grouped_index"]:
+                existing = section["items"][section["grouped_index"][key]]
                 existing["adet"] = self.coerce_order_quantity(
                     self.coerce_order_quantity(existing.get("adet", 1)) + display_adet
                 )
             else:
-                grouped_index[key] = len(grouped)
-                grouped.append({
+                section["grouped_index"][key] = len(section["items"])
+                section["items"].append({
                     "urun": display_urun,
                     "adet": display_adet,
                     "not": note,
                     "kategori": raw_with_context.get("kategori"),
                     "panel": raw_with_context.get("panel"),
                 })
+
+        grouped = []
+        for section in sections:
+            if section["heading"]:
+                grouped.append({"heading": section["heading"]})
+            grouped.extend(section["items"])
         return grouped
 
     def thermal_text_bytes(self, value):

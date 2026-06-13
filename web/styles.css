@@ -251,6 +251,12 @@ body.cashier-terminal {
     background: #dfe6ea;
 }
 
+body.cashier-terminal .reservation-widget,
+body.cashier-terminal #reservationWidget,
+body.cashier-terminal #reservationModal {
+    display: none !important;
+}
+
 body.cashier-terminal .terminal-mode-banner {
     display: flex;
 }
@@ -355,6 +361,16 @@ body.cashier-terminal .quick-sale-header {
 
 body.cashier-terminal .quick-sale-btn {
     min-height: 42px;
+}
+
+body.order-terminal .main-actions,
+body.order-terminal .management-buttons,
+body.order-terminal .extra-modules,
+body.order-terminal #btnTransfer,
+body.order-terminal #btnPrint,
+body.order-terminal #btnTotalPayment,
+body.order-terminal #btnToggleOrderEntry {
+    display: none !important;
 }
 
 body.cashier-terminal .table-btn {
