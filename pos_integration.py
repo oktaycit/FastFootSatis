@@ -30,6 +30,9 @@ logger = logging.getLogger(__name__)
 
 class POSManager:
     TOKEN_BRIDGE_TYPES = {"token-bridge", "beko-token", "beko-yn-okc"}
+    TOKEN_BRIDGE_STARTUP_GRACE_SECONDS = 180
+    TOKEN_BRIDGE_STARTUP_WAIT_SECONDS = 45
+    TOKEN_BRIDGE_HEALTH_POLL_SECONDS = 3
     PAYMENT_TYPE_CODES = {
         "nakit": 1,
         "kredi kartı": 3,
@@ -244,11 +247,18 @@ class POSManager:
             url = f"http://{self.ip}:{self.port}/health"
             resp = requests.get(url, timeout=5)
             data = resp.json()
+            data = self._wait_for_token_bridge_startup(url, data)
             device_connected = data.get("deviceConnected")
             device_state_known = data.get("deviceStateKnown")
+            bridge_uptime = self._safe_int(data.get("uptimeSeconds"))
             if device_connected is False and device_state_known is True:
                 logger.error("ÖKC Bridge: Cihaz bağlı değil")
                 return False, "ÖKC cihazı bağlı değil, lütfen USB bağlantısını kontrol edin"
+            if device_state_known is False and 0 <= bridge_uptime < self.TOKEN_BRIDGE_STARTUP_GRACE_SECONDS:
+                logger.warning(
+                    "ÖKC Bridge yeni açılmış ve cihaz durumu henüz bilinmiyor; satış isteği bekletildi"
+                )
+                return False, "ÖKC bridge başlatılıyor, cihaz bağlantısı bekleniyor. Lütfen biraz sonra tekrar deneyin"
             if device_connected is False:
                 logger.warning(
                     "ÖKC Bridge cihaz durumu henüz kesin değil, satış isteği bridge'e iletilecek"
@@ -272,6 +282,51 @@ class POSManager:
             # Health endpoint'e ulaşılamıyorsa bridge çalışmıyor olabilir
             logger.warning("ÖKC Bridge health endpoint'e ulaşılamadı, satış yine de deneniyor")
             return True, ""
+
+    def _wait_for_token_bridge_startup(self, url, data):
+        """Yeni açılan bridge cihaz state callback'ini bekliyorsa kısa süre poll et."""
+        device_state_known = data.get("deviceStateKnown")
+        bridge_uptime = self._safe_int(data.get("uptimeSeconds"), fallback=-1)
+        if device_state_known is True:
+            return data
+        if bridge_uptime < 0 or bridge_uptime >= self.TOKEN_BRIDGE_STARTUP_GRACE_SECONDS:
+            return data
+
+        wait_seconds = min(
+            self.TOKEN_BRIDGE_STARTUP_WAIT_SECONDS,
+            max(0, self.TOKEN_BRIDGE_STARTUP_GRACE_SECONDS - bridge_uptime),
+        )
+        if wait_seconds <= 0:
+            return data
+
+        logger.info(
+            "ÖKC Bridge yeni açılmış; cihaz state callback'i için %.0f sn bekleniyor",
+            wait_seconds,
+        )
+        deadline = time.monotonic() + wait_seconds
+        latest = data
+        while time.monotonic() < deadline:
+            time.sleep(self.TOKEN_BRIDGE_HEALTH_POLL_SECONDS)
+            try:
+                resp = requests.get(url, timeout=5)
+                latest = resp.json()
+            except requests.RequestException:
+                continue
+
+            if latest.get("deviceStateKnown") is True:
+                return latest
+            latest_uptime = self._safe_int(latest.get("uptimeSeconds"), fallback=bridge_uptime)
+            if latest_uptime >= self.TOKEN_BRIDGE_STARTUP_GRACE_SECONDS:
+                return latest
+
+        return latest
+
+    @staticmethod
+    def _safe_int(value, fallback=0):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return fallback
 
     def _send_token_bridge_request(self, payload):
         """Send a Token basket payload to the Windows terminal OKC bridge."""

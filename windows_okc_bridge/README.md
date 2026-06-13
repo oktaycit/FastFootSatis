@@ -44,9 +44,19 @@ curl http://localhost:8787/api/fiscal-info
 ```
 
 `/health` yanitinda `deviceStateKnown:false` gorunurse bridge aciktir ancak OKC
-baglanti callback'i henuz gelmemistir. Bu durumda FastFood satis istegini yine
-bridge'e iletir; cihaz gercekten hazir degilse hata `sendBasket` cevabindan gelir.
-`lastSerialCallbackAt` bos kalir ve konsolda `Trying again` devam ederse USB
-bulunmus ama OKC/Token handshake cevabi henuz gelmiyor demektir.
+baglanti callback'i henuz gelmemistir. Bridge ilk 5 dakika icinde callback
+kaydini periyodik olarak yeniler; FastFood sunucusu da bridge yeni acilmissa
+satis istegini hemen gondermeden once kisa sure cihaz state callback'ini bekler.
+Bu pencere dolduktan sonra, eski kurulumlarla uyum icin satis istegi yine
+bridge'e iletilir; cihaz gercekten hazir degilse hata `sendBasket` cevabindan
+gelir.
+
+Sabah Windows acilisinda sorun yakalamak icin `/health` alanlarina bakin:
+
+- `uptimeSeconds`: Bridge'in kac saniyedir calistigi.
+- `callbackRecoveryActive`: Startup callback recovery halen deniyor mu?
+- `callbackRegistrationAttempts`: Callback kaydi kac kez yenilendi?
+- `lastCallbackRegistrationError`: IntegrationHub hazir degilse son hata.
+- `lastSerialCallbackAt`: OKC'den en son satis/seri callback zamani.
 
 `/api/fiscal-info` yanıtındaki kısım numaraları ve KDV oranları, FastFood ürün eşleştirmesi için referans alınmalıdır.

@@ -173,6 +173,68 @@ class TokenBridgeHealthTests(unittest.TestCase):
         self.assertTrue(success)
         self.assertEqual(message, "")
 
+    @patch("pos_integration.requests.get")
+    def test_token_bridge_health_blocks_unknown_state_during_startup(self, mock_get):
+        mock_get.return_value = FakeResponse({
+            "success": True,
+            "deviceStateKnown": False,
+            "deviceConnected": False,
+            "uptimeSeconds": 20,
+            "pendingSales": 0,
+        })
+        manager = POSManager(True, "192.168.1.50", 8787, "token-bridge")
+        manager.TOKEN_BRIDGE_STARTUP_WAIT_SECONDS = 0
+
+        success, message = manager._check_bridge_health()
+
+        self.assertFalse(success)
+        self.assertIn("başlatılıyor", message)
+
+    @patch("pos_integration.requests.get")
+    def test_token_bridge_health_allows_unknown_state_after_startup_grace(self, mock_get):
+        mock_get.return_value = FakeResponse({
+            "success": True,
+            "deviceStateKnown": False,
+            "deviceConnected": False,
+            "uptimeSeconds": 240,
+            "pendingSales": 0,
+        })
+        manager = POSManager(True, "192.168.1.50", 8787, "token-bridge")
+
+        success, message = manager._check_bridge_health()
+
+        self.assertTrue(success)
+        self.assertEqual(message, "")
+
+    @patch("pos_integration.time.sleep")
+    @patch("pos_integration.requests.get")
+    def test_token_bridge_health_waits_until_startup_state_is_known(self, mock_get, mock_sleep):
+        mock_get.side_effect = [
+            FakeResponse({
+                "success": True,
+                "deviceStateKnown": False,
+                "deviceConnected": False,
+                "uptimeSeconds": 20,
+                "pendingSales": 0,
+            }),
+            FakeResponse({
+                "success": True,
+                "deviceStateKnown": True,
+                "deviceConnected": True,
+                "uptimeSeconds": 23,
+                "pendingSales": 0,
+            }),
+        ]
+        manager = POSManager(True, "192.168.1.50", 8787, "token-bridge")
+        manager.TOKEN_BRIDGE_STARTUP_WAIT_SECONDS = 1
+        manager.TOKEN_BRIDGE_HEALTH_POLL_SECONDS = 0
+
+        success, message = manager._check_bridge_health()
+
+        self.assertTrue(success)
+        self.assertEqual(message, "")
+        self.assertEqual(mock_get.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -102,8 +102,9 @@
 
         <!-- Right Panel - Order & Checkout -->
         <div class="panel right-panel">
-            <div class="panel-header">
+            <div class="panel-header order-header">
                 <h2 id="currentMasaLabel">Masa Seçiniz</h2>
+                <button class="btn-table-picker" id="btnOpenTablePicker" type="button">Masa Seç</button>
             </div>
 
             <div class="table-note-panel" id="tableNotePanel" style="display: none;">
@@ -221,6 +222,22 @@
                             <span>Raporlar</span>
                         </button>
                     </a>
+                </div>
+
+                <div class="operations-status" id="operationsStatus" aria-live="polite">
+                    <div class="operations-status-header">
+                        <strong>Durum</strong>
+                        <span id="operationsStatusUpdated">Kontrol ediliyor</span>
+                    </div>
+                    <div class="operations-status-list" id="operationsStatusList">
+                        <div class="operations-status-row status-warn">
+                            <span class="operations-status-dot"></span>
+                            <div class="operations-status-copy">
+                                <strong>Sistem</strong>
+                                <span>Durum alınıyor</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="shortcut-section extra-modules">
@@ -467,6 +484,24 @@
                 </div>
                 <div class="modal-actions" style="margin-top: 20px;">
                     <button class="btn btn-vazgec" id="btnCancelTransfer">VAZGEÇ</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table Picker Modal -->
+    <div id="tablePickerModal" class="modal">
+        <div class="modal-content table-picker-modal">
+            <div class="modal-header">
+                <h2>Masa / Paket Seç</h2>
+                <span class="close-modal" id="closeTablePickerModal">&times;</span>
+            </div>
+            <div class="modal-body table-picker-body">
+                <div id="tablePickerGrid" class="table-picker-groups">
+                    <!-- Masa and paket buttons will be loaded here -->
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-vazgec" id="btnCancelTablePicker" type="button">VAZGEÇ</button>
                 </div>
             </div>
         </div>

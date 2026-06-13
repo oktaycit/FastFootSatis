@@ -21,10 +21,13 @@ let paymentInProgress = false;
 let paymentWaitTimer = null;
 let activeShift = null;
 let cashierOrderEntryOpen = false;
+let operationsStatusTimer = null;
+let operationsStatusInFlight = null;
 const PAYMENT_METHODS = ['Nakit', 'Kredi Kartı', 'Açık Hesap'];
 const Z_REPORT_HOLD_MS = 5000;
 const FINALIZE_PAYMENT_LABEL = '✅ Ödemeyi Tamamla';
 const PAYMENT_WAIT_TIMEOUT_MS = 150000;
+const OPERATIONS_STATUS_REFRESH_MS = 30000;
 const STAFF_TABLES_PER_WAITER = 4;
 const STAFFING_IGNORED_WAITER_NAMES = new Set([
     '',
@@ -255,6 +258,7 @@ const elements = {
     // Buttons
     btnPrint: null,
     btnTotalPayment: null,
+    btnOpenTablePicker: null,
     btnToggleOrderEntry: null,
     btnCari: null,
     btnReports: null,
@@ -293,6 +297,9 @@ const elements = {
     splitButtonsArea: null,
     selectedCount: null,
     cashierQuickSale: null,
+    operationsStatus: null,
+    operationsStatusList: null,
+    operationsStatusUpdated: null,
     quickSaleMasaHint: null,
     btnQuickWater: null,
     btnQuickDessert: null,
@@ -316,6 +323,10 @@ const elements = {
     transferTargetGrid: null,
     btnCancelTransfer: null,
     btnTransfer: null,
+    tablePickerModal: null,
+    closeTablePickerModal: null,
+    tablePickerGrid: null,
+    btnCancelTablePicker: null,
 
     // Courier Assignment
     courierAssignmentArea: null,
@@ -356,6 +367,7 @@ function init() {
     // Initialize resizer
     initResizer();
     initHorizontalResizers();
+    startOperationsStatusPolling();
 
     console.log('✅ Application initialized');
 }
@@ -448,6 +460,7 @@ function syncSelectedKasa() {
 function onConnect() {
     console.log('✅ Connected to server');
     updateConnectionStatus(true);
+    refreshOperationsStatus();
 
     // Kasa ID'sini bildir
     syncSelectedKasa();
@@ -469,6 +482,7 @@ function onSystemInfo(data) {
     systemInfo = data || {};
     updateSystemInfo();
     renderTables();
+    refreshOperationsStatus();
 }
 
 function onSystemUpdate(data) {
@@ -478,6 +492,7 @@ function onSystemUpdate(data) {
     systemInfo = { ...systemInfo, ...data };
     updateSystemInfo();
     renderTables();
+    refreshOperationsStatus();
 }
 
 function onStaffingUpdate(data) {
@@ -520,6 +535,7 @@ function onInitialData(data) {
     applyRoleProfile(currentRole);
     populateQuickDessertOptions();
     updateQuickSaleUI();
+    refreshOperationsStatus();
 }
 
 function applyRoleProfile(role = getTerminalRole()) {
@@ -868,6 +884,7 @@ function onVardiyaUpdate(data) {
     console.log('⏳ Vardiya update:', data);
     activeShift = data;
     updateVardiyaUI();
+    refreshOperationsStatus();
 }
 
 function onPortionStockUpdate(data) {
@@ -1292,6 +1309,121 @@ function updateVardiyaUI() {
     }
 }
 
+function startOperationsStatusPolling() {
+    if (!elements.operationsStatusList) return;
+    refreshOperationsStatus();
+    if (operationsStatusTimer) {
+        clearInterval(operationsStatusTimer);
+    }
+    operationsStatusTimer = setInterval(refreshOperationsStatus, OPERATIONS_STATUS_REFRESH_MS);
+}
+
+async function refreshOperationsStatus() {
+    if (!elements.operationsStatusList) return;
+    if (operationsStatusInFlight) {
+        return operationsStatusInFlight;
+    }
+
+    operationsStatusInFlight = fetchOperationsStatus();
+    try {
+        return await operationsStatusInFlight;
+    } finally {
+        operationsStatusInFlight = null;
+    }
+}
+
+async function fetchOperationsStatus() {
+    if (!elements.operationsStatusList) return;
+
+    const kasaId = getSelectedKasaId();
+    const query = Number.isFinite(kasaId) && kasaId > 0
+        ? `?kasa_id=${encodeURIComponent(kasaId)}`
+        : '';
+
+    try {
+        const response = await fetch(`/api/dashboard/status${query}`, { cache: 'no-store' });
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        renderOperationsStatus(data);
+    } catch (error) {
+        console.warn('Operasyon durumu alınamadı:', error);
+        renderOperationsStatus({
+            updated_at: new Date().toISOString(),
+            cash_register: { label: 'Kasa', state: activeShift ? 'ok' : 'error', status_text: activeShift ? 'Açık' : 'Kapalı', message: activeShift ? 'Vardiya açık' : 'Vardiya kapalı' },
+            okc: { label: 'ÖKC', state: 'warn', status_text: 'Kontrol yok', message: 'Durum alınamadı' },
+            printers: []
+        });
+    }
+}
+
+function renderOperationsStatus(data) {
+    if (!elements.operationsStatusList) return;
+
+    const cash = data?.cash_register || {};
+    const okc = data?.okc || {};
+    const printers = Array.isArray(data?.printers) ? data.printers : [];
+    const printerChips = printers.map(renderOperationsPrinterChip).join('');
+
+    elements.operationsStatusList.innerHTML = `
+        ${renderOperationsStatusRow(cash, 'Kasa')}
+        ${renderOperationsStatusRow(okc, 'ÖKC')}
+        <div class="operations-printers">
+            <div class="operations-printers-title">Yazıcılar</div>
+            <div class="operations-printer-grid">
+                ${printerChips || '<span class="operations-empty">Yazıcı yok</span>'}
+            </div>
+        </div>
+    `;
+
+    if (elements.operationsStatusUpdated) {
+        elements.operationsStatusUpdated.textContent = formatOperationsStatusTime(data?.updated_at);
+    }
+}
+
+function renderOperationsStatusRow(item, fallbackLabel) {
+    const state = normalizeOperationsState(item?.state);
+    const label = escapeHtml(item?.label || fallbackLabel);
+    const statusText = escapeHtml(item?.status_text || 'Bekleniyor');
+    const message = escapeHtml(item?.message || '');
+    return `
+        <div class="operations-status-row status-${state}">
+            <span class="operations-status-dot"></span>
+            <div class="operations-status-copy">
+                <strong>${label}</strong>
+                <span>${message || statusText}</span>
+            </div>
+            <span class="operations-status-pill">${statusText}</span>
+        </div>
+    `;
+}
+
+function renderOperationsPrinterChip(item) {
+    const state = normalizeOperationsState(item?.state);
+    const label = escapeHtml(item?.label || 'Yazıcı');
+    const statusText = escapeHtml(item?.status_text || 'Bekleniyor');
+    const message = escapeHtml(item?.message || statusText);
+    return `
+        <span class="operations-printer-chip status-${state}" title="${message}">
+            <span class="operations-status-dot"></span>
+            <strong>${label}</strong>
+            <em>${statusText}</em>
+        </span>
+    `;
+}
+
+function normalizeOperationsState(state) {
+    return ['ok', 'warn', 'error', 'off'].includes(state) ? state : 'warn';
+}
+
+function formatOperationsStatusTime(value) {
+    if (!value) return 'Kontrol edildi';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Kontrol edildi';
+    return date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+}
+
 function enableCheckoutButtons(enabled) {
     const btns = ['btnTotalPayment', 'btnCari', 'btnFinalizePayment'];
     btns.forEach(id => {
@@ -1691,6 +1823,93 @@ function createTableButton(masa, isPaket) {
     btn.onclick = () => selectMasa(masa);
 
     return btn;
+}
+
+function createTablePickerButton(masa, isPaket) {
+    const btn = document.createElement('button');
+    btn.className = 'table-btn table-picker-btn';
+    btn.type = 'button';
+
+    if (isPaket) {
+        btn.classList.add('paket');
+    }
+
+    const items = adisyonlar[masa] || [];
+    btn.classList.toggle('occupied', items.length > 0);
+    btn.classList.toggle('selected', masa === currentMasa);
+    btn.classList.toggle('has-note', !!getTableNote(masa));
+    btn.innerHTML = getTableButtonContent(masa, items);
+    btn.onclick = () => {
+        selectMasa(masa);
+        closeTablePickerModal();
+    };
+
+    return btn;
+}
+
+function appendTablePickerGroup(titleText, tables, isPaket = false) {
+    if (!elements.tablePickerGrid || !Array.isArray(tables) || tables.length === 0) return;
+
+    const group = document.createElement('section');
+    group.className = 'table-picker-group';
+
+    const title = document.createElement('h3');
+    title.className = 'table-picker-title';
+    title.textContent = titleText;
+    group.appendChild(title);
+
+    const grid = document.createElement('div');
+    grid.className = 'tables-grid table-picker-grid';
+    tables.forEach(masa => {
+        grid.appendChild(createTablePickerButton(masa, isPaket));
+    });
+    group.appendChild(grid);
+
+    elements.tablePickerGrid.appendChild(group);
+}
+
+function renderTablePicker() {
+    if (!elements.tablePickerGrid) return;
+
+    elements.tablePickerGrid.innerHTML = '';
+
+    const paketLabels = getPaketLabels();
+    if (paketLabels.length > 0) {
+        appendTablePickerGroup('Paket Servis', paketLabels, true);
+    }
+
+    const salons = Array.isArray(systemInfo.salons) ? systemInfo.salons : [];
+    if (salons.length > 0) {
+        salons.forEach(salon => {
+            appendTablePickerGroup(salon.name || 'Salon', salon.tables || [], false);
+        });
+    } else {
+        const masaCount = Number(systemInfo.masa_sayisi || 0);
+        if (masaCount > 0) {
+            const tables = Array.from({ length: masaCount }, (_, index) => `Masa ${index + 1}`);
+            appendTablePickerGroup('Salon', tables, false);
+        }
+    }
+
+    if (!elements.tablePickerGrid.children.length) {
+        const empty = document.createElement('div');
+        empty.className = 'table-picker-empty';
+        empty.textContent = 'Masa tanımı bulunamadı';
+        elements.tablePickerGrid.appendChild(empty);
+    }
+}
+
+function openTablePickerModal() {
+    renderTablePicker();
+    if (elements.tablePickerModal) {
+        elements.tablePickerModal.style.display = 'block';
+    }
+}
+
+function closeTablePickerModal() {
+    if (elements.tablePickerModal) {
+        elements.tablePickerModal.style.display = 'none';
+    }
 }
 
 function updateTableButton(masa) {
@@ -2807,6 +3026,18 @@ function setupEventListeners() {
         elements.btnTransfer.onclick = () => openTransferModal();
     }
 
+    if (elements.btnOpenTablePicker) {
+        elements.btnOpenTablePicker.onclick = () => openTablePickerModal();
+    }
+
+    if (elements.closeTablePickerModal) {
+        elements.closeTablePickerModal.onclick = () => closeTablePickerModal();
+    }
+
+    if (elements.btnCancelTablePicker) {
+        elements.btnCancelTablePicker.onclick = () => closeTablePickerModal();
+    }
+
     if (elements.closeTransferModal) {
         elements.closeTransferModal.onclick = () => closeTransferModal();
     }
@@ -2873,6 +3104,12 @@ function setupEventListeners() {
     window.onclick = (event) => {
         if (event.target == elements.paymentModal) {
             closePaymentModal();
+        }
+        if (event.target == elements.transferModal) {
+            closeTransferModal();
+        }
+        if (event.target == elements.tablePickerModal) {
+            closeTablePickerModal();
         }
     };
 

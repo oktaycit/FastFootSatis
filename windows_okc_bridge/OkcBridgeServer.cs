@@ -17,25 +17,37 @@ namespace FastFootOkcBridge
         private const int DefaultPort = 8787;
         private const int SaleTimeoutSeconds = 120;
         private const int StalePendingThresholdSeconds = 180;
+        private const int CallbackRecoveryInitialDelaySeconds = 15;
+        private const int CallbackRecoveryRetrySeconds = 15;
+        private const int CallbackRecoveryMaxSeconds = 300;
+        private const int SendBasketRetryDelayMilliseconds = 2000;
+        private const int SendBasketMaxAttempts = 2;
 
         private static readonly JavaScriptSerializer Json = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
         private static readonly ConcurrentDictionary<string, PendingSale> PendingSales =
             new ConcurrentDictionary<string, PendingSale>();
-        private static readonly POSCommunication Communication =
-            POSCommunication.getInstance("FastFootSatis");
+        private static readonly object CommunicationLock = new object();
+        private static POSCommunication Communication;
         private static readonly object FiscalInfoLock = new object();
         // Eşzamanlı satış isteklerini engelle — ÖKC aynı anda tek işlem yapabilir
         private static readonly SemaphoreSlim SaleLock = new SemaphoreSlim(1, 1);
         private static readonly DateTime BridgeStartedAt = DateTime.Now;
+        private static DateTime _nextCallbackRecoveryAt = DateTime.MinValue;
+        private static bool _callbackWatchdogWarned;
 
         private static volatile bool _deviceConnected;
         private static volatile bool _deviceStateKnown;
         private static volatile bool _fiscalInfoLoaded;
+        private static volatile bool _callbacksRegistered;
+        private static volatile bool _callbackRecoveryActive = true;
         private static volatile int _lastSerialCallbackType = -1;
+        private static int _callbackRegistrationAttempts;
         private static string _lastDeviceId = "";
         private static string _lastFiscalInfo = "";
         private static string _lastDeviceStateAt = "";
         private static string _lastSerialCallbackAt = "";
+        private static string _lastCallbackRegistrationAt = "";
+        private static string _lastCallbackRegistrationError = "";
 
         private sealed class PendingSale
         {
@@ -65,8 +77,8 @@ namespace FastFootOkcBridge
             var port = GetPort(args);
             var prefix = string.Format("http://+:{0}/", port);
 
-            Communication.setDeviceStateCallback(DeviceStateCallback);
-            Communication.setSerialInCallback(SerialInCallback);
+            RegisterCallbacks();
+            _nextCallbackRecoveryAt = DateTime.Now.AddSeconds(CallbackRecoveryInitialDelaySeconds);
 
             var listener = new HttpListener();
             listener.Prefixes.Add(prefix);
@@ -81,29 +93,134 @@ namespace FastFootOkcBridge
             listenerThread.IsBackground = true;
             listenerThread.Start();
 
-            StartCallbackWatchdog();
-
             while (true)
             {
+                RunCallbackRecoveryIfDue();
                 Application.DoEvents();
                 Thread.Sleep(10);  // 50ms → 10ms: Callback tepki süresini iyileştir
             }
         }
 
-        private static void StartCallbackWatchdog()
+        private static POSCommunication GetCommunication(bool refresh)
         {
-            var watchdogThread = new Thread(delegate()
+            lock (CommunicationLock)
             {
-                Thread.Sleep(30000);
+                if (Communication == null || refresh)
+                {
+                    Communication = POSCommunication.getInstance("FastFootSatis");
+                }
+                return Communication;
+            }
+        }
+
+        private static bool RegisterCallbacks()
+        {
+            var attemptNo = Interlocked.Increment(ref _callbackRegistrationAttempts);
+            try
+            {
+                var communication = GetCommunication(true);
+                communication.setDeviceStateCallback(DeviceStateCallback);
+                communication.setSerialInCallback(SerialInCallback);
+                _callbacksRegistered = true;
+                _lastCallbackRegistrationAt = FormatTimestamp(DateTime.Now);
+                _lastCallbackRegistrationError = "";
+                Console.WriteLine(string.Format(
+                    "{0:yyyy-MM-dd HH:mm:ss} OKC callback kaydi hazir (deneme={1})",
+                    DateTime.Now,
+                    attemptNo));
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _callbacksRegistered = false;
+                _lastCallbackRegistrationAt = FormatTimestamp(DateTime.Now);
+                _lastCallbackRegistrationError = ex.Message;
+                Console.WriteLine(string.Format(
+                    "{0:yyyy-MM-dd HH:mm:ss} UYARI: OKC callback kaydi yapilamadi (deneme={1}): {2}",
+                    DateTime.Now,
+                    attemptNo,
+                    ex.Message));
+                return false;
+            }
+        }
+
+        private static void RunCallbackRecoveryIfDue()
+        {
+            if (!_callbackRecoveryActive)
+            {
+                return;
+            }
+
+            if (_deviceStateKnown && _deviceConnected)
+            {
+                _callbackRecoveryActive = false;
+                Console.WriteLine(string.Format(
+                    "{0:yyyy-MM-dd HH:mm:ss} OKC cihaz baglantisi dogrulandi; startup recovery tamamlandi.",
+                    DateTime.Now));
+                return;
+            }
+
+            var elapsedSeconds = (DateTime.Now - BridgeStartedAt).TotalSeconds;
+            if (elapsedSeconds >= CallbackRecoveryMaxSeconds)
+            {
+                _callbackRecoveryActive = false;
+                Console.WriteLine(string.Format(
+                    "{0:yyyy-MM-dd HH:mm:ss} UYARI: OKC startup recovery suresi doldu. Cihaz state callback'i gelmezse satis yine de sendBasket ile denenecek.",
+                    DateTime.Now));
+                return;
+            }
+
+            if (DateTime.Now < _nextCallbackRecoveryAt)
+            {
+                return;
+            }
+
+            if (!_callbackWatchdogWarned && elapsedSeconds >= 30)
+            {
+                _callbackWatchdogWarned = true;
                 if (!_deviceStateKnown)
                 {
                     Console.WriteLine(string.Format(
-                        "{0:yyyy-MM-dd HH:mm:ss} UYARI: OKC cihaz state callback'i henuz gelmedi. USB init loglari gorunuyorsa satis yine de sendBasket ile denenecek.",
+                        "{0:yyyy-MM-dd HH:mm:ss} UYARI: OKC cihaz state callback'i henuz gelmedi. Windows/USB/Token servisleri yeni aciliyorsa callback kaydi yenilenecek.",
                         DateTime.Now));
                 }
-            });
-            watchdogThread.IsBackground = true;
-            watchdogThread.Start();
+            }
+
+            Console.WriteLine(string.Format(
+                "{0:yyyy-MM-dd HH:mm:ss} OKC startup recovery: callback kaydi yenileniyor...",
+                DateTime.Now));
+            RegisterCallbacks();
+            _nextCallbackRecoveryAt = DateTime.Now.AddSeconds(CallbackRecoveryRetrySeconds);
+        }
+
+        private static int SendBasketWithStartupRetry(string body)
+        {
+            var sendStatus = -1;
+            for (var attempt = 1; attempt <= SendBasketMaxAttempts; attempt++)
+            {
+                if (!_callbacksRegistered)
+                {
+                    RegisterCallbacks();
+                }
+
+                sendStatus = GetCommunication(false).sendBasket(body);
+                if (sendStatus == 1)
+                {
+                    return sendStatus;
+                }
+
+                if (attempt < SendBasketMaxAttempts)
+                {
+                    Console.WriteLine(string.Format(
+                        "{0:yyyy-MM-dd HH:mm:ss} sendBasket basarisiz: status={1}. Callback kaydi yenilenip tekrar denenecek.",
+                        DateTime.Now,
+                        sendStatus));
+                    RegisterCallbacks();
+                    Thread.Sleep(SendBasketRetryDelayMilliseconds);
+                }
+            }
+
+            return sendStatus;
         }
 
         private static void ListenForRequests(HttpListener listener)
@@ -218,6 +335,11 @@ namespace FastFootOkcBridge
                         { "lastDeviceStateAt", _lastDeviceStateAt },
                         { "lastSerialCallbackAt", _lastSerialCallbackAt },
                         { "lastSerialCallbackType", _lastSerialCallbackType },
+                        { "callbacksRegistered", _callbacksRegistered },
+                        { "callbackRecoveryActive", _callbackRecoveryActive },
+                        { "callbackRegistrationAttempts", _callbackRegistrationAttempts },
+                        { "lastCallbackRegistrationAt", _lastCallbackRegistrationAt },
+                        { "lastCallbackRegistrationError", _lastCallbackRegistrationError },
                         { "pendingSales", PendingSales.Count },
                         { "message", GetDeviceStatusMessage() }
                     });
@@ -237,6 +359,11 @@ namespace FastFootOkcBridge
                         { "lastDeviceStateAt", _lastDeviceStateAt },
                         { "lastSerialCallbackAt", _lastSerialCallbackAt },
                         { "lastSerialCallbackType", _lastSerialCallbackType },
+                        { "callbacksRegistered", _callbacksRegistered },
+                        { "callbackRecoveryActive", _callbackRecoveryActive },
+                        { "callbackRegistrationAttempts", _callbackRegistrationAttempts },
+                        { "lastCallbackRegistrationAt", _lastCallbackRegistrationAt },
+                        { "lastCallbackRegistrationError", _lastCallbackRegistrationError },
                         { "fiscalInfo", _lastFiscalInfo },
                         { "message", "Live fiscalInfo sorgusu kapali; POS DLL bu cagriyi bazi kurulumlarda sonlandirabiliyor." }
                     });
@@ -269,6 +396,11 @@ namespace FastFootOkcBridge
         {
             if (!_deviceStateKnown)
             {
+                if (_callbackRecoveryActive)
+                {
+                    return "OKC cihaz durumu henuz callback ile bildirilmedi; startup recovery callback kaydini yeniliyor.";
+                }
+
                 return "OKC cihaz durumu henuz callback ile bildirilmedi; satis istegi gelirse denenecek.";
             }
 
@@ -326,7 +458,28 @@ namespace FastFootOkcBridge
                 PendingSales[basketId] = pending;
 
                 Console.WriteLine(string.Format("{0:yyyy-MM-dd HH:mm:ss} Satis basladi: {1}", DateTime.Now, basketId));
-                var sendStatus = Communication.sendBasket(body);
+                int sendStatus;
+                try
+                {
+                    sendStatus = SendBasketWithStartupRetry(body);
+                }
+                catch (Exception ex)
+                {
+                    PendingSale removed;
+                    PendingSales.TryRemove(basketId, out removed);
+                    Console.WriteLine(string.Format("{0:yyyy-MM-dd HH:mm:ss} sendBasket hata: {1}", DateTime.Now, ex.Message));
+                    WriteJson(context, new Dictionary<string, object>
+                    {
+                        { "success", false },
+                        { "message", "IntegrationHub sendBasket hata verdi: " + ex.Message },
+                        { "deviceStateKnown", _deviceStateKnown },
+                        { "deviceConnected", _deviceConnected },
+                        { "callbacksRegistered", _callbacksRegistered },
+                        { "callbackRecoveryActive", _callbackRecoveryActive }
+                    }, 502);
+                    return;
+                }
+
                 if (sendStatus != 1)
                 {
                     PendingSale removed;
@@ -338,7 +491,9 @@ namespace FastFootOkcBridge
                         { "message", "IntegrationHub sendBasket basarisiz dondu" },
                         { "sendStatus", sendStatus },
                         { "deviceStateKnown", _deviceStateKnown },
-                        { "deviceConnected", _deviceConnected }
+                        { "deviceConnected", _deviceConnected },
+                        { "callbacksRegistered", _callbacksRegistered },
+                        { "callbackRecoveryActive", _callbackRecoveryActive }
                     }, 502);
                     return;
                 }
@@ -353,7 +508,9 @@ namespace FastFootOkcBridge
                         { "success", false },
                         { "message", "OKC satis callback zaman asimi" },
                         { "deviceStateKnown", _deviceStateKnown },
-                        { "deviceConnected", _deviceConnected }
+                        { "deviceConnected", _deviceConnected },
+                        { "callbacksRegistered", _callbacksRegistered },
+                        { "callbackRecoveryActive", _callbackRecoveryActive }
                     }, 504);
                     return;
                 }
@@ -405,7 +562,7 @@ namespace FastFootOkcBridge
                     return _lastFiscalInfo;
                 }
 
-                _lastFiscalInfo = Communication.getFiscalInfo();
+                _lastFiscalInfo = GetCommunication(false).getFiscalInfo();
                 _fiscalInfoLoaded = !string.IsNullOrWhiteSpace(_lastFiscalInfo);
                 return _lastFiscalInfo;
             }

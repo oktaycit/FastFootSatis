@@ -28,8 +28,10 @@ import secrets
 import serial
 import serial.tools.list_ports
 import urllib.parse
+import urllib.request
 import unicodedata
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
 from integrations import IntegrationManager
 from pos_integration import POSManager
@@ -104,6 +106,7 @@ DEFAULT_PORTION_STOCK = 40
 SERVER_PORT = 5555
 AUTH_COOKIE_NAME = "ff_auth_token"
 AUTH_SESSION_DAYS = 30
+DASHBOARD_STATUS_TIMEOUT_SECONDS = 0.45
 
 AUTH_PAGE_DEFINITIONS = {
     "dashboard": {
@@ -217,6 +220,7 @@ for page_key, page_info in AUTH_PAGE_DEFINITIONS.items():
         AUTH_PREFIX_TO_PAGE.append((page_prefix, page_key))
 
 AUTH_API_PREFIX_PERMISSIONS = [
+    ("/api/dashboard", "dashboard"),
     ("/api/settings", "settings"),
     ("/api/serial/ports", "settings"),
     ("/api/salons", "settings"),
@@ -1817,6 +1821,156 @@ class RestaurantServer:
             return shift_dict
             
         return None
+
+    def get_dashboard_operational_status(self, kasa_id=None):
+        """Ana ekran için teknik detay içermeyen kasa/ÖKC/yazıcı özeti."""
+        cash_register = self.get_dashboard_cash_register_status(kasa_id)
+        okc = self.get_dashboard_okc_status()
+        printers = self.get_dashboard_printer_statuses()
+
+        active_items = [cash_register, okc] + [p for p in printers if p.get("state") != "off"]
+        if any(item.get("state") == "error" for item in active_items):
+            overall_state = "error"
+        elif any(item.get("state") == "warn" for item in active_items):
+            overall_state = "warn"
+        else:
+            overall_state = "ok"
+
+        return {
+            "success": True,
+            "updated_at": datetime.datetime.now().isoformat(),
+            "overall_state": overall_state,
+            "cash_register": cash_register,
+            "okc": okc,
+            "printers": printers
+        }
+
+    def status_item(self, key, label, state, status_text, message=""):
+        return {
+            "key": key,
+            "label": label,
+            "state": state,
+            "status_text": status_text,
+            "message": message
+        }
+
+    def get_dashboard_cash_register_status(self, kasa_id=None):
+        if not USE_DATABASE:
+            return self.status_item("cash_register", "Kasa", "ok", "Açık", "Demo vardiya")
+
+        try:
+            kasa_id = int(kasa_id or 0)
+        except (TypeError, ValueError):
+            kasa_id = 0
+
+        if kasa_id <= 0:
+            return self.status_item("cash_register", "Kasa", "warn", "Seçilmedi", "Kasa seçimi bekleniyor")
+
+        try:
+            shift = db.get_active_shift_by_kasa(kasa_id)
+        except Exception as e:
+            logger.error(f"Dashboard kasa durumu alınamadı: {e}")
+            return self.status_item("cash_register", "Kasa", "error", "Kontrol yok", "Vardiya durumu alınamadı")
+
+        if not shift:
+            return self.status_item("cash_register", "Kasa", "error", "Kapalı", "Vardiya kapalı")
+
+        kasiyer = ""
+        try:
+            kasiyer = str(dict(shift).get("kasiyer") or "").strip()
+        except Exception:
+            kasiyer = ""
+        message = f"{kasiyer} açık" if kasiyer else "Vardiya açık"
+        return self.status_item("cash_register", "Kasa", "ok", "Açık", message)
+
+    def get_dashboard_okc_status(self):
+        if not self.pos_enabled:
+            return self.status_item("okc", "ÖKC", "off", "Kapalı", "POS/ÖKC entegrasyonu kapalı")
+
+        if self.pos_type == "demo":
+            return self.status_item("okc", "ÖKC", "ok", "Demo", "Demo mod aktif")
+
+        if not str(self.pos_ip or "").strip() or not self.pos_port:
+            return self.status_item("okc", "ÖKC", "warn", "Ayar eksik", "Bağlantı ayarı tamamlanmalı")
+
+        if self.pos_type in POSManager.TOKEN_BRIDGE_TYPES:
+            return self.get_dashboard_token_bridge_status()
+
+        if self.probe_tcp_service(self.pos_ip, self.pos_port):
+            return self.status_item("okc", "POS", "ok", "Hazır", "Bağlantı hazır")
+        return self.status_item("okc", "POS", "error", "Bağlantı yok", "POS cihazına ulaşılamıyor")
+
+    def get_dashboard_token_bridge_status(self):
+        try:
+            url = f"http://{self.pos_ip}:{self.pos_port}/health"
+            with urllib.request.urlopen(url, timeout=DASHBOARD_STATUS_TIMEOUT_SECONDS) as response:
+                payload = response.read(4096).decode("utf-8", errors="replace")
+            data = json.loads(payload or "{}")
+        except Exception as e:
+            logger.warning(f"Dashboard ÖKC bridge durumu alınamadı: {e}")
+            return self.status_item("okc", "ÖKC", "error", "Bağlantı yok", "Bridge yanıt vermiyor")
+
+        device_state_known = data.get("deviceStateKnown")
+        device_connected = data.get("deviceConnected")
+        recovery_active = data.get("callbackRecoveryActive")
+        try:
+            uptime_seconds = int(data.get("uptimeSeconds") or 0)
+        except (TypeError, ValueError):
+            uptime_seconds = 0
+
+        if device_state_known is True and device_connected is True:
+            return self.status_item("okc", "ÖKC", "ok", "Hazır", "Cihaz hazır")
+        if device_state_known is True and device_connected is False:
+            return self.status_item("okc", "ÖKC", "error", "Cihaz yok", "ÖKC bağlantısı yok")
+        if recovery_active or uptime_seconds < POSManager.TOKEN_BRIDGE_STARTUP_GRACE_SECONDS:
+            return self.status_item("okc", "ÖKC", "warn", "Başlatılıyor", "Cihaz bağlantısı bekleniyor")
+        return self.status_item("okc", "ÖKC", "warn", "Bekleniyor", "Cihaz durumu kesinleşmedi")
+
+    def get_dashboard_printer_statuses(self):
+        targets = [
+            ("receipt", "Hesap", self.receipt_printer, self.direct_print)
+        ]
+
+        for panel_id in PREP_PANELS.keys():
+            panel_info = self.get_prep_panel_info(panel_id)
+            printer = self.prep_printers.get(panel_id, {})
+            targets.append(
+                (
+                    f"prep_{panel_id}",
+                    panel_info.get("name") or panel_id.title(),
+                    printer,
+                    False
+                )
+            )
+
+        with ThreadPoolExecutor(max_workers=min(len(targets), 6)) as executor:
+            return list(executor.map(
+                lambda args: self.get_dashboard_printer_status(*args),
+                targets
+            ))
+
+    def get_dashboard_printer_status(self, key, label, printer, local_print_enabled=False):
+        printer = printer or {}
+        if not printer.get("enabled"):
+            if local_print_enabled:
+                return self.status_item(key, label, "ok", "Yerel", "Yerel yazdırma açık")
+            return self.status_item(key, label, "off", "Kapalı", "Yazıcı kapalı")
+
+        host = str(printer.get("ip") or "").strip()
+        port = printer.get("port") or 9100
+        if not host:
+            return self.status_item(key, label, "warn", "Ayar eksik", "Yazıcı adresi eksik")
+
+        if self.probe_tcp_service(host, port):
+            return self.status_item(key, label, "ok", "Online", "Yazıcı hazır")
+        return self.status_item(key, label, "error", "Bağlantı yok", "Yazıcıya ulaşılamıyor")
+
+    def probe_tcp_service(self, host, port, timeout=DASHBOARD_STATUS_TIMEOUT_SECONDS):
+        try:
+            with socket.create_connection((str(host), int(port)), timeout=timeout):
+                return True
+        except Exception:
+            return False
 
     def load_waiters(self):
         """Garson listesini yükle"""
@@ -5349,6 +5503,12 @@ def waiter_table_session_page():
 def system_info():
     """Sistem bilgileri"""
     return jsonify(server.get_system_info())
+
+@app.route('/api/dashboard/status')
+def dashboard_status():
+    """Ana ekran için kasa/ÖKC/yazıcı durum özeti; teknik adres döndürmez."""
+    kasa_id = request.args.get('kasa_id')
+    return jsonify(server.get_dashboard_operational_status(kasa_id))
 
 @app.route('/api/public/menu-qr.svg')
 def api_public_menu_qr_svg():
