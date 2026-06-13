@@ -106,6 +106,11 @@
                 <h2 id="currentMasaLabel">Masa Seçiniz</h2>
             </div>
 
+            <div class="table-note-panel" id="tableNotePanel" style="display: none;">
+                <textarea id="tableNoteInput" maxlength="500" rows="2" placeholder="Masa özel notu"></textarea>
+                <button class="table-note-save" id="btnSaveTableNote" type="button" title="Masa notunu kaydet">💾</button>
+            </div>
+
             <!-- Order List -->
             <div class="order-list-container">
                 <div class="order-list" id="orderList">
@@ -255,7 +260,7 @@
                             <strong>Garson</strong>
                             <small>Ekran</small>
                         </a>
-                        <a class="module-shortcut module-personel" href="/waiters_manage">
+                        <a class="module-shortcut module-personel" href="/personel">
                             <span class="shortcut-icon">👥</span>
                             <strong>Personel</strong>
                             <small>Yönetim</small>

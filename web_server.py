@@ -95,6 +95,7 @@ KITCHEN_FILE = os.path.join(SCRIPT_DIR, "kitchen.json")
 USERS_FILE = os.path.join(SCRIPT_DIR, "users.json")
 AUTH_SESSIONS_FILE = os.path.join(SCRIPT_DIR, "auth_sessions.json")
 ACTIVE_ADISYONLAR_FILE = os.path.join(SCRIPT_DIR, "active_adisyonlar.json")
+TABLE_NOTES_FILE = os.path.join(SCRIPT_DIR, "table_notes.json")
 PORTION_STOCK_FILE = os.path.join(SCRIPT_DIR, "portion_stock.json")
 PORTION_STOCK_RESET_FILE = os.path.join(SCRIPT_DIR, "portion_stock_reset.json")
 DAILY_MEALS_FILE = os.path.join(SCRIPT_DIR, "gunluk_yemekler.txt")
@@ -488,6 +489,7 @@ class RestaurantServer:
         
         # Adisyon durumları
         self.adisyonlar = {}
+        self.table_notes = {}
         self.current_selections = {}  # {sid: masa_adi}
         
         # Menu
@@ -550,6 +552,7 @@ class RestaurantServer:
         self.load_auth_sessions()
         self.refresh_adisyonlar()
         self.load_active_adisyonlar() # Aktif adisyonları geri yükle
+        self.load_table_notes()
         self.load_menu_data()
         self.load_menu_metadata()
         self.normalize_active_order_panels()
@@ -1774,6 +1777,7 @@ class RestaurantServer:
         payload = {
             'menu': self.get_order_menu_data(),
             'adisyonlar': self.adisyonlar,
+            'table_notes': self.get_table_notes_payload(),
             'system': self.get_system_info(),
             'prep_panels': self.get_preparation_panels(),
             'prep_category_overrides': self.prep_category_overrides,
@@ -1934,6 +1938,52 @@ class RestaurantServer:
                 cleaned.append(page)
         return cleaned or self.get_role_permissions(role)
 
+    @staticmethod
+    def auth_user_name_key(name):
+        return str(name or "").strip().lower()
+
+    def build_staff_auth_user(self, staff, role, source, default_pin=""):
+        staff = staff if isinstance(staff, dict) else {"name": staff}
+        name = str(staff.get("name") or staff.get("ad") or "").strip()
+        if not name:
+            return None
+        pin = staff.get("pin")
+        if pin is None:
+            pin = default_pin
+        stable_id = uuid.uuid5(uuid.NAMESPACE_DNS, f"fastfoot:{source}:{name.lower()}")
+        return {
+            "id": f"{source}-{stable_id.hex}",
+            "name": name,
+            "pin": str(pin or ""),
+            "role": role,
+            "active": True,
+            "permissions": self.get_role_permissions(role),
+            "schedule": {"enabled": False},
+        }
+
+    def add_missing_staff_auth_users(self, users, seen_names):
+        added = 0
+        staff_sources = (
+            (self.waiters, "waiter", "waiter", ""),
+            (self.cashiers, "cashier", "cashier", "0000"),
+            (self.kitchen, "kitchen", "kitchen", "0000"),
+        )
+        for staff_list, role, source, default_pin in staff_sources:
+            for staff in staff_list:
+                raw_user = self.build_staff_auth_user(staff, role, source, default_pin)
+                if not raw_user:
+                    continue
+                key = self.auth_user_name_key(raw_user.get("name"))
+                if key in seen_names:
+                    continue
+                user = self.normalize_user(raw_user)
+                if not user:
+                    continue
+                users.append(user)
+                seen_names.add(key)
+                added += 1
+        return added
+
     def normalize_schedule(self, schedule=None):
         schedule = schedule if isinstance(schedule, dict) else {}
         days = schedule.get("days")
@@ -2015,43 +2065,34 @@ class RestaurantServer:
 
         existing_names = {"yönetici"}
         for waiter in self.waiters:
-            name = str(waiter.get("name") or "").strip()
-            if not name or name.lower() in existing_names:
+            user = self.build_staff_auth_user(waiter, "waiter", "waiter")
+            if not user:
                 continue
-            existing_names.add(name.lower())
-            users.append({
-                "name": name,
-                "pin": waiter.get("pin", ""),
-                "role": "waiter",
-                "active": True,
-                "permissions": self.get_role_permissions("waiter"),
-            })
+            key = self.auth_user_name_key(user.get("name"))
+            if key in existing_names:
+                continue
+            existing_names.add(key)
+            users.append(user)
 
         for cashier in self.cashiers:
-            name = str(cashier.get("name") or "").strip()
-            if not name or name.lower() in existing_names:
+            user = self.build_staff_auth_user(cashier, "cashier", "cashier", "0000")
+            if not user:
                 continue
-            existing_names.add(name.lower())
-            users.append({
-                "name": name,
-                "pin": cashier.get("pin", "0000"),
-                "role": "cashier",
-                "active": True,
-                "permissions": self.get_role_permissions("cashier"),
-            })
+            key = self.auth_user_name_key(user.get("name"))
+            if key in existing_names:
+                continue
+            existing_names.add(key)
+            users.append(user)
 
         for cook in self.kitchen:
-            name = str(cook.get("name") or "").strip()
-            if not name or name.lower() in existing_names:
+            user = self.build_staff_auth_user(cook, "kitchen", "kitchen", "0000")
+            if not user:
                 continue
-            existing_names.add(name.lower())
-            users.append({
-                "name": name,
-                "pin": cook.get("pin", "0000"),
-                "role": "kitchen",
-                "active": True,
-                "permissions": self.get_role_permissions("kitchen"),
-            })
+            key = self.auth_user_name_key(user.get("name"))
+            if key in existing_names:
+                continue
+            existing_names.add(key)
+            users.append(user)
 
         return users
 
@@ -2073,7 +2114,7 @@ class RestaurantServer:
             user = self.normalize_user(raw)
             if not user:
                 continue
-            key = user["name"].strip().lower()
+            key = self.auth_user_name_key(user["name"])
             if key in seen_names:
                 continue
             seen_names.add(key)
@@ -2090,11 +2131,17 @@ class RestaurantServer:
             })
             if admin:
                 normalized.insert(0, admin)
+                seen_names.add(self.auth_user_name_key(admin.get("name")))
+
+        added_staff_users = self.add_missing_staff_auth_users(normalized, seen_names)
 
         self.users = sorted(
             normalized,
             key=lambda u: (-self.get_role_level(u.get("role")), u.get("name", "").lower())
         )
+        if added_staff_users and os.path.exists(USERS_FILE):
+            self.save_users()
+            logger.info(f"✓ {added_staff_users} personel yetki kullanıcısı eklendi")
         logger.info(f"✓ {len(self.users)} kullanıcı/yetki yüklendi")
 
     def save_users(self):
@@ -3428,6 +3475,12 @@ class RestaurantServer:
                     next_adisyonlar[masa] = items
 
         self.adisyonlar = next_adisyonlar
+        if getattr(self, "table_notes", None):
+            self.table_notes = {
+                masa: note
+                for masa, note in self.table_notes.items()
+                if masa in self.adisyonlar and note
+            }
         
         logger.info(f"✓ {len(self.adisyonlar)} adisyon alanı oluşturuldu")
 
@@ -3454,6 +3507,87 @@ class RestaurantServer:
                 logger.info("✓ Aktif adisyonlar geri yüklendi")
             except Exception as e:
                 logger.error(f"Adisyon yükleme hatası: {e}")
+
+    @staticmethod
+    def sanitize_table_note(note):
+        """Masa özel notunu kısa ve güvenli bir metne indirger."""
+        text = str(note or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+        lines = [re.sub(r"\s+", " ", line).strip() for line in text.split("\n")]
+        text = "\n".join(line for line in lines if line)
+        return text[:500]
+
+    def get_table_note(self, masa_adi):
+        return str(self.table_notes.get(str(masa_adi or "").strip()) or "")
+
+    def get_table_notes_payload(self):
+        return {
+            masa: note
+            for masa, note in self.table_notes.items()
+            if note and masa in self.adisyonlar
+        }
+
+    def save_table_notes(self):
+        """Masa özel notlarını dosyaya kaydet."""
+        try:
+            payload = self.get_table_notes_payload()
+            with open(TABLE_NOTES_FILE, "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+            self.table_notes = payload
+            return True
+        except Exception as e:
+            logger.error(f"Masa notu kaydetme hatası: {e}")
+            return False
+
+    def load_table_notes(self):
+        """Masa özel notlarını dosyadan yükle."""
+        self.table_notes = {}
+        if not os.path.exists(TABLE_NOTES_FILE):
+            return
+        try:
+            with open(TABLE_NOTES_FILE, "r", encoding="utf-8") as f:
+                raw_notes = json.load(f)
+            if isinstance(raw_notes, dict):
+                for masa, note in raw_notes.items():
+                    masa_adi = str(masa or "").strip()
+                    clean_note = self.sanitize_table_note(note)
+                    if masa_adi in self.adisyonlar and clean_note:
+                        self.table_notes[masa_adi] = clean_note
+            logger.info(f"✓ {len(self.table_notes)} masa notu yüklendi")
+        except Exception as e:
+            logger.error(f"Masa notu yükleme hatası: {e}")
+
+    def set_table_note(self, masa_adi, note, save=True):
+        masa_adi = str(masa_adi or "").strip()
+        if not masa_adi or masa_adi not in self.adisyonlar:
+            return None, "Geçersiz masa"
+        clean_note = self.sanitize_table_note(note)
+        if clean_note:
+            self.table_notes[masa_adi] = clean_note
+        else:
+            self.table_notes.pop(masa_adi, None)
+        if save:
+            self.save_table_notes()
+        return clean_note, None
+
+    def clear_table_note(self, masa_adi, save=True):
+        masa_adi = str(masa_adi or "").strip()
+        if not masa_adi:
+            return False
+        removed = self.table_notes.pop(masa_adi, None) is not None
+        if removed and save:
+            self.save_table_notes()
+        return removed
+
+    def merge_table_note(self, target_masa, note, save=True):
+        note = self.sanitize_table_note(note)
+        if not note:
+            return self.get_table_note(target_masa), None
+        current_note = self.get_table_note(target_masa)
+        if current_note and note not in current_note:
+            note = self.sanitize_table_note(f"{current_note}\n{note}")
+        elif current_note:
+            note = current_note
+        return self.set_table_note(target_masa, note, save=save)
     
     def load_menu_data(self):
         """Menüyü yükle - DB'den veya dosyadan"""
@@ -7144,6 +7278,26 @@ def get_adisyonlar():
     """Tüm adisyonları getir"""
     return jsonify(server.adisyonlar)
 
+@app.route('/api/table-notes')
+def get_table_notes():
+    """Masa özel notlarını getir"""
+    return jsonify({'success': True, 'table_notes': server.get_table_notes_payload()})
+
+@app.route('/api/table-note/<masa_adi>', methods=['GET', 'POST'])
+def table_note_api(masa_adi):
+    """Belirli bir masa özel notunu getir veya güncelle."""
+    if masa_adi not in server.adisyonlar:
+        return jsonify({'success': False, 'error': 'Geçersiz masa'}), 404
+    if request.method == 'GET':
+        return jsonify({'success': True, 'masa': masa_adi, 'note': server.get_table_note(masa_adi)})
+
+    data = request.get_json(silent=True) or {}
+    note, err = server.set_table_note(masa_adi, data.get('note', ''))
+    if err:
+        return jsonify({'success': False, 'error': err}), 400
+    socketio.emit('table_note_update', {'masa': masa_adi, 'note': note})
+    return jsonify({'success': True, 'masa': masa_adi, 'note': note})
+
 @app.route('/api/adisyon/<masa_adi>')
 def get_adisyon(masa_adi):
     """Belirli bir adisyonu getir"""
@@ -7152,6 +7306,7 @@ def get_adisyon(masa_adi):
     return jsonify({
         'masa': masa_adi,
         'items': items,
+        'note': server.get_table_note(masa_adi),
         **totals
     })
 
@@ -7283,8 +7438,30 @@ def handle_select_masa(data):
     emit('masa_selected', {
         'masa': masa_adi,
         'items': items,
+        'note': server.get_table_note(masa_adi),
         **totals
     })
+
+@socketio.on('set_table_note')
+def handle_set_table_note(data):
+    """Masa özel notunu güncelle."""
+    user = require_socket_permission()
+    if not user:
+        return
+    masa_adi = data.get('masa')
+    note, err = server.set_table_note(masa_adi, data.get('note', ''))
+    if err:
+        emit('error', {'message': err})
+        return
+    masa_adi = str(masa_adi or "").strip()
+    payload = {
+        'masa': masa_adi,
+        'note': note,
+        'updated_by': user.get('name') or ''
+    }
+    socketio.emit('table_note_update', payload)
+    emit('success', {'message': 'Masa notu kaydedildi'})
+    logger.info(f"📝 Masa notu güncellendi: {masa_adi} - {user.get('name')}")
 
 @socketio.on('add_item')
 def handle_add_item(data):
@@ -7471,9 +7648,9 @@ def handle_mark_order_served(data):
 
 @socketio.on('cancel_item')
 def handle_cancel_item(data):
-    """Garson siparişi iptal eder"""
+    """Siparişi iptal eder"""
     sid = request.sid
-    user = require_socket_permission(['dashboard', 'waiter'])
+    user = require_socket_permission(['dashboard', 'waiter', 'kasa'])
     if not user:
         return
     masa_adi = data.get('masa')
@@ -7515,11 +7692,16 @@ def handle_cancel_item(data):
             # Masa güncellemesini herkese duyur
             items = server.adisyonlar[masa_adi]
             totals = server.calculate_adisyon_totals(items)
+            note_cleared = False
+            if not items:
+                note_cleared = server.clear_table_note(masa_adi)
             socketio.emit('masa_update', {
                 'masa': masa_adi,
                 'items': items,
                 **totals
             })
+            if note_cleared:
+                socketio.emit('table_note_update', {'masa': masa_adi, 'note': ''})
 
 @socketio.on('transfer_table')
 def handle_transfer_table(data):
@@ -7550,8 +7732,13 @@ def handle_transfer_table(data):
         return
         
     # Taşıma işlemi
+    source_note = server.get_table_note(source_masa)
     server.adisyonlar[target_masa].extend(items_to_move)
     server.adisyonlar[source_masa] = []
+    if source_note:
+        server.merge_table_note(target_masa, source_note, save=False)
+        server.clear_table_note(source_masa, save=False)
+        server.save_table_notes()
     server.current_selections[sid] = target_masa
     server.save_active_adisyonlar() # Persistence
     
@@ -7567,6 +7754,10 @@ def handle_transfer_table(data):
             'items': items,
             **totals,
             'source': 'transfer'
+        })
+        socketio.emit('table_note_update', {
+            'masa': masa_adi,
+            'note': server.get_table_note(masa_adi)
         })
     
     emit('success', {
@@ -7692,12 +7883,17 @@ def handle_remove_item(data):
             
             items = server.adisyonlar[masa_adi]
             totals = server.calculate_adisyon_totals(items)
+            note_cleared = False
+            if not items:
+                note_cleared = server.clear_table_note(masa_adi)
             
             socketio.emit('masa_update', {
                 'masa': masa_adi,
                 'items': items,
                 **totals
             })
+            if note_cleared:
+                socketio.emit('table_note_update', {'masa': masa_adi, 'note': ''})
 
 @socketio.on('set_item_comp')
 def handle_set_item_comp(data):
@@ -7934,8 +8130,10 @@ def handle_payment(data):
         else:
             server.adisyonlar[masa_adi] = []
 
+        note_cleared = False
         if not server.adisyonlar[masa_adi]:
             server.revoke_public_sessions_for_table(masa_adi)
+            note_cleared = server.clear_table_note(masa_adi)
         
         server.save_active_adisyonlar() # Persistence
         
@@ -7951,6 +8149,8 @@ def handle_payment(data):
             'invoice_note': invoice_note if invoice_pending else '',
             'is_partial': is_partial
         })
+        if note_cleared:
+            socketio.emit('table_note_update', {'masa': masa_adi, 'note': ''})
 
         # Eğer kısmi ödeme ise veya masada hala ürün varsa masa_update gönder
         if is_partial or server.adisyonlar[masa_adi]:
@@ -8058,6 +8258,7 @@ def handle_close_complimentary_bill(data):
 
         server.adisyonlar[masa_adi] = []
         server.revoke_public_sessions_for_table(masa_adi)
+        note_cleared = server.clear_table_note(masa_adi)
         server.save_active_adisyonlar()
 
         socketio.emit('payment_completed', {
@@ -8067,6 +8268,8 @@ def handle_close_complimentary_bill(data):
             'is_partial': False,
             'ikram_total': ikram_total
         })
+        if note_cleared:
+            socketio.emit('table_note_update', {'masa': masa_adi, 'note': ''})
         emit('success', {'message': f'Hesap ikram olarak kapatıldı: {ikram_total:.2f} TL'})
     except Exception as e:
         logger.error(f"İkram kapatma hatası: {e}")

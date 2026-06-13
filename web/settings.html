@@ -13,7 +13,9 @@
         }
 
         .settings-wrapper {
-            max-width: 960px;
+            width: 100%;
+            max-width: 1120px;
+            min-width: 0;
             margin: 30px auto;
             padding: 0 20px 40px;
         }
@@ -28,10 +30,72 @@
             gap: 10px;
         }
 
+        .settings-tablist {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding: 6px;
+            margin-bottom: 18px;
+            background: rgba(255, 255, 255, 0.78);
+            border: 1px solid #dfe6e9;
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-sm);
+            scrollbar-width: thin;
+        }
+
+        .settings-tab-button {
+            flex: 0 0 auto;
+            min-height: 44px;
+            padding: 10px 15px;
+            border: 1px solid transparent;
+            border-radius: var(--radius-md);
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 14px;
+            font-weight: 800;
+            line-height: 1;
+            white-space: nowrap;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.2s, color 0.2s, border-color 0.2s;
+        }
+
+        .settings-tab-button:hover {
+            background: #eef5fb;
+            color: var(--primary-color);
+            border-color: #d6e8f7;
+        }
+
+        .settings-tab-button.active {
+            background: var(--primary-color);
+            color: #fff;
+            border-color: var(--primary-color);
+        }
+
+        .settings-tab-button:focus-visible {
+            outline: 3px solid rgba(52, 152, 219, 0.35);
+            outline-offset: 2px;
+        }
+
+        .settings-tab-panel {
+            display: none;
+            animation: fadeIn 0.25s ease;
+        }
+
+        .settings-tab-panel.active {
+            display: block;
+        }
+
+        .settings-tab-panel .settings-card:last-child {
+            margin-bottom: 0;
+        }
+
         /* Kartlar */
         .settings-card {
             background: #fff;
-            border-radius: var(--radius-lg);
+            border-radius: var(--radius-md);
             box-shadow: var(--shadow-md);
             margin-bottom: 22px;
             overflow: hidden;
@@ -74,13 +138,14 @@
             font-weight: 600;
             color: var(--text-secondary);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0;
         }
 
         .form-group input[type="text"],
         .form-group input[type="number"],
         .form-group input[type="password"],
         .form-group select {
+            min-width: 0;
             padding: 11px 14px;
             border: 2px solid #e0e0e0;
             border-radius: var(--radius-md);
@@ -216,7 +281,16 @@
             display: flex;
             flex-wrap: wrap;
             gap: 10px;
-            margin-top: 8px;
+            margin-top: 22px;
+            position: sticky;
+            bottom: 12px;
+            z-index: 20;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.92);
+            border: 1px solid #dfe6e9;
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-md);
+            backdrop-filter: blur(8px);
         }
 
         .btn-settings {
@@ -324,6 +398,56 @@
         }
 
         /* Responsive */
+        @media (max-width: 760px) {
+            .header-content {
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .header-info {
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+
+            .settings-wrapper {
+                margin: 18px auto;
+                padding: 0 12px 28px;
+            }
+
+            .settings-title {
+                font-size: 22px;
+                margin-bottom: 16px;
+            }
+
+            .settings-tablist {
+                margin-left: -2px;
+                margin-right: -2px;
+            }
+
+            .settings-tab-button {
+                min-height: 40px;
+                padding: 9px 12px;
+                font-size: 13px;
+            }
+
+            .toggle-row {
+                gap: 14px;
+            }
+
+            .category-route-row {
+                grid-template-columns: 1fr;
+            }
+
+            .prep-skip-actions {
+                flex-wrap: wrap;
+            }
+
+            .prep-skip-actions .btn-settings {
+                width: 100%;
+            }
+        }
+
         @media (max-width: 600px) {
             .form-group {
                 min-width: 100%;
@@ -331,6 +455,7 @@
 
             .action-buttons {
                 flex-direction: column;
+                bottom: 8px;
             }
 
             .btn-settings {
@@ -510,6 +635,31 @@
     <div class="settings-wrapper">
         <div class="settings-title">⚙️ Sistem Ayarları</div>
 
+        <div class="settings-tablist" role="tablist" aria-label="Ayar grupları">
+            <button class="settings-tab-button active" id="settings-tab-isletme" type="button" role="tab"
+                aria-selected="true" aria-controls="settings-panel-isletme" data-settings-tab="isletme">
+                <span>🏢</span><span>İşletme</span>
+            </button>
+            <button class="settings-tab-button" id="settings-tab-erisim" type="button" role="tab"
+                aria-selected="false" aria-controls="settings-panel-erisim" data-settings-tab="erisim">
+                <span>🔐</span><span>Erişim</span>
+            </button>
+            <button class="settings-tab-button" id="settings-tab-yazici" type="button" role="tab"
+                aria-selected="false" aria-controls="settings-panel-yazici" data-settings-tab="yazici">
+                <span>🖨️</span><span>Yazıcı &amp; Reyon</span>
+            </button>
+            <button class="settings-tab-button" id="settings-tab-entegrasyon" type="button" role="tab"
+                aria-selected="false" aria-controls="settings-panel-entegrasyon" data-settings-tab="entegrasyon">
+                <span>🚀</span><span>Entegrasyon</span>
+            </button>
+            <button class="settings-tab-button" id="settings-tab-qr" type="button" role="tab"
+                aria-selected="false" aria-controls="settings-panel-qr" data-settings-tab="qr">
+                <span>📱</span><span>QR Menü</span>
+            </button>
+        </div>
+
+        <section class="settings-tab-panel active" id="settings-panel-isletme" role="tabpanel"
+            aria-labelledby="settings-tab-isletme" data-settings-panel="isletme">
         <!-- 1. Firma Bilgileri -->
         <div class="settings-card">
             <div class="card-header">🏢 Firma Bilgileri</div>
@@ -631,6 +781,10 @@
             </div>
         </div>
 
+        </section>
+
+        <section class="settings-tab-panel" id="settings-panel-erisim" role="tabpanel"
+            aria-labelledby="settings-tab-erisim" data-settings-panel="erisim">
         <!-- 3. Güvenlik -->
         <div class="settings-card">
             <div class="card-header">🔐 Güvenlik</div>
@@ -766,6 +920,10 @@
             </div>
         </div>
 
+        </section>
+
+        <section class="settings-tab-panel" id="settings-panel-yazici" role="tabpanel"
+            aria-labelledby="settings-tab-yazici" data-settings-panel="yazici">
         <!-- 5. Yazıcı & Sistem -->
         <div class="settings-card">
             <div class="card-header">🖨️ Yazıcı &amp; Sistem</div>
@@ -908,6 +1066,10 @@
             </div>
         </div>
 
+        </section>
+
+        <section class="settings-tab-panel" id="settings-panel-entegrasyon" role="tabpanel"
+            aria-labelledby="settings-tab-entegrasyon" data-settings-panel="entegrasyon">
         <!-- 6. Entegrasyonlar -->
         <div class="settings-card">
             <div class="card-header">🚀 Online Platform Entegrasyonları</div>
@@ -1268,6 +1430,10 @@
             </div>
         </div>
 
+        </section>
+
+        <section class="settings-tab-panel" id="settings-panel-qr" role="tabpanel"
+            aria-labelledby="settings-tab-qr" data-settings-panel="qr">
         <!-- 9. QR Menü & Online Sipariş -->
         <div class="settings-card">
             <div class="card-header">📱 QR Menü & Online Sipariş</div>
@@ -1339,6 +1505,7 @@
                 </small>
             </div>
         </div>
+        </section>
 
         <!-- Butonlar -->
         <div class="action-buttons">
@@ -1376,6 +1543,7 @@
         let prepTicketSkipProducts = ['su'];
         let menuCategories = [];
         let menuProducts = [];
+        const defaultSettingsTab = 'isletme';
 
         function escapeHtml(value) {
             return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -1393,6 +1561,77 @@
             if (panelId === 'icecek') return '/icecek';
             if (panelId === 'tatli') return '/tatli';
             return `/reyon/${encodeURIComponent(panelId)}`;
+        }
+
+        function getSettingsTabFromHash() {
+            const hash = decodeURIComponent(window.location.hash || '').replace('#', '');
+            return hash.replace(/^ayar-/, '') || defaultSettingsTab;
+        }
+
+        function setSettingsTab(tabId, updateHash = true) {
+            const panels = Array.from(document.querySelectorAll('[data-settings-panel]'));
+            const buttons = Array.from(document.querySelectorAll('[data-settings-tab]'));
+            const available = panels.some(panel => panel.dataset.settingsPanel === tabId);
+            const nextTab = available ? tabId : defaultSettingsTab;
+
+            panels.forEach(panel => {
+                const active = panel.dataset.settingsPanel === nextTab;
+                panel.classList.toggle('active', active);
+                panel.hidden = !active;
+            });
+
+            buttons.forEach(button => {
+                const active = button.dataset.settingsTab === nextTab;
+                button.classList.toggle('active', active);
+                button.setAttribute('aria-selected', active ? 'true' : 'false');
+                button.tabIndex = active ? 0 : -1;
+            });
+
+            if (updateHash) {
+                const url = new URL(window.location.href);
+                url.hash = `ayar-${nextTab}`;
+                window.history.replaceState(null, '', url);
+            }
+        }
+
+        function focusSettingField(fieldId) {
+            const element = document.getElementById(fieldId);
+            if (!element) return null;
+
+            const panel = element.closest('[data-settings-panel]');
+            if (panel) setSettingsTab(panel.dataset.settingsPanel);
+
+            window.setTimeout(() => {
+                element.focus();
+                if (typeof element.scrollIntoView === 'function') {
+                    element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                }
+            }, 0);
+
+            return element;
+        }
+
+        function initSettingsTabs() {
+            const buttons = Array.from(document.querySelectorAll('[data-settings-tab]'));
+            buttons.forEach((button, index) => {
+                button.addEventListener('click', () => setSettingsTab(button.dataset.settingsTab));
+                button.addEventListener('keydown', (event) => {
+                    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                    event.preventDefault();
+
+                    let nextIndex = index;
+                    if (event.key === 'ArrowRight') nextIndex = (index + 1) % buttons.length;
+                    if (event.key === 'ArrowLeft') nextIndex = (index - 1 + buttons.length) % buttons.length;
+                    if (event.key === 'Home') nextIndex = 0;
+                    if (event.key === 'End') nextIndex = buttons.length - 1;
+
+                    buttons[nextIndex].focus();
+                    setSettingsTab(buttons[nextIndex].dataset.settingsTab);
+                });
+            });
+
+            setSettingsTab(getSettingsTabFromHash(), false);
+            window.addEventListener('hashchange', () => setSettingsTab(getSettingsTabFromHash(), false));
         }
 
         function keywordsToText(value) {
@@ -1866,23 +2105,27 @@
 
             // Basit validasyon
             if (!firmaIsmi) {
+                focusSettingField('firmaIsmi');
                 showToast('Firma adı boş olamaz!', 'warning');
                 return;
             }
             if (isNaN(masaSayisi) || masaSayisi < 0) {
+                focusSettingField('masaSayisi');
                 showToast('Geçersiz masa sayısı!', 'warning');
                 return;
             }
             if (isNaN(paketSayisi) || paketSayisi < 0) {
+                focusSettingField('paketSayisi');
                 showToast('Geçersiz paket sayısı!', 'warning');
                 return;
             }
             if (yeniSifre && yeniSifre !== yeniSifreTekrar) {
+                focusSettingField('yeniSifreTekrar');
                 showToast('Yeni şifreler eşleşmiyor!', 'error');
                 return;
             }
             if (!mevcutSifre) {
-                document.getElementById('mevcutSifre').focus();
+                focusSettingField('mevcutSifre');
                 showToast('Ayarları kaydetmek için mevcut şifreyi girin.', 'warning');
                 return;
             }
@@ -1892,10 +2135,12 @@
                 prepSettings.printers[panel.id]?.enabled && !prepSettings.printers[panel.id]?.ip
             );
             if (missingPrinter) {
+                focusSettingField(`prep_printer_ip_${missingPrinter.id}`);
                 showToast(`${missingPrinter.name} yazıcısı açık ama IP adresi boş.`, 'warning');
                 return;
             }
             if (receiptPrinter.enabled && !receiptPrinter.ip) {
+                focusSettingField('receiptPrinterIp');
                 showToast('Hesap yazıcısı açık ama IP adresi boş.', 'warning');
                 return;
             }
@@ -2533,6 +2778,7 @@
         // Sayfa yüklenince
 
         window.addEventListener('DOMContentLoaded', () => {
+            initSettingsTabs();
             const paketInput = document.getElementById('paketSayisi');
             if (paketInput) {
                 paketInput.addEventListener('change', () => syncPaketLabelsFromCount(true));

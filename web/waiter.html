@@ -245,6 +245,16 @@
             font-weight: 800;
         }
 
+        .table-note-badge {
+            margin-top: 6px;
+            padding: 3px 7px;
+            border-radius: 999px;
+            background: #263445;
+            color: #f8d472;
+            font-size: 10px;
+            font-weight: 800;
+        }
+
         @keyframes readyPulse {
             0%, 100% {
                 filter: brightness(1);
@@ -469,6 +479,39 @@
             margin-bottom: 15px;
             scrollbar-width: none;
             -webkit-overflow-scrolling: touch;
+        }
+
+        .waiter-table-note {
+            grid-template-columns: minmax(0, 1fr) 46px;
+            gap: 8px;
+            margin: 0 0 14px;
+        }
+
+        .waiter-table-note textarea {
+            width: 100%;
+            min-height: 46px;
+            max-height: 90px;
+            resize: vertical;
+            margin: 0;
+            padding: 9px 10px;
+            background: #111827;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 13px;
+            line-height: 1.35;
+            box-sizing: border-box;
+        }
+
+        .waiter-table-note button {
+            min-width: 46px;
+            min-height: 46px;
+            border: none;
+            border-radius: 8px;
+            background: #16a085;
+            color: #fff;
+            font-size: 18px;
+            cursor: pointer;
         }
 
         .category-tabs::-webkit-scrollbar {
@@ -1124,6 +1167,10 @@
             <!-- Screen 2: Menu & Order -->
             <div id="order-screen" class="screen">
                 <div class="category-tabs" id="categoryContainer"></div>
+                <div class="waiter-table-note" id="waiterTableNotePanel" style="display: none;">
+                    <textarea id="waiterTableNoteInput" maxlength="500" rows="2" placeholder="Masa özel notu"></textarea>
+                    <button type="button" onclick="saveWaiterTableNote()" title="Masa notunu kaydet">💾</button>
+                </div>
                 <div class="grid" id="menuItemsContainer"></div>
             </div>
         </div>
@@ -1227,6 +1274,7 @@
         let prepCategoryOverrides = {};
         const DEFAULT_PORTION_STOCK = 40;
         let waiterAdisyonlar = {};
+        let tableNotes = {};
         let sysInfo = {};
         let currentTable = null;
         let basket = []; // Henüz gönderilmemiş yerel sepet
@@ -1335,6 +1383,64 @@
 
         function isKitchenCancelableItem(item) {
             return !item?.durum || item.durum === 'mutfakta';
+        }
+
+        function normalizeTableNote(note) {
+            return String(note || '').trim();
+        }
+
+        function getTableNote(tableName) {
+            return normalizeTableNote(tableNotes[String(tableName || '').trim()]);
+        }
+
+        function setLocalTableNote(tableName, note) {
+            const cleanTableName = String(tableName || '').trim();
+            if (!cleanTableName) return;
+            const cleanNote = normalizeTableNote(note);
+            if (cleanNote) {
+                tableNotes[cleanTableName] = cleanNote;
+            } else {
+                delete tableNotes[cleanTableName];
+            }
+        }
+
+        function updateWaiterTableNoteUI(options = {}) {
+            const panel = document.getElementById('waiterTableNotePanel');
+            const input = document.getElementById('waiterTableNoteInput');
+            if (!panel || !input) return;
+            panel.style.display = currentTable ? 'grid' : 'none';
+            if (!currentTable) {
+                input.value = '';
+                return;
+            }
+            if (options.forceInput || document.activeElement !== input) {
+                input.value = getTableNote(currentTable);
+            }
+        }
+
+        function saveWaiterTableNote() {
+            if (!currentTable) {
+                showWaiterToast('Önce masa seçin', 'error');
+                return;
+            }
+            const input = document.getElementById('waiterTableNoteInput');
+            const note = normalizeTableNote(input ? input.value : '');
+            setLocalTableNote(currentTable, note);
+            renderTables();
+            socket.emit('set_table_note', {
+                masa: currentTable,
+                note
+            });
+        }
+
+        const waiterTableNoteInput = document.getElementById('waiterTableNoteInput');
+        if (waiterTableNoteInput) {
+            waiterTableNoteInput.addEventListener('keydown', (event) => {
+                if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                    event.preventDefault();
+                    saveWaiterTableNote();
+                }
+            });
         }
 
         function getLineTotal(item) {
@@ -2314,11 +2420,13 @@
             menuData = data.menu;
             waiterMenuData = buildWaiterMenuData(menuData);
             waiterAdisyonlar = data.adisyonlar || {};
+            tableNotes = data.table_notes || {};
             sysInfo = data.system;
             prepPanels = Array.isArray(data.prep_panels) ? data.prep_panels : [];
             prepCategoryOverrides = data.prep_category_overrides || {};
             renderTables();
             renderCategories();
+            updateWaiterTableNoteUI();
         });
 
         socket.on('system_info', (data) => {
@@ -2401,9 +2509,13 @@
 
         socket.on('masa_update', (data) => {
             waiterAdisyonlar[data.masa] = data.items || [];
+            if (Object.prototype.hasOwnProperty.call(data, 'note')) {
+                setLocalTableNote(data.masa, data.note);
+            }
             if (currentTable === data.masa) {
                 serverItems = data.items || [];
                 updateBasketDisplay();
+                updateWaiterTableNoteUI();
             }
             renderTables();
             updateActiveTableAlert();
@@ -2411,20 +2523,37 @@
 
         socket.on('masa_selected', (data) => {
             waiterAdisyonlar[data.masa] = data.items || [];
+            if (Object.prototype.hasOwnProperty.call(data, 'note')) {
+                setLocalTableNote(data.masa, data.note);
+            }
             if (currentTable === data.masa) {
                 serverItems = data.items || [];
                 updateBasketDisplay();
+                updateWaiterTableNoteUI();
             }
             renderTables();
             updateActiveTableAlert();
         });
 
+        socket.on('table_note_update', (data) => {
+            if (!data || !data.masa) return;
+            setLocalTableNote(data.masa, data.note || '');
+            if (currentTable === data.masa) {
+                updateWaiterTableNoteUI({
+                    forceInput: document.activeElement !== document.getElementById('waiterTableNoteInput')
+                });
+            }
+            renderTables();
+        });
+
         socket.on('payment_completed', (data) => {
             if (!data || !data.masa || data.is_partial) return;
             waiterAdisyonlar[data.masa] = [];
+            setLocalTableNote(data.masa, '');
             if (currentTable === data.masa) {
                 serverItems = [];
                 updateBasketDisplay();
+                updateWaiterTableNoteUI();
             }
             renderTables();
             updateActiveTableAlert();
@@ -2476,8 +2605,9 @@
         function createTableButton(tableName, label) {
             const div = document.createElement('div');
             const isReady = hasReadyItems(tableName);
+            const hasNote = !!getTableNote(tableName);
             div.className = 'btn-item' + (isReady ? ' order-ready' : '');
-            div.innerHTML = `<span>${escapeHtml(label)}</span>${isReady ? '<span class="table-ready-badge">HAZIR</span>' : ''}`;
+            div.innerHTML = `<span>${escapeHtml(label)}</span>${isReady ? '<span class="table-ready-badge">HAZIR</span>' : ''}${hasNote ? '<span class="table-note-badge">NOT</span>' : ''}`;
             div.onclick = () => selectMainTable(tableName);
             return div;
         }
@@ -2655,6 +2785,7 @@
             showScreen('order-screen');
             document.getElementById('basketPanel').style.display = 'flex';
             updateBasketDisplay();
+            updateWaiterTableNoteUI();
             socket.emit('select_masa', { masa: name });
         }
 
@@ -2664,6 +2795,7 @@
             if (id === 'table-screen') {
                 document.getElementById('basketPanel').style.display = 'none';
                 basket = [];
+                updateWaiterTableNoteUI();
             }
         }
 

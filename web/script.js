@@ -10,6 +10,7 @@ let menuData = {};
 let portionStock = {};
 let dailyMeals = { items: [], categories: [] };
 let adisyonlar = {};
+let tableNotes = {};
 let currentMasa = null;
 let currentItems = [];
 let currentTotal = 0;
@@ -63,6 +64,25 @@ function isPaketMasa(masa) {
 
 function getTableButtonId(masa) {
     return `btn-${encodeURIComponent(String(masa || '').trim()).replace(/%/g, '_')}`;
+}
+
+function normalizeTableNote(note) {
+    return String(note || '').trim();
+}
+
+function getTableNote(masa) {
+    return normalizeTableNote(tableNotes[String(masa || '').trim()]);
+}
+
+function setLocalTableNote(masa, note) {
+    const masaAdi = String(masa || '').trim();
+    if (!masaAdi) return;
+    const cleanNote = normalizeTableNote(note);
+    if (cleanNote) {
+        tableNotes[masaAdi] = cleanNote;
+    } else {
+        delete tableNotes[masaAdi];
+    }
 }
 
 function isMenuItemVisible(item) {
@@ -224,6 +244,9 @@ const elements = {
     staffingActiveWaiters: null,
     staffingNeededWaiters: null,
     currentMasaLabel: null,
+    tableNotePanel: null,
+    tableNoteInput: null,
+    btnSaveTableNote: null,
     orderList: null,
     totalAmount: null,
     complimentaryAmount: null,
@@ -359,6 +382,7 @@ function connectToServer() {
     socket.on('adisyonlar_update', onAdisyonlarUpdate);
     socket.on('masa_selected', onMasaSelected);
     socket.on('masa_update', onMasaUpdate);
+    socket.on('table_note_update', onTableNoteUpdate);
     socket.on('payment_completed', onPaymentCompleted);
     socket.on('incoming_call', onIncomingCall);
     socket.on('success', onSuccess);
@@ -480,6 +504,7 @@ function onInitialData(data) {
     portionStock = data.portion_stock || {};
     dailyMeals = data.daily_meals || dailyMeals;
     adisyonlar = data.adisyonlar || {};
+    tableNotes = data.table_notes || {};
     activeShift = data.active_shift || activeShift || null;
 
     const currentRole = captureTerminalRoleFromLocation();
@@ -489,6 +514,7 @@ function onInitialData(data) {
     renderMenu();
     renderTables();
     updateVardiyaUI(); // İlk yüklemede vardiya durumunu yansıt
+    updateTableNoteUI();
     syncSelectedKasa(); // Sunucudan kasa secimine gore guncel vardiyayi tekrar iste
 
     applyRoleProfile(currentRole);
@@ -666,8 +692,12 @@ function onMasaSelected(data) {
     currentMasa = data.masa;
     currentItems = data.items || [];
     currentTotal = Number(data.total ?? getPayableTotal(currentItems)) || 0;
+    if (Object.prototype.hasOwnProperty.call(data, 'note')) {
+        setLocalTableNote(data.masa, data.note);
+    }
 
     updateOrderDisplay();
+    updateTableNoteUI();
     updateCourierArea();
     updateQuickSaleUI();
 }
@@ -677,17 +707,30 @@ function onMasaUpdate(data) {
 
     // Update adisyonlar
     adisyonlar[data.masa] = data.items || [];
+    if (Object.prototype.hasOwnProperty.call(data, 'note')) {
+        setLocalTableNote(data.masa, data.note);
+    }
 
     // If this is our current masa, update display
     if (data.masa === currentMasa) {
         currentItems = data.items || [];
         currentTotal = Number(data.total ?? getPayableTotal(currentItems)) || 0;
         updateOrderDisplay();
+        updateTableNoteUI();
     }
 
     // Update table buttons
     updateTableButton(data.masa);
     updateStaffingSummary();
+}
+
+function onTableNoteUpdate(data) {
+    if (!data || !data.masa) return;
+    setLocalTableNote(data.masa, data.note || '');
+    updateTableButton(data.masa);
+    if (data.masa === currentMasa) {
+        updateTableNoteUI({ forceInput: document.activeElement !== elements.tableNoteInput });
+    }
 }
 
 function onPaymentCompleted(data) {
@@ -697,6 +740,7 @@ function onPaymentCompleted(data) {
     // Clear adisyon only when the whole account is closed.
     if (!data.is_partial) {
         adisyonlar[data.masa] = [];
+        setLocalTableNote(data.masa, '');
     }
 
     if (data.masa === currentMasa) {
@@ -705,6 +749,7 @@ function onPaymentCompleted(data) {
             currentItems = [];
             currentTotal = 0;
             updateOrderDisplay();
+            updateTableNoteUI();
         }
         if (typeof closePaymentModal === 'function') {
             closePaymentModal();
@@ -736,6 +781,35 @@ function onAdisyonlarUpdate(data) {
         updateOrderDisplay();
     }
     updateStaffingSummary();
+}
+
+function updateTableNoteUI(options = {}) {
+    if (!elements.tableNotePanel || !elements.tableNoteInput) return;
+    const hasMasa = !!currentMasa;
+    elements.tableNotePanel.style.display = hasMasa ? 'grid' : 'none';
+    if (!hasMasa) {
+        elements.tableNoteInput.value = '';
+        return;
+    }
+
+    const shouldUpdateInput = options.forceInput || document.activeElement !== elements.tableNoteInput;
+    if (shouldUpdateInput) {
+        elements.tableNoteInput.value = getTableNote(currentMasa);
+    }
+}
+
+function saveCurrentTableNote() {
+    if (!currentMasa) {
+        showNotification('Lütfen önce masa seçiniz!', 'warning');
+        return;
+    }
+    const note = elements.tableNoteInput ? elements.tableNoteInput.value.trim() : '';
+    setLocalTableNote(currentMasa, note);
+    updateTableButton(currentMasa);
+    socket.emit('set_table_note', {
+        masa: currentMasa,
+        note
+    });
 }
 
 function onNewOnlineOrder(data) {
@@ -1582,6 +1656,19 @@ function renderTables() {
     updateStaffingSummary();
 }
 
+function getTableButtonContent(masa, items) {
+    const safeMasa = escapeHtml(masa);
+    const noteBadge = getTableNote(masa)
+        ? '<span class="table-note-badge">NOT</span>'
+        : '';
+    if ((items || []).length > 0) {
+        const total = getPayableTotal(items);
+        const ikramTotal = getComplimentaryTotal(items);
+        return `<div>${safeMasa}</div><div>${total.toFixed(2)} TL</div>${ikramTotal > 0 ? `<small>İkram ${ikramTotal.toFixed(2)}</small>` : ''}${noteBadge}`;
+    }
+    return `<div>${safeMasa}</div>${noteBadge}`;
+}
+
 function createTableButton(masa, isPaket) {
     const btn = document.createElement('button');
     btn.className = 'table-btn';
@@ -1592,14 +1679,13 @@ function createTableButton(masa, isPaket) {
     }
 
     const items = adisyonlar[masa] || [];
-    const total = getPayableTotal(items);
-    const ikramTotal = getComplimentaryTotal(items);
+    btn.classList.toggle('has-note', !!getTableNote(masa));
 
     if (items.length > 0) {
         btn.classList.add('occupied');
-        btn.innerHTML = `<div>${masa}</div><div>${total.toFixed(2)} TL</div>${ikramTotal > 0 ? `<small>İkram ${ikramTotal.toFixed(2)}</small>` : ''}`;
+        btn.innerHTML = getTableButtonContent(masa, items);
     } else {
-        btn.textContent = masa;
+        btn.innerHTML = getTableButtonContent(masa, items);
     }
 
     btn.onclick = () => selectMasa(masa);
@@ -1614,15 +1700,14 @@ function updateTableButton(masa) {
     if (!btn) return;
 
     const items = adisyonlar[masa] || [];
-    const total = getPayableTotal(items);
-    const ikramTotal = getComplimentaryTotal(items);
+    btn.classList.toggle('has-note', !!getTableNote(masa));
 
     if (items.length > 0) {
         btn.classList.add('occupied');
-        btn.innerHTML = `<div>${masa}</div><div>${total.toFixed(2)} TL</div>${ikramTotal > 0 ? `<small>İkram ${ikramTotal.toFixed(2)}</small>` : ''}`;
+        btn.innerHTML = getTableButtonContent(masa, items);
     } else {
         btn.classList.remove('occupied');
-        btn.textContent = masa;
+        btn.innerHTML = getTableButtonContent(masa, items);
     }
 }
 
@@ -1647,6 +1732,7 @@ function selectMasa(masa) {
     if (elements.currentMasaLabel) {
         elements.currentMasaLabel.textContent = masa;
     }
+    updateTableNoteUI();
 
     // Reset selection on masa switch
     selectedItemKeys = [];
@@ -1688,7 +1774,12 @@ function updateOrderDisplay() {
             const unitChip = row.isSplitUnit
                 ? `<span class="order-unit-chip">${row.unitNumber}/${row.unitCount}</span>`
                 : '';
-            const canCancelFromRow = !row.isSplitUnit && isKitchenCancelableItem(item) && item.uid;
+            const canCancelFromRow = isKitchenCancelableItem(item)
+                && item.uid
+                && (!row.isSplitUnit || row.unitNumber === 1);
+            const cancelTitle = row.isSplitUnit
+                ? 'Bu ürün satırının tamamını iptal eder'
+                : 'Siparişi iptal et';
 
             if (isIkram) {
                 orderItem.classList.add('ikram');
@@ -1707,7 +1798,8 @@ function updateOrderDisplay() {
                 <div class="order-item-actions">
                     <div class="order-item-price">${isIkram ? `İKRAM<br><small>${listTotal.toFixed(2)} TL</small>` : `${itemTotal.toFixed(2)} TL`}</div>
                     ${canCancelFromRow ? `
-                        <button class="btn-cancel-small" onclick="cancelItem('${item.uid}', event)" 
+                        <button class="btn-cancel-small" onclick="cancelItem('${item.uid}', event)"
+                                title="${escapeHtml(cancelTitle)}"
                                 style="background: #e74c3c; color: white; border: none; padding: 4px 8px; border-radius: 4px; font-size: 10px; cursor: pointer;">
                             İPTAL
                         </button>
@@ -2616,6 +2708,19 @@ function setupEventListeners() {
 
     if (elements.btnToggleOrderEntry) {
         elements.btnToggleOrderEntry.onclick = () => toggleCashierOrderEntry();
+    }
+
+    if (elements.btnSaveTableNote) {
+        elements.btnSaveTableNote.onclick = () => saveCurrentTableNote();
+    }
+
+    if (elements.tableNoteInput) {
+        elements.tableNoteInput.addEventListener('keydown', (event) => {
+            if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                event.preventDefault();
+                saveCurrentTableNote();
+            }
+        });
     }
 
     if (elements.btnCari) {

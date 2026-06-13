@@ -452,6 +452,7 @@
         let authRoles = {};
         let authPages = {};
         let currentUsers = [];
+        let editingUserId = '';
         const dayLabels = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 
         function escapeHtml(value) {
@@ -486,31 +487,64 @@
             setTimeout(() => t.style.display = 'none', 3000);
         }
 
-        async function loadAuthUsers() {
-            const res = await fetch('/api/auth/users');
-            const data = await res.json();
-            if (!data.success) {
-                showToast(data.error || 'Kullanıcılar yüklenemedi', 'error');
-                return;
+        async function readJsonResponse(res) {
+            const text = await res.text();
+            if (!text) return {};
+            try {
+                return JSON.parse(text);
+            } catch (error) {
+                if (res.redirected || (res.url || '').includes('/login')) {
+                    throw new Error('Oturum süresi dolmuş. Lütfen tekrar giriş yapın.');
+                }
+                throw new Error('Sunucudan beklenmeyen yanıt alındı.');
             }
-            authRoles = data.roles || {};
-            authPages = data.pages || {};
-            currentUsers = data.users || [];
-            renderRoleSelect();
-            renderPermissionChecks();
-            renderDays();
-            renderUsersTable();
-            toggleScheduleInputs();
+        }
+
+        function findAuthUser(id) {
+            return currentUsers.find(user => String(user.id) === String(id));
+        }
+
+        async function loadAuthUsers() {
+            try {
+                const selectedUserId = document.getElementById('u_id').value || editingUserId;
+                const res = await fetch('/api/auth/users');
+                const data = await readJsonResponse(res);
+                if (!res.ok || !data.success) {
+                    throw new Error(data.error || 'Kullanıcılar yüklenemedi');
+                }
+                authRoles = data.roles || {};
+                authPages = data.pages || {};
+                currentUsers = data.users || [];
+                renderRoleSelect();
+                renderDays();
+                const selectedUser = selectedUserId ? findAuthUser(selectedUserId) : null;
+                if (selectedUser) {
+                    populateUserForm(selectedUser, false);
+                } else {
+                    if (selectedUserId) resetUserForm();
+                    renderPermissionChecks();
+                }
+                renderUsersTable();
+                toggleScheduleInputs();
+            } catch (error) {
+                showToast(error.message || 'Kullanıcılar yüklenemedi', 'error');
+            }
         }
 
         function renderRoleSelect() {
             const roleSelect = document.getElementById('u_role');
-            if (!roleSelect || roleSelect.options.length) return;
-            roleSelect.innerHTML = Object.values(authRoles)
+            if (!roleSelect) return;
+            const previousRole = roleSelect.value;
+            const roles = Object.values(authRoles)
                 .sort((a, b) => b.level - a.level)
-                .map(role => `<option value="${role.key}">${escapeHtml(role.label)} (${role.level})</option>`)
-                .join('');
-            if (authRoles.waiter) roleSelect.value = 'waiter';
+            roleSelect.innerHTML = roles.length
+                ? roles.map(role => `<option value="${role.key}">${escapeHtml(role.label)} (${role.level})</option>`).join('')
+                : '<option value="waiter">Garson</option>';
+            if (previousRole && authRoles[previousRole]) {
+                roleSelect.value = previousRole;
+            } else if (authRoles.waiter) {
+                roleSelect.value = 'waiter';
+            }
         }
 
         function renderPermissionChecks(selected = null) {
@@ -518,8 +552,16 @@
             if (!grid) return;
             const role = document.getElementById('u_role').value || 'waiter';
             const rolePermissions = (authRoles[role]?.permissions || []);
-            const selectedSet = new Set(selected || (rolePermissions.includes('*') ? Object.keys(authPages) : rolePermissions));
-            grid.innerHTML = Object.values(authPages).map(page => `
+            const pages = Object.values(authPages);
+            if (!pages.length) {
+                grid.innerHTML = '<div class="hint-text">Yetki sayfaları yüklenemedi.</div>';
+                return;
+            }
+            const selectedPermissions = Array.isArray(selected)
+                ? selected
+                : (rolePermissions.includes('*') ? Object.keys(authPages) : rolePermissions);
+            const selectedSet = new Set(selectedPermissions);
+            grid.innerHTML = pages.map(page => `
                 <label class="perm-check">
                     <input type="checkbox" value="${page.key}" ${selectedSet.has(page.key) ? 'checked' : ''}>
                     ${escapeHtml(page.label)}
@@ -550,6 +592,7 @@
         }
 
         function resetUserForm() {
+            editingUserId = '';
             document.getElementById('u_id').value = '';
             document.getElementById('u_name').value = '';
             document.getElementById('u_pin').value = '';
@@ -576,6 +619,26 @@
             };
         }
 
+        function populateUserForm(user, scrollToForm = true) {
+            editingUserId = String(user.id || '');
+            document.getElementById('u_id').value = editingUserId;
+            document.getElementById('u_name').value = user.name || '';
+            document.getElementById('u_pin').value = '';
+            document.getElementById('u_role').value = user.role || 'waiter';
+            document.getElementById('u_active').checked = user.active !== false;
+            renderPermissionChecks(Array.isArray(user.permissions) ? user.permissions : []);
+            renderDays();
+            const schedule = user.schedule || {};
+            document.getElementById('u_schedule_enabled').checked = !!schedule.enabled;
+            document.getElementById('u_start').value = schedule.start || '00:00';
+            document.getElementById('u_end').value = schedule.end || '23:59';
+            document.querySelectorAll('#daysRow input').forEach(input => {
+                input.checked = (schedule.days || [0, 1, 2, 3, 4, 5, 6]).includes(Number(input.value));
+            });
+            toggleScheduleInputs();
+            if (scrollToForm) window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
         async function saveUser() {
             const payload = {
                 id: document.getElementById('u_id').value,
@@ -589,46 +652,41 @@
             if (!payload.name) return showToast('Kullanıcı adı gerekli', 'error');
             if (!payload.id && !payload.pin) return showToast('Yeni kullanıcı için PIN gerekli', 'error');
 
-            const res = await fetch('/api/auth/users', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const data = await res.json();
-            if (!data.success) return showToast(data.error || 'Kullanıcı kaydedilemedi', 'error');
-            resetUserForm();
-            loadAuthUsers();
-            showToast('Kullanıcı kaydedildi');
+            try {
+                const res = await fetch('/api/auth/users', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await readJsonResponse(res);
+                if (!res.ok || !data.success) return showToast(data.error || 'Kullanıcı kaydedilemedi', 'error');
+                resetUserForm();
+                loadAuthUsers();
+                showToast('Kullanıcı kaydedildi');
+            } catch (error) {
+                showToast(error.message || 'Kullanıcı kaydedilemedi', 'error');
+            }
         }
 
         function editUser(id) {
-            const user = currentUsers.find(u => u.id === id);
-            if (!user) return;
-            document.getElementById('u_id').value = user.id;
-            document.getElementById('u_name').value = user.name || '';
-            document.getElementById('u_pin').value = '';
-            document.getElementById('u_role').value = user.role || 'waiter';
-            document.getElementById('u_active').checked = !!user.active;
-            renderPermissionChecks(user.permissions || []);
-            const schedule = user.schedule || {};
-            document.getElementById('u_schedule_enabled').checked = !!schedule.enabled;
-            document.getElementById('u_start').value = schedule.start || '00:00';
-            document.getElementById('u_end').value = schedule.end || '23:59';
-            document.querySelectorAll('#daysRow input').forEach(input => {
-                input.checked = (schedule.days || [0, 1, 2, 3, 4, 5, 6]).includes(Number(input.value));
-            });
-            toggleScheduleInputs();
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            const user = findAuthUser(id);
+            if (!user) return showToast('Kullanıcı bulunamadı', 'error');
+            populateUserForm(user);
         }
 
         async function deleteUser(id) {
-            const user = currentUsers.find(u => u.id === id);
+            const user = findAuthUser(id);
             if (!user || !confirm(`${user.name} kullanıcısını silmek istiyor musunuz?`)) return;
-            const res = await fetch('/api/auth/users/' + encodeURIComponent(id), { method: 'DELETE' });
-            const data = await res.json();
-            if (!data.success) return showToast(data.error || 'Kullanıcı silinemedi', 'error');
-            loadAuthUsers();
-            showToast('Kullanıcı silindi');
+            try {
+                const res = await fetch('/api/auth/users/' + encodeURIComponent(id), { method: 'DELETE' });
+                const data = await readJsonResponse(res);
+                if (!res.ok || !data.success) return showToast(data.error || 'Kullanıcı silinemedi', 'error');
+                if (String(editingUserId) === String(id)) resetUserForm();
+                loadAuthUsers();
+                showToast('Kullanıcı silindi');
+            } catch (error) {
+                showToast(error.message || 'Kullanıcı silinemedi', 'error');
+            }
         }
 
         function scheduleSummary(schedule = {}) {
@@ -639,6 +697,10 @@
 
         function renderUsersTable() {
             const tbody = document.getElementById('usersTable');
+            if (!currentUsers.length) {
+                tbody.innerHTML = '<tr><td colspan="5">Kullanıcı bulunamadı.</td></tr>';
+                return;
+            }
             tbody.innerHTML = currentUsers.map(user => `
                 <tr>
                     <td><strong>${escapeHtml(user.name)}</strong></td>
@@ -646,11 +708,23 @@
                     <td><span class="status-pill ${user.active ? 'active' : 'passive'}">${user.active ? 'Aktif' : 'Pasif'}</span></td>
                     <td>${escapeHtml(scheduleSummary(user.schedule))}</td>
                     <td>
-                        <button class="btn-delete" style="background:#2563eb;" onclick="editUser('${user.id}')">Düzenle</button>
-                        <button class="btn-delete" onclick="deleteUser('${user.id}')">Sil</button>
+                        <button class="btn-delete" style="background:#2563eb;" data-user-action="edit" data-user-id="${escapeHtml(user.id)}">Düzenle</button>
+                        <button class="btn-delete" data-user-action="delete" data-user-id="${escapeHtml(user.id)}">Sil</button>
                     </td>
                 </tr>
             `).join('');
+        }
+
+        function initUserTableActions() {
+            const tbody = document.getElementById('usersTable');
+            if (!tbody) return;
+            tbody.addEventListener('click', (event) => {
+                const button = event.target.closest('[data-user-action]');
+                if (!button) return;
+                const id = button.dataset.userId;
+                if (button.dataset.userAction === 'edit') editUser(id);
+                if (button.dataset.userAction === 'delete') deleteUser(id);
+            });
         }
 
         async function loadWaiters() {
@@ -820,7 +894,10 @@
             }
         }
 
-        window.onload = loadAuthUsers;
+        window.addEventListener('DOMContentLoaded', () => {
+            initUserTableActions();
+            loadAuthUsers();
+        });
     </script>
 
 </body>
