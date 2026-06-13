@@ -108,6 +108,8 @@ SERVER_PORT = 5555
 AUTH_COOKIE_NAME = "ff_auth_token"
 AUTH_SESSION_DAYS = 30
 DASHBOARD_STATUS_TIMEOUT_SECONDS = 0.45
+DEFAULT_PRINTER_ALERT_MODE = "escpos_buzzer"
+PRINTER_ALERT_MODES = {"escpos_buzzer", "cash_drawer", "both"}
 
 AUTH_PAGE_DEFINITIONS = {
     "dashboard": {
@@ -1045,7 +1047,9 @@ class RestaurantServer:
                 "enabled": False,
                 "ip": "",
                 "port": 9100,
-                "copies": 1
+                "copies": 1,
+                "alert_enabled": True,
+                "alert_mode": DEFAULT_PRINTER_ALERT_MODE
             }
             for panel_id in PREP_PANELS.keys()
         }
@@ -1055,7 +1059,9 @@ class RestaurantServer:
             "enabled": False,
             "ip": "",
             "port": 9100,
-            "copies": 1
+            "copies": 1,
+            "alert_enabled": True,
+            "alert_mode": DEFAULT_PRINTER_ALERT_MODE
         }
 
     def coerce_json_setting(self, value, fallback):
@@ -1193,9 +1199,23 @@ class RestaurantServer:
                 "enabled": self.bool_from_setting(raw.get("enabled"), default["enabled"]),
                 "ip": str(raw.get("ip") or default["ip"]).strip()[:80],
                 "port": self.bounded_int(raw.get("port"), default["port"], 1, 65535),
-                "copies": self.bounded_int(raw.get("copies"), default["copies"], 1, 5)
+                "copies": self.bounded_int(raw.get("copies"), default["copies"], 1, 5),
+                "alert_enabled": self.bool_from_setting(
+                    raw.get("alert_enabled"),
+                    default["alert_enabled"]
+                ),
+                "alert_mode": self.sanitize_printer_alert_mode(
+                    raw.get("alert_mode"),
+                    default["alert_mode"]
+                )
             }
         return sanitized
+
+    def sanitize_printer_alert_mode(self, value, default=DEFAULT_PRINTER_ALERT_MODE):
+        mode = str(value or default).strip().lower()
+        if mode in PRINTER_ALERT_MODES:
+            return mode
+        return default
 
     def sanitize_receipt_printer_settings(self, printer_data=None):
         default = self.get_default_receipt_printer_settings()
@@ -1207,7 +1227,15 @@ class RestaurantServer:
             "enabled": self.bool_from_setting(printer_data.get("enabled"), default["enabled"]),
             "ip": str(printer_data.get("ip") or default["ip"]).strip()[:80],
             "port": self.bounded_int(printer_data.get("port"), default["port"], 1, 65535),
-            "copies": self.bounded_int(printer_data.get("copies"), default["copies"], 1, 5)
+            "copies": self.bounded_int(printer_data.get("copies"), default["copies"], 1, 5),
+            "alert_enabled": self.bool_from_setting(
+                printer_data.get("alert_enabled"),
+                default["alert_enabled"]
+            ),
+            "alert_mode": self.sanitize_printer_alert_mode(
+                printer_data.get("alert_mode"),
+                default["alert_mode"]
+            )
         }
 
     def get_prep_panel_info(self, panel_id):
@@ -1612,13 +1640,17 @@ class RestaurantServer:
             "receipt_printer_enabled": "HAYIR",
             "receipt_printer_ip": "",
             "receipt_printer_port": "9100",
-            "receipt_printer_copies": "1"
+            "receipt_printer_copies": "1",
+            "receipt_printer_alert_enabled": "EVET",
+            "receipt_printer_alert_mode": DEFAULT_PRINTER_ALERT_MODE
         }
         for panel_id in PREP_PANELS.keys():
             defaults[f"prep_printer_{panel_id}_enabled"] = "HAYIR"
             defaults[f"prep_printer_{panel_id}_ip"] = ""
             defaults[f"prep_printer_{panel_id}_port"] = "9100"
             defaults[f"prep_printer_{panel_id}_copies"] = "1"
+            defaults[f"prep_printer_{panel_id}_alert_enabled"] = "EVET"
+            defaults[f"prep_printer_{panel_id}_alert_mode"] = DEFAULT_PRINTER_ALERT_MODE
         
         if os.path.exists(SETTINGS_FILE):
             try:
@@ -1665,7 +1697,9 @@ class RestaurantServer:
                     "enabled": defaults.get(f"prep_printer_{panel_id}_enabled"),
                     "ip": defaults.get(f"prep_printer_{panel_id}_ip"),
                     "port": defaults.get(f"prep_printer_{panel_id}_port"),
-                    "copies": defaults.get(f"prep_printer_{panel_id}_copies")
+                    "copies": defaults.get(f"prep_printer_{panel_id}_copies"),
+                    "alert_enabled": defaults.get(f"prep_printer_{panel_id}_alert_enabled"),
+                    "alert_mode": defaults.get(f"prep_printer_{panel_id}_alert_mode")
                 }
         self.prep_printers = self.sanitize_prep_printer_settings(printer_json)
 
@@ -1675,7 +1709,9 @@ class RestaurantServer:
                 "enabled": defaults.get("receipt_printer_enabled"),
                 "ip": defaults.get("receipt_printer_ip"),
                 "port": defaults.get("receipt_printer_port"),
-                "copies": defaults.get("receipt_printer_copies")
+                "copies": defaults.get("receipt_printer_copies"),
+                "alert_enabled": defaults.get("receipt_printer_alert_enabled"),
+                "alert_mode": defaults.get("receipt_printer_alert_mode")
             }
         self.receipt_printer = self.sanitize_receipt_printer_settings(receipt_json)
         
@@ -1734,6 +1770,8 @@ class RestaurantServer:
                     f.write(f"prep_printer_{panel_id}_ip:{printer.get('ip', '')}\n")
                     f.write(f"prep_printer_{panel_id}_port:{printer.get('port', 9100)}\n")
                     f.write(f"prep_printer_{panel_id}_copies:{printer.get('copies', 1)}\n")
+                    f.write(f"prep_printer_{panel_id}_alert_enabled:{'EVET' if printer.get('alert_enabled') else 'HAYIR'}\n")
+                    f.write(f"prep_printer_{panel_id}_alert_mode:{printer.get('alert_mode', DEFAULT_PRINTER_ALERT_MODE)}\n")
                 f.write(
                     "receipt_printer_json:"
                     f"{json.dumps(self.receipt_printer, ensure_ascii=False)}\n"
@@ -1742,6 +1780,8 @@ class RestaurantServer:
                 f.write(f"receipt_printer_ip:{self.receipt_printer.get('ip', '')}\n")
                 f.write(f"receipt_printer_port:{self.receipt_printer.get('port', 9100)}\n")
                 f.write(f"receipt_printer_copies:{self.receipt_printer.get('copies', 1)}\n")
+                f.write(f"receipt_printer_alert_enabled:{'EVET' if self.receipt_printer.get('alert_enabled') else 'HAYIR'}\n")
+                f.write(f"receipt_printer_alert_mode:{self.receipt_printer.get('alert_mode', DEFAULT_PRINTER_ALERT_MODE)}\n")
                 f.write(f"verify_mode:{self.verify_mode}\n")
                 f.write(f"online_orders_enabled:{'EVET' if self.online_orders_enabled else 'HAYIR'}\n")
                 f.write(f"va_max_duration:{self.va_max_duration}\n")
@@ -3264,7 +3304,21 @@ class RestaurantServer:
         lines.extend(["=" * width, "Afiyet Olsun".center(width), "", "", ""])
         return "\n".join(lines)
 
-    def encode_thermal_ticket(self, text):
+    def build_thermal_printer_alert_payload(self, printer):
+        if not printer.get("alert_enabled", True):
+            return b""
+
+        mode = self.sanitize_printer_alert_mode(printer.get("alert_mode"))
+        internal_buzzer = b"\x07\x1bB\x03\x03"
+        drawer_buzzer = b"\x1bp\x00\x32\xfa"
+
+        if mode == "cash_drawer":
+            return drawer_buzzer
+        if mode == "both":
+            return internal_buzzer + drawer_buzzer
+        return internal_buzzer
+
+    def encode_thermal_ticket(self, text, alert_payload=b""):
         # ESC/POS: init, Turkish code page on many devices, body, paper cut.
         if isinstance(text, bytes):
             payload = text
@@ -3272,7 +3326,7 @@ class RestaurantServer:
         else:
             payload = text.encode("cp1254", errors="replace")
             feed = b"\n\n\n"
-        return b"\x1b@\x1bR\x0c\x1bt\x30" + payload + feed + b"\x1dV\x00"
+        return b"\x1b@\x1bR\x0c\x1bt\x30" + payload + feed + b"\x1dV\x00" + alert_payload
 
     def send_thermal_text_to_ip_printer(self, printer, text, label):
         if not printer.get("enabled"):
@@ -3285,7 +3339,10 @@ class RestaurantServer:
 
         port = self.bounded_int(printer.get("port"), 9100, 1, 65535)
         copies = self.bounded_int(printer.get("copies"), 1, 1, 5)
-        payload = self.encode_thermal_ticket(text)
+        payload = self.encode_thermal_ticket(
+            text,
+            self.build_thermal_printer_alert_payload(printer)
+        )
 
         def task():
             for copy_index in range(copies):

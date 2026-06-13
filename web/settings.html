@@ -966,6 +966,26 @@
                         <input type="number" id="receiptPrinterCopies" min="1" max="5" placeholder="1">
                     </div>
                 </div>
+                <div class="toggle-row">
+                    <div>
+                        <div class="toggle-label">Fiş Sonrası Uyarı</div>
+                        <div class="toggle-desc">Hesap fişi kesildikten sonra yazıcıdan sesli uyarı gönderir</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="receiptPrinterAlertEnabled">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="form-row" style="margin-top:12px;">
+                    <div class="form-group" style="max-width:360px;">
+                        <label for="receiptPrinterAlertMode">Uyarı Tipi</label>
+                        <select id="receiptPrinterAlertMode" class="settings-select">
+                            <option value="escpos_buzzer">Dahili buzzer</option>
+                            <option value="cash_drawer">RJ11 buzzer / çekmece</option>
+                            <option value="both">İkisi de</option>
+                        </select>
+                    </div>
+                </div>
                 <button class="btn-settings btn-info-s btn-sm" type="button" onclick="copyReceiptPrinterToServicePanels()"
                     style="margin:0 0 4px 0;">
                     🥤🍰 Bu IP'yi İçecek ve Tatlı Yazıcılarına Kopyala
@@ -1638,6 +1658,21 @@
             return Array.isArray(value) ? value.join(', ') : String(value || '');
         }
 
+        function normalizePrinterAlertMode(value) {
+            return ['escpos_buzzer', 'cash_drawer', 'both'].includes(value) ? value : 'escpos_buzzer';
+        }
+
+        function printerAlertModeOptions(selected) {
+            const current = normalizePrinterAlertMode(selected);
+            return [
+                ['escpos_buzzer', 'Dahili buzzer'],
+                ['cash_drawer', 'RJ11 buzzer / çekmece'],
+                ['both', 'İkisi de']
+            ].map(([value, label]) => (
+                `<option value="${value}" ${current === value ? 'selected' : ''}>${label}</option>`
+            )).join('');
+        }
+
         function textToKeywords(value) {
             return String(value || '')
                 .split(/[\n,]+/)
@@ -1694,6 +1729,8 @@
                 document.getElementById('receiptPrinterIp').value = receiptPrinter.ip || '';
                 document.getElementById('receiptPrinterPort').value = receiptPrinter.port || 9100;
                 document.getElementById('receiptPrinterCopies').value = receiptPrinter.copies || 1;
+                document.getElementById('receiptPrinterAlertEnabled').checked = receiptPrinter.alert_enabled !== false;
+                document.getElementById('receiptPrinterAlertMode').value = normalizePrinterAlertMode(receiptPrinter.alert_mode);
                 prepCategoryOverrides = data.prep_category_overrides || {};
                 prepTicketSkipProducts = Array.isArray(data.prep_ticket_skip_products) ? data.prep_ticket_skip_products : ['su'];
                 menuCategories = Array.isArray(data.menu_categories) ? data.menu_categories : [];
@@ -1900,6 +1937,24 @@
                                 <input type="number" id="prep_printer_copies_${panel.id}" min="1" max="5" value="${escapeHtml(printer.copies || 1)}">
                             </div>
                         </div>
+                        <div class="toggle-row">
+                            <div>
+                                <div class="toggle-label">Fiş Sonrası Uyarı</div>
+                                <div class="toggle-desc">Bu reyon fişi kesildikten sonra yazıcıdan sesli uyarı gönderir</div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="prep_printer_alert_enabled_${panel.id}" ${printer.alert_enabled !== false ? 'checked' : ''}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="form-row" style="margin-top:12px;">
+                            <div class="form-group" style="max-width:360px;">
+                                <label>Uyarı Tipi</label>
+                                <select class="settings-select" id="prep_printer_alert_mode_${panel.id}">
+                                    ${printerAlertModeOptions(printer.alert_mode)}
+                                </select>
+                            </div>
+                        </div>
                     </div>
                 `;
             }).join('');
@@ -1996,7 +2051,9 @@
                     enabled: document.getElementById(`prep_printer_enabled_${panel.id}`)?.checked || false,
                     ip: document.getElementById(`prep_printer_ip_${panel.id}`)?.value.trim() || '',
                     port: parseInt(document.getElementById(`prep_printer_port_${panel.id}`)?.value) || 9100,
-                    copies: parseInt(document.getElementById(`prep_printer_copies_${panel.id}`)?.value) || 1
+                    copies: parseInt(document.getElementById(`prep_printer_copies_${panel.id}`)?.value) || 1,
+                    alert_enabled: document.getElementById(`prep_printer_alert_enabled_${panel.id}`)?.checked !== false,
+                    alert_mode: normalizePrinterAlertMode(document.getElementById(`prep_printer_alert_mode_${panel.id}`)?.value)
                 };
             });
 
@@ -2016,7 +2073,9 @@
                 enabled: document.getElementById('receiptPrinterEnabled')?.checked || false,
                 ip: document.getElementById('receiptPrinterIp')?.value.trim() || '',
                 port: parseInt(document.getElementById('receiptPrinterPort')?.value) || 9100,
-                copies: parseInt(document.getElementById('receiptPrinterCopies')?.value) || 1
+                copies: parseInt(document.getElementById('receiptPrinterCopies')?.value) || 1,
+                alert_enabled: document.getElementById('receiptPrinterAlertEnabled')?.checked !== false,
+                alert_mode: normalizePrinterAlertMode(document.getElementById('receiptPrinterAlertMode')?.value)
             };
         }
 
@@ -2031,10 +2090,14 @@
                 const ip = document.getElementById(`prep_printer_ip_${panelId}`);
                 const port = document.getElementById(`prep_printer_port_${panelId}`);
                 const copies = document.getElementById(`prep_printer_copies_${panelId}`);
+                const alertEnabled = document.getElementById(`prep_printer_alert_enabled_${panelId}`);
+                const alertMode = document.getElementById(`prep_printer_alert_mode_${panelId}`);
                 if (enabled) enabled.checked = true;
                 if (ip) ip.value = printer.ip;
                 if (port) port.value = printer.port;
                 if (copies) copies.value = printer.copies;
+                if (alertEnabled) alertEnabled.checked = printer.alert_enabled !== false;
+                if (alertMode) alertMode.value = normalizePrinterAlertMode(printer.alert_mode);
             });
             showToast('İçecek ve Tatlı yazıcıları kasadaki IP ile eşlendi.', 'success');
         }
