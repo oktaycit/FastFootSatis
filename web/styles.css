@@ -1500,6 +1500,10 @@ body.order-terminal .cashier-quick-sale {
     grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.action-grid-five {
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+}
+
 .split-actions {
     margin-bottom: 8px;
 }
@@ -1572,6 +1576,10 @@ body.order-terminal .cashier-quick-sale {
 
 .action-btn-register {
     background: #334155;
+}
+
+.action-btn-reservations {
+    background: #7c3aed;
 }
 
 .action-btn-settings {
