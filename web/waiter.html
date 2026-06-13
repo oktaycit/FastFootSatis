@@ -1723,14 +1723,17 @@
                 && getBasketQuantity(item) > 0;
         }
 
-        function getPlateComboTargetPrice(item, totalPortions) {
-            const exactPrice = getBasketPortionPrice(item, totalPortions);
-            if (exactPrice !== null) return exactPrice;
+        function getPlateComboFullPrice(item) {
             const fullPrice = getBasketPortionPrice(item, 1) || Number(item?.basePrice || 0);
-            if (Number.isFinite(fullPrice) && fullPrice > 0) {
-                return roundMoney(fullPrice * totalPortions);
-            }
-            return 0;
+            return Number.isFinite(fullPrice) && fullPrice > 0 ? roundMoney(fullPrice) : 0;
+        }
+
+        function getPlateComboTargetPrice(items, totalPortions) {
+            const fullPrices = (items || [])
+                .map(getPlateComboFullPrice)
+                .filter(price => price > 0);
+            if (!fullPrices.length) return 0;
+            return roundMoney(Math.max(...fullPrices) * totalPortions);
         }
 
         function refreshPlateComboPricing() {
@@ -1740,9 +1743,8 @@
             basket.forEach(item => {
                 if (!isDailyMealPlateComboItem(item)) return;
                 const plateKey = getPlateGroupKey(item.plateGroup);
-                const categoryKey = normalizeMenuText(item.category || item.name || '');
-                if (!plateKey || !categoryKey) return;
-                const key = `${plateKey}|${categoryKey}`;
+                if (!plateKey) return;
+                const key = plateKey;
                 if (!groups.has(key)) groups.set(key, []);
                 groups.get(key).push(item);
             });
@@ -1754,7 +1756,7 @@
                 }, 0));
                 if (totalPortions <= 0.5) return;
 
-                const targetTotal = getPlateComboTargetPrice(items[0], totalPortions);
+                const targetTotal = getPlateComboTargetPrice(items, totalPortions);
                 if (!targetTotal) return;
 
                 items.forEach(item => {

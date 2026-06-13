@@ -1399,6 +1399,25 @@ class RestaurantServer:
             return round(full_price * target_amount, 2)
         return 0.0
 
+    def daily_meal_full_portion_price(self, category):
+        return self.daily_meal_portion_price(category, 1)
+
+    def daily_meal_plate_combo_price(self, categories, portion_amount):
+        full_prices = [
+            self.daily_meal_full_portion_price(category)
+            for category in categories
+        ]
+        full_prices = [price for price in full_prices if price > 0]
+        if not full_prices:
+            return 0.0
+        try:
+            target_amount = round(float(portion_amount or 0), 3)
+        except Exception:
+            target_amount = 0
+        if target_amount <= 0:
+            return 0.0
+        return round(max(full_prices) * target_amount, 2)
+
     def normalize_plate_combo_pricing(self, order_items):
         normalized_items = [dict(item) if isinstance(item, dict) else item for item in (order_items or [])]
         grouped = defaultdict(list)
@@ -1417,7 +1436,7 @@ class RestaurantServer:
             portions = self.get_portion_units_for_order(urun, item.get('adet', item.get('quantity', 1)))
             if portions <= 0:
                 continue
-            grouped[(plate_key, self._normalize_product_key(category))].append({
+            grouped[plate_key].append({
                 'item': item,
                 'category': category,
                 'portions': portions
@@ -1429,7 +1448,10 @@ class RestaurantServer:
             total_portions = round(sum(entry['portions'] for entry in entries), 3)
             if total_portions <= 0.5:
                 continue
-            target_total = self.daily_meal_portion_price(entries[0]['category'], total_portions)
+            target_total = self.daily_meal_plate_combo_price(
+                [entry['category'] for entry in entries],
+                total_portions
+            )
             if target_total <= 0:
                 continue
 
