@@ -40,6 +40,7 @@ DEPLOY_EXCLUDES = \
 	--exclude 'auth_sessions.json' \
 	--exclude 'menu_meta.json' \
 	--exclude 'table_notes.json' \
+	--exclude 'reservations.json' \
 	--exclude 'portion_stock*.json' \
 	--exclude 'gunluk_yemekler.txt' \
 	--exclude 'gunluk_yemekler/' \

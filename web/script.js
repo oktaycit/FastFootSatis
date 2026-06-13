@@ -11,6 +11,9 @@ let portionStock = {};
 let dailyMeals = { items: [], categories: [] };
 let adisyonlar = {};
 let tableNotes = {};
+let reservationsPayload = { reservations: [], active_by_table: {}, active_count: 0, today_count: 0 };
+let reservationFilter = 'active';
+let reservationSearchTerm = '';
 let currentMasa = null;
 let currentItems = [];
 let currentTotal = 0;
@@ -300,6 +303,12 @@ const elements = {
     operationsStatus: null,
     operationsStatusList: null,
     operationsStatusUpdated: null,
+    reservationWidget: null,
+    reservationSummary: null,
+    reservationFilters: null,
+    reservationSearch: null,
+    reservationList: null,
+    btnOpenReservationModal: null,
     quickSaleMasaHint: null,
     btnQuickWater: null,
     btnQuickDessert: null,
@@ -327,6 +336,24 @@ const elements = {
     closeTablePickerModal: null,
     tablePickerGrid: null,
     btnCancelTablePicker: null,
+    reservationModal: null,
+    reservationModalTitle: null,
+    closeReservationModal: null,
+    reservationForm: null,
+    reservationId: null,
+    reservationCustomer: null,
+    reservationPhone: null,
+    reservationSource: null,
+    reservationDate: null,
+    reservationTime: null,
+    reservationTable: null,
+    reservationGuests: null,
+    reservationStatus: null,
+    reservationMenu: null,
+    reservationNote: null,
+    btnCancelReservation: null,
+    btnDeleteReservation: null,
+    btnSaveReservation: null,
 
     // Courier Assignment
     courierAssignmentArea: null,
@@ -395,6 +422,7 @@ function connectToServer() {
     socket.on('masa_selected', onMasaSelected);
     socket.on('masa_update', onMasaUpdate);
     socket.on('table_note_update', onTableNoteUpdate);
+    socket.on('reservations_update', onReservationsUpdate);
     socket.on('payment_completed', onPaymentCompleted);
     socket.on('incoming_call', onIncomingCall);
     socket.on('success', onSuccess);
@@ -520,6 +548,7 @@ function onInitialData(data) {
     dailyMeals = data.daily_meals || dailyMeals;
     adisyonlar = data.adisyonlar || {};
     tableNotes = data.table_notes || {};
+    reservationsPayload = normalizeReservationsPayload(data.reservations);
     activeShift = data.active_shift || activeShift || null;
 
     const currentRole = captureTerminalRoleFromLocation();
@@ -528,6 +557,7 @@ function onInitialData(data) {
     updateSystemInfo();
     renderMenu();
     renderTables();
+    renderReservations();
     updateVardiyaUI(); // İlk yüklemede vardiya durumunu yansıt
     updateTableNoteUI();
     syncSelectedKasa(); // Sunucudan kasa secimine gore guncel vardiyayi tekrar iste
@@ -826,6 +856,229 @@ function saveCurrentTableNote() {
         masa: currentMasa,
         note
     });
+}
+
+function normalizeReservationsPayload(payload) {
+    const data = payload && typeof payload === 'object' ? payload : {};
+    return {
+        success: data.success !== false,
+        today: data.today || getLocalDateValue(),
+        reservations: Array.isArray(data.reservations) ? data.reservations : [],
+        active_by_table: data.active_by_table && typeof data.active_by_table === 'object'
+            ? data.active_by_table
+            : {},
+        active_count: Number(data.active_count || 0),
+        today_count: Number(data.today_count || 0)
+    };
+}
+
+function onReservationsUpdate(data) {
+    reservationsPayload = normalizeReservationsPayload(data);
+    renderReservations();
+    renderTables();
+    if (elements.tablePickerModal?.style.display === 'block') {
+        renderTablePicker();
+    }
+}
+
+function getActiveReservationsForTable(masa) {
+    const tableName = String(masa || '').trim();
+    const list = reservationsPayload.active_by_table?.[tableName];
+    return Array.isArray(list) ? list : [];
+}
+
+function getNextReservationForTable(masa) {
+    return getActiveReservationsForTable(masa)[0] || null;
+}
+
+function getReservationById(id) {
+    return (reservationsPayload.reservations || []).find(item => item.id === id) || null;
+}
+
+function isReservationUpcoming(reservation) {
+    if (!reservation || reservation.status !== 'planlandi') return false;
+    return String(reservation.date || '') >= String(reservationsPayload.today || getLocalDateValue());
+}
+
+function isReservationToday(reservation) {
+    return String(reservation?.date || '') === String(reservationsPayload.today || getLocalDateValue());
+}
+
+function isReservationPast(reservation) {
+    if (!reservation || reservation.status === 'iptal') return false;
+    return String(reservation.date || '') < String(reservationsPayload.today || getLocalDateValue());
+}
+
+function normalizeReservationSearchText(value) {
+    return String(value || '')
+        .trim()
+        .toLocaleLowerCase('tr-TR')
+        .replace(/ı/g, 'i')
+        .replace(/ğ/g, 'g')
+        .replace(/ü/g, 'u')
+        .replace(/ş/g, 's')
+        .replace(/ö/g, 'o')
+        .replace(/ç/g, 'c');
+}
+
+function getReservationSearchHaystack(reservation) {
+    return normalizeReservationSearchText([
+        reservation.customer_name,
+        reservation.phone,
+        reservation.masa,
+        reservation.menu_preferences,
+        reservation.note,
+        reservation.date,
+        reservation.time,
+        reservation.day,
+        reservation.source_label,
+        reservation.status_label
+    ].filter(Boolean).join(' '));
+}
+
+function matchesReservationFilter(reservation) {
+    if (!reservation) return false;
+    if (reservationFilter === 'all') return true;
+    if (reservationFilter === 'today') return isReservationToday(reservation);
+    if (reservationFilter === 'past') return isReservationPast(reservation);
+    if (reservationFilter === 'cancelled') return reservation.status === 'iptal';
+    return isReservationUpcoming(reservation);
+}
+
+function getFilteredReservations() {
+    const search = normalizeReservationSearchText(reservationSearchTerm);
+    return (reservationsPayload.reservations || [])
+        .filter(matchesReservationFilter)
+        .filter(reservation => !search || getReservationSearchHaystack(reservation).includes(search))
+        .sort(compareReservations);
+}
+
+function compareReservations(a, b) {
+    const aKey = `${a?.date || '9999-12-31'} ${a?.time || '23:59'} ${a?.customer_name || ''}`;
+    const bKey = `${b?.date || '9999-12-31'} ${b?.time || '23:59'} ${b?.customer_name || ''}`;
+    return aKey.localeCompare(bKey, 'tr');
+}
+
+function renderReservations() {
+    if (!elements.reservationList) return;
+
+    const todayCount = Number(reservationsPayload.today_count || 0);
+    const activeCount = Number(reservationsPayload.active_count || 0);
+    const totalCount = (reservationsPayload.reservations || []).length;
+    const visibleReservations = getFilteredReservations();
+
+    if (elements.reservationSummary) {
+        elements.reservationSummary.textContent = `Bugün ${todayCount} / Yaklaşan ${activeCount} / Toplam ${totalCount}`;
+    }
+
+    updateReservationFilterButtons();
+
+    if (!visibleReservations.length) {
+        const emptyText = reservationSearchTerm
+            ? 'Aramaya uygun rezervasyon yok'
+            : 'Rezervasyon yok';
+        elements.reservationList.innerHTML = `<div class="reservation-empty">${emptyText}</div>`;
+        return;
+    }
+
+    elements.reservationList.innerHTML = visibleReservations.map(renderReservationRow).join('');
+}
+
+function updateReservationFilterButtons() {
+    if (!elements.reservationFilters) return;
+    elements.reservationFilters.querySelectorAll('button[data-filter]').forEach(button => {
+        const isActive = button.dataset.filter === reservationFilter;
+        button.classList.toggle('active', isActive);
+        button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+}
+
+function getReservationRowClass(reservation) {
+    if (reservation.status === 'iptal') return 'is-cancelled';
+    if (reservation.status === 'geldi') return 'is-arrived';
+    if (isReservationPast(reservation)) return 'is-past';
+    if (isReservationToday(reservation)) return 'is-today';
+    return 'is-active';
+}
+
+function getReservationStatusBadge(reservation) {
+    const label = reservation.status_label || 'Planlandı';
+    return `<span class="reservation-status-badge">${escapeHtml(label)}</span>`;
+}
+
+function renderReservationActions(reservation) {
+    const id = escapeHtml(reservation.id);
+    const quickActions = reservation.status === 'planlandi'
+        ? `
+            <button type="button" data-action="arrived" data-id="${id}">Geldi</button>
+            <button type="button" data-action="cancel" data-id="${id}">İptal</button>
+        `
+        : '';
+    return `
+        <button type="button" data-action="edit" data-id="${id}">Düzenle</button>
+        ${quickActions}
+    `;
+}
+
+function truncateReservationText(value, maxLength = 120) {
+    const text = String(value || '').trim();
+    if (text.length <= maxLength) return text;
+    return `${text.slice(0, maxLength - 1)}…`;
+}
+
+function renderReservationMeta(reservation, dateLabel) {
+    const parts = [
+        dateLabel,
+        reservation.masa,
+        `${Number(reservation.guest_count || 0)} kişi`,
+        reservation.source_label
+    ].filter(Boolean);
+    return escapeHtml(parts.join(' · '));
+}
+
+function renderReservationExtra(reservation) {
+    const rows = [];
+    if (reservation.phone) rows.push(`<span>${escapeHtml(reservation.phone)}</span>`);
+    if (reservation.menu_preferences) {
+        rows.push(`<small>Menü: ${escapeHtml(truncateReservationText(reservation.menu_preferences))}</small>`);
+    }
+    if (reservation.note) {
+        rows.push(`<small>Not: ${escapeHtml(truncateReservationText(reservation.note))}</small>`);
+    }
+    return rows.join('');
+}
+
+function renderReservationRow(reservation) {
+    const dateLabel = formatReservationDateLabel(reservation);
+    const rowClass = getReservationRowClass(reservation);
+    return `
+        <div class="reservation-row ${rowClass}" data-id="${escapeHtml(reservation.id)}">
+            <button type="button" class="reservation-row-main" data-action="edit" data-id="${escapeHtml(reservation.id)}">
+                <span class="reservation-row-title">
+                    <strong>${escapeHtml(reservation.customer_name)}</strong>
+                    ${getReservationStatusBadge(reservation)}
+                </span>
+                <span>${renderReservationMeta(reservation, dateLabel)}</span>
+                ${renderReservationExtra(reservation)}
+            </button>
+            <div class="reservation-row-actions">
+                ${renderReservationActions(reservation)}
+            </div>
+        </div>
+    `;
+}
+
+function formatReservationDateLabel(reservation) {
+    const day = reservation?.day || '';
+    const date = reservation?.date ? formatShortDate(reservation.date) : '';
+    const time = reservation?.time || '';
+    return [day, date, time].filter(Boolean).join(' ');
+}
+
+function formatShortDate(value) {
+    const parts = String(value || '').split('-');
+    if (parts.length !== 3) return value || '';
+    return `${parts[2]}.${parts[1]}`;
 }
 
 function onNewOnlineOrder(data) {
@@ -1793,12 +2046,16 @@ function getTableButtonContent(masa, items) {
     const noteBadge = getTableNote(masa)
         ? '<span class="table-note-badge">NOT</span>'
         : '';
+    const reservation = getNextReservationForTable(masa);
+    const reservationBadge = reservation
+        ? `<span class="table-reservation-badge" title="${escapeHtml(formatReservationDateLabel(reservation))}">REZ ${escapeHtml(reservation.time || '')}</span>`
+        : '';
     if ((items || []).length > 0) {
         const total = getPayableTotal(items);
         const ikramTotal = getComplimentaryTotal(items);
-        return `<div>${safeMasa}</div><div>${total.toFixed(2)} TL</div>${ikramTotal > 0 ? `<small>İkram ${ikramTotal.toFixed(2)}</small>` : ''}${noteBadge}`;
+        return `<div>${safeMasa}</div><div>${total.toFixed(2)} TL</div>${ikramTotal > 0 ? `<small>İkram ${ikramTotal.toFixed(2)}</small>` : ''}${noteBadge}${reservationBadge}`;
     }
-    return `<div>${safeMasa}</div>${noteBadge}`;
+    return `<div>${safeMasa}</div>${noteBadge}${reservationBadge}`;
 }
 
 function createTableButton(masa, isPaket) {
@@ -1812,6 +2069,7 @@ function createTableButton(masa, isPaket) {
 
     const items = adisyonlar[masa] || [];
     btn.classList.toggle('has-note', !!getTableNote(masa));
+    btn.classList.toggle('has-reservation', !!getNextReservationForTable(masa));
 
     if (items.length > 0) {
         btn.classList.add('occupied');
@@ -1838,6 +2096,7 @@ function createTablePickerButton(masa, isPaket) {
     btn.classList.toggle('occupied', items.length > 0);
     btn.classList.toggle('selected', masa === currentMasa);
     btn.classList.toggle('has-note', !!getTableNote(masa));
+    btn.classList.toggle('has-reservation', !!getNextReservationForTable(masa));
     btn.innerHTML = getTableButtonContent(masa, items);
     btn.onclick = () => {
         selectMasa(masa);
@@ -1912,6 +2171,194 @@ function closeTablePickerModal() {
     }
 }
 
+function getReservationTableNames() {
+    const salons = Array.isArray(systemInfo.salons) ? systemInfo.salons : [];
+    if (salons.length > 0) {
+        return salons
+            .flatMap(salon => Array.isArray(salon.tables) ? salon.tables : [])
+            .map(table => String(table || '').trim())
+            .filter(Boolean);
+    }
+
+    const masaCount = Number(systemInfo.masa_sayisi || 0);
+    if (masaCount > 0) {
+        return Array.from({ length: masaCount }, (_, index) => `Masa ${index + 1}`);
+    }
+
+    return Object.keys(adisyonlar || {}).filter(masa => !isPaketMasa(masa));
+}
+
+function populateReservationTableOptions(selectedTable = '') {
+    if (!elements.reservationTable) return;
+    const tables = getReservationTableNames();
+    elements.reservationTable.innerHTML = '';
+
+    if (!tables.length) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'Masa yok';
+        elements.reservationTable.appendChild(option);
+        return;
+    }
+
+    tables.forEach(table => {
+        const option = document.createElement('option');
+        option.value = table;
+        option.textContent = table;
+        elements.reservationTable.appendChild(option);
+    });
+
+    if (selectedTable && tables.includes(selectedTable)) {
+        elements.reservationTable.value = selectedTable;
+    }
+}
+
+function getLocalDateValue(date = new Date()) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function getDefaultReservationTime() {
+    const date = new Date();
+    date.setMinutes(Math.ceil((date.getMinutes() + 1) / 30) * 30, 0, 0);
+    if (date.getHours() >= 23 && date.getMinutes() > 30) {
+        return '19:00';
+    }
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+function openReservationModal(reservation = null, preferredTable = currentMasa) {
+    if (!elements.reservationModal) return;
+
+    const selectedTable = reservation?.masa || (preferredTable && !isPaketMasa(preferredTable) ? preferredTable : '');
+    populateReservationTableOptions(selectedTable);
+
+    if (elements.reservationModalTitle) {
+        elements.reservationModalTitle.textContent = reservation ? 'Rezervasyon Düzenle' : 'Yeni Rezervasyon';
+    }
+
+    if (elements.reservationId) elements.reservationId.value = reservation?.id || '';
+    if (elements.reservationCustomer) elements.reservationCustomer.value = reservation?.customer_name || '';
+    if (elements.reservationPhone) elements.reservationPhone.value = reservation?.phone || '';
+    if (elements.reservationSource) elements.reservationSource.value = reservation?.source || 'telefon';
+    if (elements.reservationDate) elements.reservationDate.value = reservation?.date || getLocalDateValue();
+    if (elements.reservationTime) elements.reservationTime.value = reservation?.time || getDefaultReservationTime();
+    if (elements.reservationGuests) elements.reservationGuests.value = reservation?.guest_count || 2;
+    if (elements.reservationStatus) elements.reservationStatus.value = reservation?.status || 'planlandi';
+    if (elements.reservationMenu) elements.reservationMenu.value = reservation?.menu_preferences || '';
+    if (elements.reservationNote) elements.reservationNote.value = reservation?.note || '';
+    if (elements.btnDeleteReservation) {
+        elements.btnDeleteReservation.style.display = reservation?.id ? '' : 'none';
+    }
+
+    elements.reservationModal.style.display = 'block';
+    if (elements.reservationCustomer) {
+        elements.reservationCustomer.focus();
+    }
+}
+
+function closeReservationModal() {
+    if (elements.reservationModal) {
+        elements.reservationModal.style.display = 'none';
+    }
+}
+
+function getReservationFormPayload() {
+    return {
+        customer_name: elements.reservationCustomer?.value || '',
+        phone: elements.reservationPhone?.value || '',
+        source: elements.reservationSource?.value || 'telefon',
+        date: elements.reservationDate?.value || '',
+        time: elements.reservationTime?.value || '',
+        masa: elements.reservationTable?.value || '',
+        guest_count: Number(elements.reservationGuests?.value || 0),
+        status: elements.reservationStatus?.value || 'planlandi',
+        menu_preferences: elements.reservationMenu?.value || '',
+        note: elements.reservationNote?.value || ''
+    };
+}
+
+async function saveReservation(event) {
+    if (event) event.preventDefault();
+
+    const reservationId = elements.reservationId?.value || '';
+    const payload = getReservationFormPayload();
+    const url = reservationId
+        ? `/api/reservations/${encodeURIComponent(reservationId)}`
+        : '/api/reservations';
+    const method = reservationId ? 'PUT' : 'POST';
+
+    try {
+        if (elements.btnSaveReservation) {
+            elements.btnSaveReservation.disabled = true;
+        }
+        const response = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Rezervasyon kaydedilemedi');
+        }
+        reservationsPayload = normalizeReservationsPayload(data.reservations);
+        renderReservations();
+        renderTables();
+        closeReservationModal();
+        showNotification('Rezervasyon kaydedildi', 'success');
+    } catch (error) {
+        showNotification(error.message || 'Rezervasyon kaydedilemedi', 'error');
+    } finally {
+        if (elements.btnSaveReservation) {
+            elements.btnSaveReservation.disabled = false;
+        }
+    }
+}
+
+async function updateReservationStatus(reservationId, status) {
+    const reservation = getReservationById(reservationId);
+    if (!reservation) {
+        showNotification('Rezervasyon bulunamadı', 'error');
+        return;
+    }
+    try {
+        const response = await fetch(`/api/reservations/${encodeURIComponent(reservationId)}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Rezervasyon güncellenemedi');
+        }
+        reservationsPayload = normalizeReservationsPayload(data.reservations);
+        renderReservations();
+        renderTables();
+        if (status === 'iptal') {
+            closeReservationModal();
+        }
+        showNotification(status === 'geldi' ? 'Rezervasyon geldi olarak işaretlendi' : 'Rezervasyon iptal edildi', 'success');
+    } catch (error) {
+        showNotification(error.message || 'Rezervasyon güncellenemedi', 'error');
+    }
+}
+
+function handleReservationListClick(event) {
+    const target = event.target.closest('[data-action][data-id]');
+    if (!target) return;
+    const action = target.dataset.action;
+    const id = target.dataset.id;
+    if (action === 'edit') {
+        openReservationModal(getReservationById(id));
+    } else if (action === 'arrived') {
+        updateReservationStatus(id, 'geldi');
+    } else if (action === 'cancel') {
+        updateReservationStatus(id, 'iptal');
+    }
+}
+
 function updateTableButton(masa) {
     const btnId = getTableButtonId(masa);
     const btn = document.getElementById(btnId);
@@ -1920,6 +2367,7 @@ function updateTableButton(masa) {
 
     const items = adisyonlar[masa] || [];
     btn.classList.toggle('has-note', !!getTableNote(masa));
+    btn.classList.toggle('has-reservation', !!getNextReservationForTable(masa));
 
     if (items.length > 0) {
         btn.classList.add('occupied');
@@ -3030,6 +3478,51 @@ function setupEventListeners() {
         elements.btnOpenTablePicker.onclick = () => openTablePickerModal();
     }
 
+    if (elements.btnOpenReservationModal) {
+        elements.btnOpenReservationModal.onclick = () => openReservationModal(null, currentMasa);
+    }
+
+    if (elements.closeReservationModal) {
+        elements.closeReservationModal.onclick = () => closeReservationModal();
+    }
+
+    if (elements.btnCancelReservation) {
+        elements.btnCancelReservation.onclick = () => closeReservationModal();
+    }
+
+    if (elements.btnDeleteReservation) {
+        elements.btnDeleteReservation.onclick = () => {
+            const reservationId = elements.reservationId?.value || '';
+            if (reservationId) {
+                updateReservationStatus(reservationId, 'iptal');
+            }
+        };
+    }
+
+    if (elements.reservationForm) {
+        elements.reservationForm.onsubmit = saveReservation;
+    }
+
+    if (elements.reservationList) {
+        elements.reservationList.onclick = handleReservationListClick;
+    }
+
+    if (elements.reservationFilters) {
+        elements.reservationFilters.onclick = (event) => {
+            const button = event.target.closest('button[data-filter]');
+            if (!button) return;
+            reservationFilter = button.dataset.filter || 'active';
+            renderReservations();
+        };
+    }
+
+    if (elements.reservationSearch) {
+        elements.reservationSearch.oninput = () => {
+            reservationSearchTerm = elements.reservationSearch.value || '';
+            renderReservations();
+        };
+    }
+
     if (elements.closeTablePickerModal) {
         elements.closeTablePickerModal.onclick = () => closeTablePickerModal();
     }
@@ -3110,6 +3603,9 @@ function setupEventListeners() {
         }
         if (event.target == elements.tablePickerModal) {
             closeTablePickerModal();
+        }
+        if (event.target == elements.reservationModal) {
+            closeReservationModal();
         }
     };
 

@@ -98,6 +98,7 @@ USERS_FILE = os.path.join(SCRIPT_DIR, "users.json")
 AUTH_SESSIONS_FILE = os.path.join(SCRIPT_DIR, "auth_sessions.json")
 ACTIVE_ADISYONLAR_FILE = os.path.join(SCRIPT_DIR, "active_adisyonlar.json")
 TABLE_NOTES_FILE = os.path.join(SCRIPT_DIR, "table_notes.json")
+RESERVATIONS_FILE = os.path.join(SCRIPT_DIR, "reservations.json")
 PORTION_STOCK_FILE = os.path.join(SCRIPT_DIR, "portion_stock.json")
 PORTION_STOCK_RESET_FILE = os.path.join(SCRIPT_DIR, "portion_stock_reset.json")
 DAILY_MEALS_FILE = os.path.join(SCRIPT_DIR, "gunluk_yemekler.txt")
@@ -242,6 +243,7 @@ AUTH_API_PREFIX_PERMISSIONS = [
     ("/api/cari", "cari"),
     ("/api/courier-firms", "kurye"),
     ("/api/online/orders", "dashboard"),
+    ("/api/reservations", "dashboard"),
     ("/api/waiter/table-session", "table_session"),
     ("/api/waiter/nfc-tag", "table_session"),
     ("/api/portion-stock", "porsiyon"),
@@ -494,6 +496,7 @@ class RestaurantServer:
         # Adisyon durumları
         self.adisyonlar = {}
         self.table_notes = {}
+        self.reservations = []
         self.current_selections = {}  # {sid: masa_adi}
         
         # Menu
@@ -557,6 +560,7 @@ class RestaurantServer:
         self.refresh_adisyonlar()
         self.load_active_adisyonlar() # Aktif adisyonları geri yükle
         self.load_table_notes()
+        self.load_reservations()
         self.load_menu_data()
         self.load_menu_metadata()
         self.normalize_active_order_panels()
@@ -1782,6 +1786,7 @@ class RestaurantServer:
             'menu': self.get_order_menu_data(),
             'adisyonlar': self.adisyonlar,
             'table_notes': self.get_table_notes_payload(),
+            'reservations': self.get_reservations_payload(),
             'system': self.get_system_info(),
             'prep_panels': self.get_preparation_panels(),
             'prep_category_overrides': self.prep_category_overrides,
@@ -3742,6 +3747,268 @@ class RestaurantServer:
         elif current_note:
             note = current_note
         return self.set_table_note(target_masa, note, save=save)
+
+    @staticmethod
+    def sanitize_reservation_text(value, max_len=160, multiline=False):
+        """Rezervasyon metin alanlarını kısa ve güvenli hale getir."""
+        text = str(value or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+        if multiline:
+            lines = [re.sub(r"\s+", " ", line).strip() for line in text.split("\n")]
+            text = "\n".join(line for line in lines if line)
+        else:
+            text = re.sub(r"\s+", " ", text)
+        return text[:max_len]
+
+    @staticmethod
+    def normalize_reservation_date(value):
+        text = str(value or "").strip()[:10]
+        try:
+            date_value = datetime.date.fromisoformat(text)
+        except Exception:
+            return None, None, "Geçerli tarih girin"
+        day_names = [
+            "Pazartesi", "Salı", "Çarşamba", "Perşembe",
+            "Cuma", "Cumartesi", "Pazar"
+        ]
+        return date_value.isoformat(), day_names[date_value.weekday()], None
+
+    @staticmethod
+    def normalize_reservation_time(value):
+        text = str(value or "").strip()
+        match = re.match(r"^(\d{1,2}):(\d{2})", text)
+        if not match:
+            return None, "Geçerli saat girin"
+        hour = int(match.group(1))
+        minute = int(match.group(2))
+        if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+            return None, "Geçerli saat girin"
+        return f"{hour:02d}:{minute:02d}", None
+
+    @staticmethod
+    def normalize_reservation_status(value):
+        aliases = {
+            "planlandi": "planlandi",
+            "planlandı": "planlandi",
+            "aktif": "planlandi",
+            "geldi": "geldi",
+            "tamamlandi": "geldi",
+            "tamamlandı": "geldi",
+            "iptal": "iptal",
+            "iptal edildi": "iptal",
+            "cancelled": "iptal",
+            "canceled": "iptal",
+        }
+        normalized = str(value or "planlandi").strip().lower()
+        return aliases.get(normalized, "planlandi")
+
+    @staticmethod
+    def reservation_status_label(status):
+        return {
+            "planlandi": "Planlandı",
+            "geldi": "Geldi",
+            "iptal": "İptal",
+        }.get(status, "Planlandı")
+
+    @staticmethod
+    def normalize_reservation_source(value):
+        aliases = {
+            "telefon": "telefon",
+            "phone": "telefon",
+            "arama": "telefon",
+            "sozlu": "sozlu",
+            "sözlü": "sozlu",
+            "yuz yuze": "sozlu",
+            "yüz yüze": "sozlu",
+        }
+        normalized = str(value or "telefon").strip().lower()
+        return aliases.get(normalized, "telefon")
+
+    @staticmethod
+    def reservation_source_label(source):
+        return {
+            "telefon": "Telefon",
+            "sozlu": "Sözlü",
+        }.get(source, "Telefon")
+
+    @staticmethod
+    def reservation_sort_key(reservation):
+        status_order = {"planlandi": 0, "geldi": 1, "iptal": 2}
+        return (
+            reservation.get("date") or "9999-12-31",
+            reservation.get("time") or "23:59",
+            status_order.get(reservation.get("status"), 9),
+            reservation.get("customer_name") or "",
+        )
+
+    def normalize_reservation_record(self, data, existing=None, allow_unknown_masa=False):
+        """API ve dosya kayıtlarını tek rezervasyon şemasına dönüştür."""
+        existing = existing or {}
+        data = data or {}
+        now = datetime.datetime.now().isoformat(timespec="seconds")
+
+        customer_name = self.sanitize_reservation_text(
+            data.get("customer_name", existing.get("customer_name")),
+            max_len=120
+        )
+        phone = self.sanitize_reservation_text(
+            data.get("phone", existing.get("phone")),
+            max_len=60
+        )
+        date_key, day_name, date_error = self.normalize_reservation_date(
+            data.get("date", existing.get("date"))
+        )
+        time_key, time_error = self.normalize_reservation_time(
+            data.get("time", existing.get("time"))
+        )
+        masa = self.sanitize_reservation_text(
+            data.get("masa", existing.get("masa")),
+            max_len=80
+        )
+
+        if not customer_name:
+            return None, "Rezervasyonu yaptıran kişi gerekli"
+        if not phone:
+            return None, "İletişim bilgisi gerekli"
+        if date_error:
+            return None, date_error
+        if time_error:
+            return None, time_error
+        if not masa:
+            return None, "Masa seçimi gerekli"
+        if not allow_unknown_masa and masa not in self.adisyonlar:
+            return None, "Geçerli masa seçin"
+
+        try:
+            guest_count = int(data.get("guest_count", existing.get("guest_count", 1)))
+        except (TypeError, ValueError):
+            guest_count = 0
+        if guest_count <= 0 or guest_count > 999:
+            return None, "Gelecek kişi sayısı 1-999 arasında olmalı"
+
+        status = self.normalize_reservation_status(data.get("status", existing.get("status")))
+        source = self.normalize_reservation_source(data.get("source", existing.get("source")))
+        reservation_id = str(existing.get("id") or data.get("id") or uuid.uuid4().hex)
+
+        record = {
+            "id": reservation_id,
+            "customer_name": customer_name,
+            "phone": phone,
+            "source": source,
+            "source_label": self.reservation_source_label(source),
+            "date": date_key,
+            "day": day_name,
+            "time": time_key,
+            "masa": masa,
+            "guest_count": guest_count,
+            "menu_preferences": self.sanitize_reservation_text(
+                data.get("menu_preferences", existing.get("menu_preferences")),
+                max_len=600,
+                multiline=True
+            ),
+            "note": self.sanitize_reservation_text(
+                data.get("note", existing.get("note")),
+                max_len=500,
+                multiline=True
+            ),
+            "status": status,
+            "status_label": self.reservation_status_label(status),
+            "created_at": existing.get("created_at") or now,
+            "updated_at": now,
+        }
+        return record, None
+
+    def load_reservations(self):
+        """Masa rezervasyonlarını JSON dosyasından yükle."""
+        self.reservations = []
+        if not os.path.exists(RESERVATIONS_FILE):
+            return
+        try:
+            with open(RESERVATIONS_FILE, "r", encoding="utf-8") as f:
+                raw_data = json.load(f)
+            raw_reservations = raw_data.get("reservations", raw_data) if isinstance(raw_data, dict) else raw_data
+            if not isinstance(raw_reservations, list):
+                raw_reservations = []
+            for raw in raw_reservations:
+                if not isinstance(raw, dict):
+                    continue
+                record, err = self.normalize_reservation_record(raw, allow_unknown_masa=True)
+                if not err:
+                    self.reservations.append(record)
+            self.reservations.sort(key=self.reservation_sort_key)
+            logger.info(f"✓ {len(self.reservations)} rezervasyon yüklendi")
+        except Exception as e:
+            logger.error(f"Rezervasyon yükleme hatası: {e}")
+            self.reservations = []
+
+    def save_reservations(self):
+        """Masa rezervasyonlarını dosyaya kaydet."""
+        try:
+            self.reservations.sort(key=self.reservation_sort_key)
+            with open(RESERVATIONS_FILE, "w", encoding="utf-8") as f:
+                json.dump(self.reservations, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception as e:
+            logger.error(f"Rezervasyon kaydetme hatası: {e}")
+            return False
+
+    def get_reservations_payload(self):
+        today_key = datetime.date.today().isoformat()
+        active_by_table = defaultdict(list)
+        active_count = 0
+        today_count = 0
+
+        for reservation in sorted(self.reservations, key=self.reservation_sort_key):
+            if reservation.get("status") != "planlandi":
+                continue
+            if reservation.get("date") == today_key:
+                today_count += 1
+            if (reservation.get("date") or "") < today_key:
+                continue
+            active_count += 1
+            masa = reservation.get("masa")
+            if masa:
+                active_by_table[masa].append(reservation)
+
+        return {
+            "success": True,
+            "today": today_key,
+            "reservations": sorted(self.reservations, key=self.reservation_sort_key),
+            "active_by_table": dict(active_by_table),
+            "active_count": active_count,
+            "today_count": today_count,
+        }
+
+    def create_reservation(self, data):
+        record, err = self.normalize_reservation_record(data)
+        if err:
+            return None, err
+        self.reservations.append(record)
+        if not self.save_reservations():
+            return None, "Rezervasyon dosyaya kaydedilemedi"
+        return record, None
+
+    def update_reservation(self, reservation_id, data):
+        reservation_id = str(reservation_id or "").strip()
+        for index, existing in enumerate(self.reservations):
+            if existing.get("id") != reservation_id:
+                continue
+            masa_is_unchanged = "masa" not in (data or {})
+            allow_unknown_masa = masa_is_unchanged and existing.get("masa") not in self.adisyonlar
+            record, err = self.normalize_reservation_record(
+                data,
+                existing=existing,
+                allow_unknown_masa=allow_unknown_masa
+            )
+            if err:
+                return None, err
+            self.reservations[index] = record
+            if not self.save_reservations():
+                return None, "Rezervasyon dosyaya kaydedilemedi"
+            return record, None
+        return None, "Rezervasyon bulunamadı"
+
+    def cancel_reservation(self, reservation_id):
+        return self.update_reservation(reservation_id, {"status": "iptal"})
     
     def load_menu_data(self):
         """Menüyü yükle - DB'den veya dosyadan"""
@@ -7458,6 +7725,37 @@ def table_note_api(masa_adi):
     socketio.emit('table_note_update', {'masa': masa_adi, 'note': note})
     return jsonify({'success': True, 'masa': masa_adi, 'note': note})
 
+@app.route('/api/reservations', methods=['GET', 'POST'])
+def reservations_api():
+    """Masa rezervasyonlarını getir veya yeni rezervasyon oluştur."""
+    if request.method == 'GET':
+        return jsonify(server.get_reservations_payload())
+
+    data = request.get_json(silent=True) or {}
+    reservation, err = server.create_reservation(data)
+    if err:
+        return jsonify({'success': False, 'error': err}), 400
+    payload = server.get_reservations_payload()
+    socketio.emit('reservations_update', payload)
+    return jsonify({'success': True, 'reservation': reservation, 'reservations': payload})
+
+@app.route('/api/reservations/<reservation_id>', methods=['PUT', 'PATCH', 'DELETE'])
+def reservation_detail_api(reservation_id):
+    """Rezervasyon güncelle veya iptal et."""
+    if request.method == 'DELETE':
+        reservation, err = server.cancel_reservation(reservation_id)
+    else:
+        data = request.get_json(silent=True) or {}
+        reservation, err = server.update_reservation(reservation_id, data)
+
+    if err:
+        status = 404 if err == "Rezervasyon bulunamadı" else 400
+        return jsonify({'success': False, 'error': err}), status
+
+    payload = server.get_reservations_payload()
+    socketio.emit('reservations_update', payload)
+    return jsonify({'success': True, 'reservation': reservation, 'reservations': payload})
+
 @app.route('/api/adisyon/<masa_adi>')
 def get_adisyon(masa_adi):
     """Belirli bir adisyonu getir"""
@@ -8566,6 +8864,7 @@ if __name__ == '__main__':
     server.start_portion_stock_reset_scheduler()
     
     # Web sunucuyu başlat
-    logger.info(f"🌐 Web sunucu başlatılıyor: http://{get_local_ip()}:8000")
+    web_port = max(1, min(get_env_int("FASTFOOT_WEB_PORT", 8000), 65535))
+    logger.info(f"🌐 Web sunucu başlatılıyor: http://{get_local_ip()}:{web_port}")
     
-    socketio.run(app, host='0.0.0.0', port=8000, debug=False, allow_unsafe_werkzeug=True)
+    socketio.run(app, host='0.0.0.0', port=web_port, debug=False, allow_unsafe_werkzeug=True)
