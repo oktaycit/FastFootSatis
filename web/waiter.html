@@ -3504,18 +3504,18 @@
                 const quantityControls = `<div class="basket-control-group">
                             <span class="basket-control-label">Adet</span>
                             <div class="quantity-stepper">
-                                <button type="button" onclick="adjustBasketQuantity(${index}, -1)" ${quantity <= 1 ? 'disabled' : ''}>-</button>
-                                <span>${formatPortionAmount(quantity)}x</span>
                                 <button type="button" onclick="adjustBasketQuantity(${index}, 1)">+</button>
+                                <span>${formatPortionAmount(quantity)}x</span>
+                                <button type="button" onclick="adjustBasketQuantity(${index}, -1)" ${quantity <= 1 ? 'disabled' : ''}>-</button>
                             </div>
                         </div>`;
                 const portionControls = portionAdjustable
                     ? `<div class="basket-control-group">
                             <span class="basket-control-label">Porsiyon</span>
                             <div class="portion-stepper">
-                                <button type="button" onclick="adjustBasketPortion(${index}, -1)" ${portionIndex === 0 ? 'disabled' : ''}>-</button>
-                                <span>${formatPortionChoiceLabel(GRILL_PORTION_VALUES[portionIndex])}</span>
                                 <button type="button" onclick="adjustBasketPortion(${index}, 1)" ${portionIndex === GRILL_PORTION_VALUES.length - 1 ? 'disabled' : ''}>+</button>
+                                <span>${formatPortionChoiceLabel(GRILL_PORTION_VALUES[portionIndex])}</span>
+                                <button type="button" onclick="adjustBasketPortion(${index}, -1)" ${portionIndex === 0 ? 'disabled' : ''}>-</button>
                             </div>
                         </div>`
                     : '';
@@ -3527,6 +3527,11 @@
                         ${plateBadge}
                         <br/><span class="basket-line-meta">${getBasketPriceMeta(item)}</span>
                         ${baseNoteLabel ? `<br/><span class="basket-item-note">${escapeHtml(baseNoteLabel)}</span>` : ''}
+                        <div class="basket-inline-controls ${inlineControlClass}">
+                            ${quantityControls}
+                            ${portionControls}
+                            <span class="remove" onclick="removeFromBasket(${index})">×</span>
+                        </div>
                         <input
                             class="basket-note"
                             type="text"
@@ -3535,13 +3540,8 @@
                             value="${escapeHtml(item.note || '')}"
                             oninput="updateBasketNote(${index}, this.value)"
                         >
-                        <div class="basket-inline-controls ${inlineControlClass}">
-                            ${quantityControls}
-                            ${portionControls}
-                            <span class="remove" onclick="removeFromBasket(${index})">×</span>
-                        </div>
-                        ${plateSelect}
                         <div class="ready-note-buttons"></div>
+                        ${plateSelect}
                     </div>
                 `;
                 list.appendChild(div);

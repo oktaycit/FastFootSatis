@@ -537,15 +537,13 @@
                             <tr>
                                 <th>Ürün</th>
                                 <th>Satış Adedi</th>
-                                <th>İkram</th>
                                 <th>Ortalama</th>
                                 <th>Satış Tutarı</th>
-                                <th>İkram Değeri</th>
                             </tr>
                         </thead>
                         <tbody id="detayBody">
                             <tr>
-                                <td colspan="6" class="empty-state"
+                                <td colspan="4" class="empty-state"
                                     style="padding:30px; text-align:center; color:var(--muted);">Yükleniyor...</td>
                             </tr>
                         </tbody>
@@ -586,14 +584,14 @@
                 if (!d.success) { showOzetError(d.error); return; }
 
                 const ozet = d.ozet || [];
+                const satisOzet = ozet.filter(o => (o.tip || '') !== 'ikram');
                 const genel = d.genel_toplam || 0;
-                const genelIkram = d.genel_ikram_toplam || 0;
 
                 // Kartları güncelle
                 document.getElementById('statCiro').textContent = formatTL(genel);
 
                 let nakit = 0, nakitAdet = 0, kart = 0, kartAdet = 0, faturaBekleyenAdet = 0;
-                ozet.forEach(o => {
+                satisOzet.forEach(o => {
                     const tipler = (o.odeme || '').toLowerCase();
                     if (tipler.includes('nakit')) { nakit += o.toplam; nakitAdet += o.adet; }
                     else if (tipler.includes('kart') || tipler.includes('kredi')) { kart += o.toplam; kartAdet += o.adet; }
@@ -607,14 +605,11 @@
                 const digerToplam = genel - nakit - kart;
                 const statParts = [];
                 if (digerToplam > 0.01) statParts.push(`+ ${formatTL(digerToplam)} diğer`);
-                if (genelIkram > 0.01) statParts.push(`İkram: ${formatTL(genelIkram)}`);
                 if (faturaBekleyenAdet > 0) statParts.push(`Fatura bekleyen: ${faturaBekleyenAdet}`);
                 document.getElementById('statOtherPayments').textContent = statParts.join(' • ');
 
-                // Özet tablosu
-                document.getElementById('ozetSayi').textContent = `${ozet.length} grup`;
-
-                if (!ozet.length) {
+                if (!satisOzet.length) {
+                    document.getElementById('ozetSayi').textContent = '0 grup';
                     document.getElementById('ozetBody').innerHTML =
                         `<tr><td colspan="3"><div class="empty-state"><div class="empty-icon">📭</div><p>Satış yok</p><span>${tarih} tarihinde kayıt bulunamadı</span></div></td></tr>`;
                     return;
@@ -622,19 +617,13 @@
 
                 // Grupla: ödeme tipine göre topla
                 const grouped = {};
-                let ikramAdet = 0;
-                let ikramToplam = 0;
-                ozet.forEach(o => {
-                    if ((o.tip || '') === 'ikram') {
-                        ikramAdet += o.adet;
-                        ikramToplam += o.ikram_toplam || 0;
-                        return;
-                    }
+                satisOzet.forEach(o => {
                     const key = o.odeme || 'Diğer';
                     if (!grouped[key]) grouped[key] = { toplam: 0, adet: 0 };
                     grouped[key].toplam += o.toplam;
                     grouped[key].adet += o.adet;
                 });
+                document.getElementById('ozetSayi').textContent = `${Object.keys(grouped).length} grup`;
 
                 let rows = '';
                 let genelAdet = 0;
@@ -646,14 +635,6 @@
                     <td class="tutar-cell">${formatTL(v.toplam)}</td>
                 </tr>`;
                 });
-                if (ikramToplam > 0.01) {
-                    genelAdet += ikramAdet;
-                    rows += `<tr>
-                    <td><span class="odeme-badge odeme-diger">🎁 İkram</span></td>
-                    <td>${ikramAdet}</td>
-                    <td class="tutar-cell">${formatTL(ikramToplam)}</td>
-                </tr>`;
-                }
                 // Toplam satırı
                 rows += `<tr class="ozet-total">
                 <td><strong>TOPLAM</strong></td>
@@ -674,27 +655,26 @@
                 const d = await r.json();
                 if (!d.success) { showDetayError(d.error); return; }
 
-                const detay = d.detay || [];
+                const detay = (d.detay || []).filter(s =>
+                    Number(s.satis_adet || 0) > 0 || Number(s.toplam || 0) > 0.01
+                );
                 document.getElementById('detaySayi').textContent = `${detay.length} ürün`;
                 document.getElementById('statKalem').textContent = detay.length;
 
                 if (!detay.length) {
                     document.getElementById('detayBody').innerHTML =
-                        `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">🧾</div><p>Satış kaydı yok</p><span>${tarih} tarihinde satış bulunamadı</span></div></td></tr>`;
+                        `<tr><td colspan="4"><div class="empty-state"><div class="empty-icon">🧾</div><p>Satış kaydı yok</p><span>${tarih} tarihinde satış bulunamadı</span></div></td></tr>`;
                     return;
                 }
 
                 document.getElementById('detayBody').innerHTML = detay.map((s) => {
                     const satisAdet = Number(s.satis_adet || 0);
-                    const ikramAdet = Number(s.ikram_adet || 0);
-                    const ikramToplam = Number(s.ikram_toplam || 0);
+                    const ortalamaFiyat = satisAdet > 0 ? Number(s.toplam || 0) / satisAdet : 0;
                     return `<tr>
                     <td style="font-weight:600;">${escHtml(s.urun)}</td>
                     <td style="text-align:center;">${formatQty(satisAdet)}</td>
-                    <td style="text-align:center;">${ikramAdet > 0 ? formatQty(ikramAdet) : '-'}</td>
-                    <td>${formatTL(s.ortalama_fiyat || 0)}</td>
+                    <td>${formatTL(ortalamaFiyat)}</td>
                     <td class="tutar-cell">${formatTL(s.toplam || 0)}</td>
-                    <td>${ikramToplam > 0.01 ? `<span style="color:#fbbf24;font-weight:700;">${formatTL(ikramToplam)}</span>` : '<span style="color:var(--muted);">-</span>'}</td>
                 </tr>`;
                 }).join('');
 
@@ -709,7 +689,7 @@
         }
         function showDetayError(msg) {
             document.getElementById('detayBody').innerHTML =
-                `<tr><td colspan="6" style="padding:20px;text-align:center;color:#fca5a5;">⚠️ ${escHtml(msg)}</td></tr>`;
+                `<tr><td colspan="4" style="padding:20px;text-align:center;color:#fca5a5;">⚠️ ${escHtml(msg)}</td></tr>`;
         }
 
         // ── Yardımcılar ──
