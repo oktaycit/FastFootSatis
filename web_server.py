@@ -1048,7 +1048,7 @@ class RestaurantServer:
                 "ip": "",
                 "port": 9100,
                 "copies": 1,
-                "alert_enabled": True,
+                "alert_enabled": False,
                 "alert_mode": DEFAULT_PRINTER_ALERT_MODE
             }
             for panel_id in PREP_PANELS.keys()
@@ -1060,7 +1060,7 @@ class RestaurantServer:
             "ip": "",
             "port": 9100,
             "copies": 1,
-            "alert_enabled": True,
+            "alert_enabled": False,
             "alert_mode": DEFAULT_PRINTER_ALERT_MODE
         }
 
@@ -1641,7 +1641,7 @@ class RestaurantServer:
             "receipt_printer_ip": "",
             "receipt_printer_port": "9100",
             "receipt_printer_copies": "1",
-            "receipt_printer_alert_enabled": "EVET",
+            "receipt_printer_alert_enabled": "HAYIR",
             "receipt_printer_alert_mode": DEFAULT_PRINTER_ALERT_MODE
         }
         for panel_id in PREP_PANELS.keys():
@@ -1649,7 +1649,7 @@ class RestaurantServer:
             defaults[f"prep_printer_{panel_id}_ip"] = ""
             defaults[f"prep_printer_{panel_id}_port"] = "9100"
             defaults[f"prep_printer_{panel_id}_copies"] = "1"
-            defaults[f"prep_printer_{panel_id}_alert_enabled"] = "EVET"
+            defaults[f"prep_printer_{panel_id}_alert_enabled"] = "HAYIR"
             defaults[f"prep_printer_{panel_id}_alert_mode"] = DEFAULT_PRINTER_ALERT_MODE
         
         if os.path.exists(SETTINGS_FILE):
@@ -3318,7 +3318,7 @@ class RestaurantServer:
             return internal_buzzer + drawer_buzzer
         return internal_buzzer
 
-    def encode_thermal_ticket(self, text, alert_payload=b""):
+    def encode_thermal_ticket(self, text):
         # ESC/POS: init, Turkish code page on many devices, body, paper cut.
         if isinstance(text, bytes):
             payload = text
@@ -3326,7 +3326,21 @@ class RestaurantServer:
         else:
             payload = text.encode("cp1254", errors="replace")
             feed = b"\n\n\n"
-        return b"\x1b@\x1bR\x0c\x1bt\x30" + payload + feed + b"\x1dV\x00" + alert_payload
+        return b"\x1b@\x1bR\x0c\x1bt\x30" + payload + feed + b"\x1dV\x00"
+
+    def send_thermal_alert_to_ip_printer(self, ip, port, alert_payload, label):
+        if not alert_payload:
+            return False
+
+        try:
+            time.sleep(0.25)
+            with socket.create_connection((ip, port), timeout=2) as client:
+                client.sendall(alert_payload)
+            logger.info(f"🔔 {label} uyarı komutu gönderildi: {ip}:{port}")
+            return True
+        except Exception as e:
+            logger.warning(f"Termal yazıcı uyarı komutu gönderilemedi ({label} {ip}:{port}): {e}")
+            return False
 
     def send_thermal_text_to_ip_printer(self, printer, text, label):
         if not printer.get("enabled"):
@@ -3339,10 +3353,8 @@ class RestaurantServer:
 
         port = self.bounded_int(printer.get("port"), 9100, 1, 65535)
         copies = self.bounded_int(printer.get("copies"), 1, 1, 5)
-        payload = self.encode_thermal_ticket(
-            text,
-            self.build_thermal_printer_alert_payload(printer)
-        )
+        payload = self.encode_thermal_ticket(text)
+        alert_payload = self.build_thermal_printer_alert_payload(printer)
 
         def task():
             for copy_index in range(copies):
@@ -3350,6 +3362,7 @@ class RestaurantServer:
                     with socket.create_connection((ip, port), timeout=5) as client:
                         client.sendall(payload)
                     logger.info(f"🖨️ {label} yazıcıya gönderildi: {ip}:{port} ({copy_index + 1}/{copies})")
+                    self.send_thermal_alert_to_ip_printer(ip, port, alert_payload, label)
                 except Exception as e:
                     logger.error(f"Termal yazıcı hatası ({label} {ip}:{port}): {e}")
 
