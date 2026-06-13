@@ -138,6 +138,10 @@
             background: #263445;
         }
 
+        .btn-tools.logout {
+            background: #8e2d2d;
+        }
+
         .terminal-mode-chip {
             display: none;
             color: #d6e4f0;
@@ -155,6 +159,10 @@
         }
 
         body.shared-terminal .btn-tools.qr-tools {
+            display: none;
+        }
+
+        body.shared-terminal .btn-tools.logout {
             display: none;
         }
 
@@ -1098,6 +1106,7 @@
                 <span class="terminal-mode-chip" id="terminalModeChip">ORTAK</span>
                 <button class="btn-tools dim-toggle" id="btnDimMode" onclick="toggleLowLight()" title="Düşük ışık">☾</button>
                 <button class="btn-tools qr-tools" onclick="openQrTools()">QR/NFC</button>
+                <button class="btn-tools logout" onclick="logoutWaiter()" title="Garson oturumunu kapat">Çıkış</button>
                 <span id="waiterDisplayName" style="color: #999; font-size: 12px;"></span>
                 <div class="selected-table-info" id="activeTableName">MASA SEÇİN</div>
             </div>
@@ -1251,6 +1260,12 @@
             setLowLight(!document.body.classList.contains('low-light'));
         }
 
+        function registerWaiterSession() {
+            if (!loggedWaiter) return;
+            if (socket.disconnected) socket.connect();
+            socket.emit('waiter_init', { name: loggedWaiter });
+        }
+
         function openSharedTerminal() {
             loggedWaiter = 'Ortak Terminal';
             loggedPin = '';
@@ -1258,7 +1273,7 @@
             document.getElementById('loginOverlay').style.display = 'none';
             document.getElementById('mainApp').style.display = 'flex';
             document.getElementById('terminalModeChip').textContent = 'ORTAK';
-            socket.emit('waiter_init', { name: loggedWaiter });
+            registerWaiterSession();
         }
 
         function openAuthenticatedWaiter(user) {
@@ -1267,7 +1282,38 @@
             document.getElementById('waiterDisplayName').textContent = '🤵 ' + loggedWaiter;
             document.getElementById('loginOverlay').style.display = 'none';
             document.getElementById('mainApp').style.display = 'flex';
-            socket.emit('waiter_init', { name: loggedWaiter });
+            registerWaiterSession();
+        }
+
+        async function logoutWaiter() {
+            if (sharedTerminalMode) return;
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+            } catch (err) {
+                console.warn('Garson çıkışı sunucuya bildirilemedi:', err);
+            }
+
+            if (socket.connected || socket.disconnected === false) {
+                socket.disconnect();
+            }
+
+            loggedWaiter = null;
+            loggedPin = null;
+            currentTable = null;
+            basket = [];
+            serverItems = [];
+            pendingTransfer = null;
+
+            const pinInput = document.getElementById('loginPin');
+            if (pinInput) pinInput.value = '';
+            document.getElementById('waiterDisplayName').textContent = '';
+            document.getElementById('activeTableName').textContent = 'MASA SEÇİN';
+            document.getElementById('basketPanel').style.display = 'none';
+            document.getElementById('mainApp').style.display = 'none';
+            document.getElementById('loginOverlay').style.display = 'flex';
+            showScreen('table-screen');
+            updateBasketDisplay();
+            window.location.href = '/login?next=/waiter';
         }
 
         setLowLight(document.body.classList.contains('low-light'));
@@ -2211,6 +2257,19 @@
             });
         }
 
+        async function loadWaiterOptions() {
+            const select = document.getElementById('loginWaiterSelect');
+            if (!select || select.options.length > 1) return;
+            const res = await fetch('/api/waiters');
+            const waiters = await res.json();
+            waiters.forEach(w => {
+                const opt = document.createElement('option');
+                opt.value = w.name;
+                opt.textContent = w.name;
+                select.appendChild(opt);
+            });
+        }
+
         // Sayfa yüklendiğinde garsonları çek
         async function fetchWaiters() {
             if (sharedTerminalMode) return;
@@ -2219,15 +2278,7 @@
                 openAuthenticatedWaiter(me.user);
                 return;
             }
-            const res = await fetch('/api/waiters');
-            const waiters = await res.json();
-            const select = document.getElementById('loginWaiterSelect');
-            waiters.forEach(w => {
-                const opt = document.createElement('option');
-                opt.value = w.name;
-                opt.textContent = w.name;
-                select.appendChild(opt);
-            });
+            await loadWaiterOptions();
         }
         fetchWaiters();
 
@@ -2250,7 +2301,7 @@
                 document.getElementById('loginOverlay').style.display = 'none';
                 document.getElementById('mainApp').style.display = 'flex';
 
-                socket.emit('waiter_init', { name: loggedWaiter });
+                registerWaiterSession();
                 if (window.navigator.vibrate) window.navigator.vibrate([100, 50, 100]);
             } else {
                 alert('Hatalı PIN!');
