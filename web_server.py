@@ -2241,6 +2241,23 @@ class RestaurantServer:
             return self.kitchen
         return []
 
+    def save_staff_list_for_source(self, source):
+        if source == "waiter":
+            return self.save_waiters()
+        if source == "cashier":
+            return self.save_cashiers()
+        if source == "kitchen":
+            return self.save_kitchen()
+        return False
+
+    def staff_source_for_role(self, role):
+        role_sources = {
+            "waiter": "waiter",
+            "cashier": "cashier",
+            "kitchen": "kitchen",
+        }
+        return role_sources.get(role)
+
     def staff_record_exists(self, name, source):
         name_key = self.auth_user_name_key(name)
         if not name_key:
@@ -2252,6 +2269,77 @@ class RestaurantServer:
                 return True
         return False
 
+    def upsert_staff_record_for_user(self, user, pin=None):
+        source = self.staff_source_for_role(user.get("role"))
+        if not source or not user.get("active", True):
+            return False
+
+        name = str(user.get("name") or "").strip()
+        if not name:
+            return False
+
+        staff_list = self.staff_list_for_source(source)
+        name_key = self.auth_user_name_key(name)
+        for staff in staff_list:
+            if not isinstance(staff, dict):
+                continue
+            staff_name = staff.get("name") or staff.get("ad")
+            if self.auth_user_name_key(staff_name) == name_key:
+                staff["name"] = name
+                if pin:
+                    staff["pin"] = str(pin)
+                self.save_staff_list_for_source(source)
+                return True
+
+        staff = {"name": name}
+        if pin:
+            staff["pin"] = str(pin)
+        staff_list.append(staff)
+        self.save_staff_list_for_source(source)
+        return True
+
+    def remove_staff_record_by_name(self, name, source):
+        name_key = self.auth_user_name_key(name)
+        if not name_key:
+            return False
+
+        staff_list = self.staff_list_for_source(source)
+        kept = []
+        removed = False
+        for staff in staff_list:
+            staff_obj = staff if isinstance(staff, dict) else {"name": staff}
+            staff_name = staff_obj.get("name") or staff_obj.get("ad")
+            if self.auth_user_name_key(staff_name) == name_key:
+                removed = True
+                continue
+            kept.append(staff)
+
+        if not removed:
+            return False
+
+        if source == "waiter":
+            self.waiters = kept
+        elif source == "cashier":
+            self.cashiers = kept
+        elif source == "kitchen":
+            self.kitchen = kept
+        self.save_staff_list_for_source(source)
+        return True
+
+    def sync_staff_record_after_user_save(self, user, previous_user=None, pin=None):
+        if previous_user:
+            previous_source = self.staff_source_for_role(previous_user.get("role"))
+            current_source = self.staff_source_for_role(user.get("role"))
+            name_changed = self.auth_user_name_key(previous_user.get("name")) != self.auth_user_name_key(user.get("name"))
+            if previous_source and (previous_source != current_source or name_changed or not user.get("active", True)):
+                self.remove_staff_record_by_name(previous_user.get("name"), previous_source)
+
+        self.upsert_staff_record_for_user(user, pin=pin)
+
+    def sync_staff_lists_from_auth_users(self):
+        for user in self.users:
+            self.sync_staff_record_after_user_save(user)
+
     def is_orphaned_staff_auth_user(self, user):
         if not user:
             return False
@@ -2260,9 +2348,8 @@ class RestaurantServer:
             "cashier": "cashier",
             "kitchen": "kitchen",
         }
-        user_id = str(user.get("id") or "")
         for source, role in staff_roles.items():
-            if user_id.startswith(f"{source}-") and user.get("role") == role:
+            if user.get("role") == role:
                 return not self.staff_record_exists(user.get("name"), source)
         return False
 
@@ -2448,6 +2535,7 @@ class RestaurantServer:
             normalized,
             key=lambda u: (-self.get_role_level(u.get("role")), u.get("name", "").lower())
         )
+        self.sync_staff_lists_from_auth_users()
         if added_staff_users and os.path.exists(USERS_FILE):
             self.save_users()
             logger.info(f"✓ {added_staff_users} personel yetki kullanıcısı eklendi")
@@ -2756,6 +2844,7 @@ class RestaurantServer:
             else:
                 return None, "Bu isimde bir kullanıcı zaten var"
 
+        previous_user = dict(existing) if existing else None
         raw = dict(existing or {})
         raw.update({
             "id": user_id or raw.get("id") or str(uuid.uuid4()),
@@ -2787,6 +2876,7 @@ class RestaurantServer:
             key=lambda u: (-self.get_role_level(u.get("role")), u.get("name", "").lower())
         )
         self.save_users()
+        self.sync_staff_record_after_user_save(user, previous_user=previous_user, pin=data.get("pin"))
         return user, None
 
     def delete_user(self, user_id, actor=None):
@@ -2799,6 +2889,9 @@ class RestaurantServer:
             return False, "Bu yetki seviyesindeki kullanıcıyı silemezsiniz"
         if user.get("role") == "admin" and sum(1 for u in self.users if u.get("role") == "admin") <= 1:
             return False, "Son yönetici kullanıcısı silinemez"
+        source = self.staff_source_for_role(user.get("role"))
+        if source:
+            self.remove_staff_record_by_name(user.get("name"), source)
         self.users = [u for u in self.users if u.get("id") != user.get("id")]
         for token_hash, session in list(self.auth_sessions.items()):
             if session.get("user_id") == user.get("id"):

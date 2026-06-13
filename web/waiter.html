@@ -3044,9 +3044,10 @@
                     alert(stockError);
                     return -1;
                 }
-                basket[mergeIndex] = mergedItem;
+                basket.splice(mergeIndex, 1);
+                basket.push(mergedItem);
                 updateBasketDisplay();
-                return mergeIndex;
+                return basket.length - 1;
             } else {
                 const stockError = getBasketStockError(nextItem);
                 if (stockError) {
@@ -3544,7 +3545,7 @@
                         ${plateSelect}
                     </div>
                 `;
-                list.appendChild(div);
+                list.insertBefore(div, list.firstChild);
                 appendReadyNoteButtons(div, index, item);
                 total += getBasketLineTotal(item);
             });
