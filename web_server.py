@@ -2205,6 +2205,94 @@ class RestaurantServer:
                 added += 1
         return added
 
+    def sync_staff_auth_user(self, name, pin, role, source):
+        name = str(name or "").strip()
+        if not name:
+            return None, "Kullanıcı adı gerekli"
+
+        existing = self.find_user(name=name)
+        payload = {
+            "name": name,
+            "pin": str(pin or ""),
+            "role": role,
+            "active": True,
+            "permissions": self.get_role_permissions(role),
+            "schedule": {"enabled": False},
+        }
+
+        if existing:
+            if existing.get("role") == "admin" or existing.get("role") != role:
+                return existing, None
+
+            payload.update({
+                "id": existing.get("id"),
+                "permissions": existing.get("permissions") or self.get_role_permissions(role),
+                "schedule": existing.get("schedule") or {"enabled": False},
+            })
+
+        return self.upsert_user(payload)
+
+    def staff_list_for_source(self, source):
+        if source == "waiter":
+            return self.waiters
+        if source == "cashier":
+            return self.cashiers
+        if source == "kitchen":
+            return self.kitchen
+        return []
+
+    def staff_record_exists(self, name, source):
+        name_key = self.auth_user_name_key(name)
+        if not name_key:
+            return False
+        for staff in self.staff_list_for_source(source):
+            staff = staff if isinstance(staff, dict) else {"name": staff}
+            staff_name = staff.get("name") or staff.get("ad")
+            if self.auth_user_name_key(staff_name) == name_key:
+                return True
+        return False
+
+    def is_orphaned_staff_auth_user(self, user):
+        if not user:
+            return False
+        staff_roles = {
+            "waiter": "waiter",
+            "cashier": "cashier",
+            "kitchen": "kitchen",
+        }
+        user_id = str(user.get("id") or "")
+        for source, role in staff_roles.items():
+            if user_id.startswith(f"{source}-") and user.get("role") == role:
+                return not self.staff_record_exists(user.get("name"), source)
+        return False
+
+    def delete_staff_auth_user(self, name, role):
+        name_key = self.auth_user_name_key(name)
+        if not name_key:
+            return 0
+
+        removed_ids = []
+        kept_users = []
+        for user in self.users:
+            same_name = self.auth_user_name_key(user.get("name")) == name_key
+            same_staff_role = user.get("role") == role
+            should_remove = same_name and same_staff_role and user.get("role") != "admin"
+            if should_remove:
+                removed_ids.append(user.get("id"))
+            else:
+                kept_users.append(user)
+
+        if not removed_ids:
+            return 0
+
+        self.users = kept_users
+        for token_hash, session in list(self.auth_sessions.items()):
+            if session.get("user_id") in removed_ids:
+                self.auth_sessions.pop(token_hash, None)
+        self.save_users()
+        self.save_auth_sessions()
+        return len(removed_ids)
+
     def normalize_schedule(self, schedule=None):
         schedule = schedule if isinstance(schedule, dict) else {}
         days = schedule.get("days")
@@ -2662,7 +2750,11 @@ class RestaurantServer:
             return None, "Kullanıcı adı gerekli"
         duplicate = self.find_user(name=name)
         if duplicate and (not existing or duplicate.get("id") != existing.get("id")):
-            return None, "Bu isimde bir kullanıcı zaten var"
+            if not existing and self.is_orphaned_staff_auth_user(duplicate):
+                existing = duplicate
+                user_id = str(duplicate.get("id") or "")
+            else:
+                return None, "Bu isimde bir kullanıcı zaten var"
 
         raw = dict(existing or {})
         raw.update({
@@ -6874,14 +6966,7 @@ def add_waiter_api():
         
         server.waiters.append({'name': name, 'pin': pin})
         server.save_waiters()
-        if not server.find_user(name=name):
-            server.upsert_user({
-                'name': name,
-                'pin': pin,
-                'role': 'waiter',
-                'permissions': server.get_role_permissions('waiter'),
-                'active': True
-            }, actor=getattr(g, 'current_user', None))
+        server.sync_staff_auth_user(name, pin, 'waiter', 'waiter')
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
@@ -6890,8 +6975,9 @@ def add_waiter_api():
 def delete_waiter_api(idx):
     try:
         if 0 <= idx < len(server.waiters):
-            server.waiters.pop(idx)
+            waiter = server.waiters.pop(idx)
             server.save_waiters()
+            server.delete_staff_auth_user((waiter or {}).get('name'), 'waiter')
             return jsonify({'success': True})
         return jsonify({'success': False, 'error': 'Geçersiz indeks'})
     except Exception as e:
@@ -6913,14 +6999,7 @@ def add_cashier_api():
             return jsonify({'success': False, 'error': 'PIN gerekli'})
         server.cashiers.append({'name': name, 'pin': pin})
         server.save_cashiers()
-        if not server.find_user(name=name):
-            server.upsert_user({
-                'name': name,
-                'pin': pin,
-                'role': 'cashier',
-                'permissions': server.get_role_permissions('cashier'),
-                'active': True
-            }, actor=getattr(g, 'current_user', None))
+        server.sync_staff_auth_user(name, pin, 'cashier', 'cashier')
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
@@ -6929,8 +7008,9 @@ def add_cashier_api():
 def delete_cashier_api(idx):
     try:
         if 0 <= idx < len(server.cashiers):
-            server.cashiers.pop(idx)
+            cashier = server.cashiers.pop(idx)
             server.save_cashiers()
+            server.delete_staff_auth_user((cashier or {}).get('name'), 'cashier')
             return jsonify({'success': True})
         return jsonify({'success': False, 'error': 'Geçersiz indeks'})
     except Exception as e:
@@ -6955,14 +7035,7 @@ def add_kitchen_api():
             
         server.kitchen.append({'name': name, 'pin': pin})
         server.save_kitchen()
-        if not server.find_user(name=name):
-            server.upsert_user({
-                'name': name,
-                'pin': pin,
-                'role': 'kitchen',
-                'permissions': server.get_role_permissions('kitchen'),
-                'active': True
-            }, actor=getattr(g, 'current_user', None))
+        server.sync_staff_auth_user(name, pin, 'kitchen', 'kitchen')
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
@@ -6972,8 +7045,9 @@ def delete_kitchen_api(idx):
     """Mutfak personelini sil"""
     try:
         if 0 <= idx < len(server.kitchen):
-            server.kitchen.pop(idx)
+            kitchen_staff = server.kitchen.pop(idx)
             server.save_kitchen()
+            server.delete_staff_auth_user((kitchen_staff or {}).get('name'), 'kitchen')
             return jsonify({'success': True})
         return jsonify({'success': False, 'error': 'Geçersiz indeks'})
     except Exception as e:
