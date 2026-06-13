@@ -1423,11 +1423,15 @@
             sections.forEach(section => {
                 if (section.heading) grouped.push({ heading: section.heading });
                 grouped.push(...section.items);
+                if (section.heading && section.heading.startsWith('AYNI TABAK') && section.items.length) {
+                    grouped.push({ separator: true });
+                }
             });
             return grouped;
         }
 
         function formatPrepPrintItemLine(item) {
+            if (item.separator) return '--------------------------------';
             if (item.heading) return item.heading;
             const noteText = item.note ? ` ${item.note}` : '';
             return `${formatOrderQuantity(item.quantity)} x ${item.productName}${noteText}`;

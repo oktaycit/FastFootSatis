@@ -2886,6 +2886,8 @@ class RestaurantServer:
         )
 
     def prep_ticket_item_title(self, item):
+        if item.get("separator"):
+            return "-" * 32
         heading = str(item.get("heading") or "").strip()
         if heading:
             return heading
@@ -2948,6 +2950,7 @@ class RestaurantServer:
                 heading = self.prep_ticket_same_plate_heading(plate_heading) if plate_heading else ("AYRI SERVİS" if has_plate_items else "")
                 section_map[section_key] = {
                     "heading": heading,
+                    "is_plate": bool(plate_heading),
                     "items": [],
                     "grouped_index": {}
                 }
@@ -3007,6 +3010,8 @@ class RestaurantServer:
             if section["heading"]:
                 grouped.append({"heading": section["heading"]})
             grouped.extend(section["items"])
+            if section.get("is_plate") and section["items"]:
+                grouped.append({"separator": True})
         return grouped
 
     def thermal_text_bytes(self, value):
@@ -3162,6 +3167,12 @@ class RestaurantServer:
         for item_index, item in enumerate(ticket_items):
             if item_index > 0:
                 y += 4
+            if item.get("separator"):
+                separator_text = "-" * 32
+                for line in self.wrap_ticket_text_pixels(draw, separator_text, small_font, max_item_width):
+                    draw.text((margin_x, y), line, font=small_font, fill=0)
+                    y += 31
+                continue
             item_text = self.ticket_upper(self.prep_ticket_item_title(item))
             for line in self.wrap_ticket_text_pixels(draw, item_text, item_font, max_item_width):
                 draw.text((margin_x, y), line, font=item_font, fill=0)
@@ -3200,6 +3211,9 @@ class RestaurantServer:
             output.append(self.escpos_line("-" * width))
 
         for item in ticket_items:
+            if item.get("separator"):
+                output.append(self.escpos_line("-" * width, bold=True))
+                continue
             item_text = self.ticket_upper(self.prep_ticket_item_title(item))
             for index, line in enumerate(self.wrap_ticket_text(item_text, wide_width)):
                 prefix = "" if index == 0 else "  "
@@ -3220,8 +3234,15 @@ class RestaurantServer:
             now,
             f"Fis No: {sira}",
             f"Masa  : {masa_adi}",
-            "-" * width,
         ]
+
+        table_note = self.get_table_note(masa_adi)
+        if table_note:
+            lines.append("-" * width)
+            lines.append("Masa Notu:")
+            lines.extend(self.wrap_ticket_text(table_note, width))
+
+        lines.append("-" * width)
 
         for item in items:
             ikram = " (IKRAM)" if item.get("tip") == "ikram" else ""

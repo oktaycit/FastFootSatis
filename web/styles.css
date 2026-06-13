@@ -300,9 +300,13 @@ body.cashier-terminal .order-list-container {
 }
 
 body.cashier-terminal .controls-container {
-    flex-shrink: 0;
-    max-height: 62vh;
-    padding: 8px;
+    flex: 1 1 280px;
+    min-height: 0;
+    max-height: none;
+    padding: 8px 8px 22px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
 }
 
 body.cashier-terminal .total-display,
@@ -1035,6 +1039,7 @@ body.cashier-terminal .staffing-summary {
     box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.05);
     overflow-y: auto;
     /* Enable scroll if content is too tall */
+    min-height: 0;
     height: auto;
     max-height: 50vh;
     /* Don't let buttons cover more than half the screen */

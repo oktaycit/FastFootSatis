@@ -615,6 +615,29 @@
             color: #ffe08a;
         }
 
+        .basket-inline-controls {
+            display: flex;
+            align-items: flex-end;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .basket-inline-controls .basket-control-group {
+            flex: 1 1 124px;
+            max-width: 190px;
+        }
+
+        .basket-inline-controls.single-control .basket-control-group {
+            flex-grow: 0;
+            min-width: 124px;
+        }
+
+        .basket-inline-controls .remove {
+            margin-left: auto;
+            align-self: flex-end;
+        }
+
         .basket-select {
             display: inline-flex;
             align-items: center;
@@ -1024,6 +1047,10 @@
         }
 
         @media (max-width: 420px) {
+            .basket-panel {
+                max-height: 48vh;
+            }
+
             .basket-item {
                 flex-direction: column;
             }
@@ -1038,6 +1065,42 @@
 
             .basket-control-group {
                 flex: 1 1 124px;
+            }
+
+            .basket-inline-controls {
+                display: grid;
+                gap: 6px;
+                align-items: end;
+            }
+
+            .basket-inline-controls.has-portion {
+                grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+            }
+
+            .basket-inline-controls.single-control {
+                grid-template-columns: minmax(0, 1fr) auto;
+            }
+
+            .basket-inline-controls .basket-control-group {
+                min-width: 0;
+                max-width: none;
+            }
+
+            .basket-inline-controls .portion-stepper,
+            .basket-inline-controls .quantity-stepper {
+                grid-template-columns: 28px minmax(0, 1fr) 28px;
+                gap: 4px;
+                min-width: 0;
+            }
+
+            .basket-inline-controls .portion-stepper button,
+            .basket-inline-controls .quantity-stepper button {
+                width: 28px;
+            }
+
+            .basket-inline-controls .remove {
+                margin-left: 0;
+                padding: 0 4px;
             }
         }
 
@@ -3456,6 +3519,7 @@
                             </div>
                         </div>`
                     : '';
+                const inlineControlClass = portionControls ? 'has-portion' : 'single-control';
                 div.innerHTML = `
                     <div style="flex-grow: 1;">
                         <span style="color: #3498db; font-size: 10px; font-weight: bold;">[YENİ]</span>
@@ -3471,13 +3535,13 @@
                             value="${escapeHtml(item.note || '')}"
                             oninput="updateBasketNote(${index}, this.value)"
                         >
+                        <div class="basket-inline-controls ${inlineControlClass}">
+                            ${quantityControls}
+                            ${portionControls}
+                            <span class="remove" onclick="removeFromBasket(${index})">×</span>
+                        </div>
                         ${plateSelect}
                         <div class="ready-note-buttons"></div>
-                    </div>
-                    <div class="basket-item-actions">
-                        ${quantityControls}
-                        ${portionControls}
-                        <span class="remove" onclick="removeFromBasket(${index})">×</span>
                     </div>
                 `;
                 list.appendChild(div);

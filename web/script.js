@@ -3439,6 +3439,40 @@ function initResizer() {
     if (!resizer || !container) return;
 
     let startY, startHeight;
+    const MIN_ORDER_LIST_HEIGHT = 80;
+
+    function getControlsReserveHeight() {
+        return document.body.classList.contains('cashier-terminal') ? 240 : 180;
+    }
+
+    function getMaxOrderListHeight() {
+        const panel = container.closest('.right-panel');
+        if (!panel) return window.innerHeight * 0.7;
+
+        const panelHeight = panel.getBoundingClientRect().height || window.innerHeight;
+        let reservedHeight = getControlsReserveHeight();
+
+        Array.from(panel.children).forEach(child => {
+            if (child === container || child.classList.contains('controls-container')) return;
+
+            const style = window.getComputedStyle(child);
+            if (style.display === 'none' || style.position === 'absolute' || style.position === 'fixed') return;
+
+            reservedHeight += child.getBoundingClientRect().height;
+        });
+
+        return Math.max(MIN_ORDER_LIST_HEIGHT, panelHeight - reservedHeight);
+    }
+
+    function applyOrderListHeight(rawHeight) {
+        const maxHeight = getMaxOrderListHeight();
+        const numericHeight = Number.parseFloat(rawHeight);
+        if (!Number.isFinite(numericHeight)) return;
+
+        const nextHeight = Math.max(MIN_ORDER_LIST_HEIGHT, Math.min(numericHeight, maxHeight));
+        container.style.height = `${nextHeight}px`;
+        container.style.flex = `0 0 ${nextHeight}px`;
+    }
 
     function onMouseDown(e) {
         startY = e.clientY;
@@ -3466,20 +3500,14 @@ function initResizer() {
 
     function onMouseMove(e) {
         const newHeight = startHeight + (e.clientY - startY);
-        if (newHeight > 100 && newHeight < (window.innerHeight * 0.7)) {
-            container.style.height = newHeight + 'px';
-            container.style.flex = `0 0 ${newHeight}px`;
-        }
+        applyOrderListHeight(newHeight);
     }
 
     function onTouchMove(e) {
         e.preventDefault();
         const touch = e.touches[0];
         const newHeight = startHeight + (touch.clientY - startY);
-        if (newHeight > 100 && newHeight < (window.innerHeight * 0.7)) {
-            container.style.height = newHeight + 'px';
-            container.style.flex = `0 0 ${newHeight}px`;
-        }
+        applyOrderListHeight(newHeight);
     }
 
     function onMouseUp() {
@@ -3510,9 +3538,14 @@ function initResizer() {
     // Restore saved height
     const savedHeight = localStorage.getItem('order_list_height');
     if (savedHeight) {
-        container.style.height = savedHeight;
-        container.style.flex = `0 0 ${savedHeight}`;
+        applyOrderListHeight(savedHeight);
     }
+
+    window.addEventListener('resize', () => {
+        if (container.style.height) {
+            applyOrderListHeight(container.style.height);
+        }
+    });
 }
 
 /**
