@@ -76,29 +76,6 @@
                 </div>
             </div>
 
-            <div class="reservation-widget" id="reservationWidget">
-                <div class="reservation-widget-header">
-                    <div>
-                        <strong>Rezervasyonlar</strong>
-                        <span id="reservationSummary">Bugün 0</span>
-                    </div>
-                    <button class="btn-reservation-new" id="btnOpenReservationModal" type="button">Yeni</button>
-                </div>
-                <div class="reservation-toolbar">
-                    <div class="reservation-filters" id="reservationFilters" aria-label="Rezervasyon filtresi">
-                        <button class="active" type="button" data-filter="active">Yaklaşan</button>
-                        <button type="button" data-filter="today">Bugün</button>
-                        <button type="button" data-filter="all">Tümü</button>
-                        <button type="button" data-filter="past">Geçmiş</button>
-                        <button type="button" data-filter="cancelled">İptal</button>
-                    </div>
-                    <input id="reservationSearch" type="search" maxlength="80" placeholder="Ara">
-                </div>
-                <div class="reservation-list" id="reservationList">
-                    <div class="reservation-empty">Rezervasyon yok</div>
-                </div>
-            </div>
-
             <!-- Paket Servisi -->
             <div class="tables-section" id="paketSection" style="display: none;">
                 <h3 class="section-title">🛵 Paket Servis</h3>
@@ -527,75 +504,6 @@
                     <button class="btn btn-vazgec" id="btnCancelTablePicker" type="button">VAZGEÇ</button>
                 </div>
             </div>
-        </div>
-    </div>
-
-    <!-- Reservation Modal -->
-    <div id="reservationModal" class="modal">
-        <div class="modal-content reservation-modal">
-            <div class="modal-header">
-                <h2 id="reservationModalTitle">Rezervasyon</h2>
-                <span class="close-modal" id="closeReservationModal">&times;</span>
-            </div>
-            <form class="modal-body reservation-form" id="reservationForm">
-                <input type="hidden" id="reservationId">
-                <div class="reservation-form-grid">
-                    <label>
-                        <span>Ad Soyad</span>
-                        <input type="text" id="reservationCustomer" maxlength="120" required>
-                    </label>
-                    <label>
-                        <span>İletişim</span>
-                        <input type="tel" id="reservationPhone" maxlength="60" required>
-                    </label>
-                    <label>
-                        <span>Kaynak</span>
-                        <select id="reservationSource">
-                            <option value="telefon">Telefon</option>
-                            <option value="sozlu">Sözlü</option>
-                        </select>
-                    </label>
-                    <label>
-                        <span>Tarih</span>
-                        <input type="date" id="reservationDate" required>
-                    </label>
-                    <label>
-                        <span>Saat</span>
-                        <input type="time" id="reservationTime" required>
-                    </label>
-                    <label>
-                        <span>Masa</span>
-                        <select id="reservationTable" required></select>
-                    </label>
-                    <label>
-                        <span>Kişi</span>
-                        <input type="number" id="reservationGuests" min="1" max="999" step="1" required>
-                    </label>
-                    <label>
-                        <span>Durum</span>
-                        <select id="reservationStatus">
-                            <option value="planlandi">Planlandı</option>
-                            <option value="geldi">Geldi</option>
-                            <option value="iptal">İptal</option>
-                        </select>
-                    </label>
-                </div>
-                <label class="reservation-wide-field">
-                    <span>Menü Tercihleri</span>
-                    <textarea id="reservationMenu" maxlength="600" rows="3"></textarea>
-                </label>
-                <label class="reservation-wide-field">
-                    <span>Not</span>
-                    <textarea id="reservationNote" maxlength="500" rows="2"></textarea>
-                </label>
-                <div class="modal-actions reservation-actions">
-                    <button class="btn btn-vazgec" id="btnCancelReservation" type="button">VAZGEÇ</button>
-                    <button class="btn btn-vazgec btn-reservation-delete" id="btnDeleteReservation" type="button">
-                        İPTAL
-                    </button>
-                    <button class="btn btn-tamamla" id="btnSaveReservation" type="submit">KAYDET</button>
-                </div>
-            </form>
         </div>
     </div>
 

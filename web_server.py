@@ -112,7 +112,7 @@ DASHBOARD_STATUS_TIMEOUT_SECONDS = 0.45
 AUTH_PAGE_DEFINITIONS = {
     "dashboard": {
         "label": "Ana kasa ekranı",
-        "paths": ["/", "/index.html", "/kasa-terminal"],
+        "paths": ["/", "/index.html", "/kasa-terminal", "/reservations", "/reservations.html"],
     },
     "settings": {
         "label": "Sistem ayarları",
@@ -5637,6 +5637,11 @@ def index():
 def kasa_terminal_page():
     """Sipariş girişi kapalı kasa/hesap terminali"""
     return app.send_static_file('index.html')
+
+@app.route('/reservations')
+def reservations_page():
+    """Rezervasyon takip sayfası"""
+    return app.send_static_file('reservations.html')
 
 @app.route('/terminals')
 def terminals():

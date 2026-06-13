@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rezervasyon Takibi</title>
+    <style>
+        :root {
+            --bg: #f1f5f9;
+            --surface: #ffffff;
+            --line: #d8e1ec;
+            --line-strong: #b9c7d8;
+            --text: #172033;
+            --muted: #64748b;
+            --blue: #2563eb;
+            --blue-soft: #dbeafe;
+            --green: #16a34a;
+            --green-soft: #dcfce7;
+            --red: #dc2626;
+            --red-soft: #fee2e2;
+            --amber: #d97706;
+            --amber-soft: #fef3c7;
+            --radius: 8px;
+            --shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 16px 22px;
+            border-bottom: 1px solid var(--line);
+            background: var(--surface);
+            box-shadow: var(--shadow);
+        }
+
+        .topbar-left {
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .back-link,
+        .btn {
+            min-height: 38px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 9px 13px;
+            border: 1px solid var(--line-strong);
+            border-radius: var(--radius);
+            background: var(--surface);
+            color: var(--text);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 800;
+            line-height: 1;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            border-color: var(--blue);
+            background: var(--blue);
+            color: #fff;
+        }
+
+        .btn-danger {
+            border-color: #fecaca;
+            background: var(--red-soft);
+            color: #991b1b;
+        }
+
+        .title-block {
+            min-width: 0;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 22px;
+            line-height: 1.15;
+        }
+
+        .title-block span {
+            display: block;
+            margin-top: 3px;
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .page {
+            display: grid;
+            gap: 14px;
+            padding: 18px 22px 24px;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .summary-card {
+            min-width: 0;
+            padding: 12px;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: var(--surface);
+        }
+
+        .summary-card strong {
+            display: block;
+            font-size: 24px;
+            line-height: 1;
+        }
+
+        .summary-card span {
+            display: block;
+            margin-top: 6px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 900;
+        }
+
+        .toolbar {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
+            gap: 10px;
+            align-items: center;
+            padding: 10px;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: var(--surface);
+        }
+
+        .filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .filters button {
+            min-height: 32px;
+            padding: 7px 10px;
+            border: 1px solid var(--line-strong);
+            border-radius: var(--radius);
+            background: #fff;
+            color: var(--text);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 900;
+        }
+
+        .filters button.active {
+            border-color: var(--blue);
+            background: var(--blue-soft);
+            color: #1e40af;
+        }
+
+        .search {
+            width: 100%;
+            min-height: 36px;
+            padding: 8px 10px;
+            border: 1px solid var(--line-strong);
+            border-radius: var(--radius);
+            font-size: 14px;
+            font-weight: 700;
+            outline: none;
+        }
+
+        .search:focus,
+        .form-grid input:focus,
+        .form-grid select:focus,
+        .wide-field textarea:focus {
+            border-color: var(--blue);
+        }
+
+        .table-shell {
+            overflow: auto;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: var(--surface);
+            box-shadow: var(--shadow);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 980px;
+        }
+
+        th,
+        td {
+            padding: 10px;
+            border-bottom: 1px solid var(--line);
+            text-align: left;
+            vertical-align: top;
+            font-size: 13px;
+        }
+
+        th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: #f8fafc;
+            color: #334155;
+            font-size: 12px;
+            font-weight: 900;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .customer-cell strong {
+            display: block;
+            font-size: 14px;
+        }
+
+        .customer-cell span,
+        .muted {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .line-clamp {
+            max-width: 260px;
+            color: #334155;
+            font-weight: 700;
+            line-height: 1.25;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            padding: 4px 7px;
+            border-radius: var(--radius);
+            background: var(--blue-soft);
+            color: #1e40af;
+            font-size: 12px;
+            font-weight: 900;
+        }
+
+        .status-geldi {
+            background: var(--green-soft);
+            color: #166534;
+        }
+
+        .status-iptal {
+            background: var(--red-soft);
+            color: #991b1b;
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .actions .btn {
+            min-height: 30px;
+            padding: 7px 9px;
+            font-size: 12px;
+        }
+
+        .empty {
+            padding: 24px;
+            color: var(--muted);
+            font-weight: 900;
+            text-align: center;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            overflow: auto;
+            padding: 18px;
+            background: rgba(15, 23, 42, 0.62);
+        }
+
+        .modal.open {
+            display: block;
+        }
+
+        .modal-card {
+            width: min(760px, 100%);
+            margin: 0 auto;
+            border-radius: var(--radius);
+            background: var(--surface);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 18px;
+        }
+
+        .modal-body {
+            padding: 16px;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        label {
+            min-width: 0;
+            display: grid;
+            gap: 5px;
+            color: #334155;
+            font-size: 13px;
+            font-weight: 900;
+        }
+
+        .form-grid input,
+        .form-grid select,
+        .wide-field textarea {
+            width: 100%;
+            min-width: 0;
+            padding: 10px;
+            border: 1px solid var(--line-strong);
+            border-radius: var(--radius);
+            color: var(--text);
+            font-size: 14px;
+            font-weight: 700;
+            outline: none;
+        }
+
+        .wide-field {
+            margin-top: 12px;
+        }
+
+        .wide-field textarea {
+            min-height: 76px;
+            resize: vertical;
+            line-height: 1.35;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            padding: 14px 16px;
+            border-top: 1px solid var(--line);
+            background: #f8fafc;
+        }
+
+        .toast {
+            position: fixed;
+            right: 18px;
+            bottom: 18px;
+            z-index: 1200;
+            max-width: min(420px, calc(100vw - 36px));
+            padding: 12px 14px;
+            border-radius: var(--radius);
+            background: var(--text);
+            color: #fff;
+            font-size: 14px;
+            font-weight: 800;
+            box-shadow: var(--shadow);
+            display: none;
+        }
+
+        .toast.show {
+            display: block;
+        }
+
+        .toast.error {
+            background: #991b1b;
+        }
+
+        .toast.success {
+            background: #166534;
+        }
+
+        @media (max-width: 800px) {
+            .topbar,
+            .toolbar {
+                grid-template-columns: 1fr;
+                align-items: stretch;
+            }
+
+            .topbar {
+                display: grid;
+            }
+
+            .topbar-left {
+                align-items: flex-start;
+            }
+
+            .summary-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header class="topbar">
+        <div class="topbar-left">
+            <a class="back-link" href="/">Geri</a>
+            <div class="title-block">
+                <h1>Rezervasyon Takibi</h1>
+                <span id="pageSubtitle">Rezervasyonlar yükleniyor</span>
+            </div>
+        </div>
+        <button class="btn btn-primary" id="btnNewReservation" type="button">Yeni Rezervasyon</button>
+    </header>
+
+    <main class="page">
+        <section class="summary-grid" aria-label="Rezervasyon özeti">
+            <div class="summary-card">
+                <strong id="summaryToday">0</strong>
+                <span>Bugün</span>
+            </div>
+            <div class="summary-card">
+                <strong id="summaryUpcoming">0</strong>
+                <span>Yaklaşan</span>
+            </div>
+            <div class="summary-card">
+                <strong id="summaryTotal">0</strong>
+                <span>Toplam</span>
+            </div>
+            <div class="summary-card">
+                <strong id="summaryCancelled">0</strong>
+                <span>İptal</span>
+            </div>
+        </section>
+
+        <section class="toolbar" aria-label="Liste kontrolleri">
+            <div class="filters" id="reservationFilters">
+                <button class="active" type="button" data-filter="active">Yaklaşan</button>
+                <button type="button" data-filter="today">Bugün</button>
+                <button type="button" data-filter="all">Tümü</button>
+                <button type="button" data-filter="past">Geçmiş</button>
+                <button type="button" data-filter="cancelled">İptal</button>
+            </div>
+            <input class="search" id="reservationSearch" type="search" maxlength="80" placeholder="Ad, telefon, masa veya menü ara">
+        </section>
+
+        <section class="table-shell">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Tarih</th>
+                        <th>Saat</th>
+                        <th>Masa</th>
+                        <th>Kişi</th>
+                        <th>Rezervasyon Sahibi</th>
+                        <th>Menü / Not</th>
+                        <th>Durum</th>
+                        <th>İşlem</th>
+                    </tr>
+                </thead>
+                <tbody id="reservationTableBody">
+                    <tr>
+                        <td colspan="8" class="empty">Rezervasyonlar yükleniyor</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+    </main>
+
+    <div class="modal" id="reservationModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2 id="reservationModalTitle">Yeni Rezervasyon</h2>
+                <button class="btn" id="btnCloseModal" type="button">Kapat</button>
+            </div>
+            <form id="reservationForm">
+                <div class="modal-body">
+                    <input type="hidden" id="reservationId">
+                    <div class="form-grid">
+                        <label>
+                            Ad Soyad
+                            <input type="text" id="reservationCustomer" maxlength="120" required>
+                        </label>
+                        <label>
+                            İletişim
+                            <input type="tel" id="reservationPhone" maxlength="60" required>
+                        </label>
+                        <label>
+                            Kaynak
+                            <select id="reservationSource">
+                                <option value="telefon">Telefon</option>
+                                <option value="sozlu">Sözlü</option>
+                            </select>
+                        </label>
+                        <label>
+                            Tarih
+                            <input type="date" id="reservationDate" required>
+                        </label>
+                        <label>
+                            Saat
+                            <input type="time" id="reservationTime" required>
+                        </label>
+                        <label>
+                            Masa
+                            <select id="reservationTable" required></select>
+                        </label>
+                        <label>
+                            Kişi
+                            <input type="number" id="reservationGuests" min="1" max="999" step="1" required>
+                        </label>
+                        <label>
+                            Durum
+                            <select id="reservationStatus">
+                                <option value="planlandi">Planlandı</option>
+                                <option value="geldi">Geldi</option>
+                                <option value="iptal">İptal</option>
+                            </select>
+                        </label>
+                    </div>
+                    <label class="wide-field">
+                        Menü Tercihleri
+                        <textarea id="reservationMenu" maxlength="600" rows="3"></textarea>
+                    </label>
+                    <label class="wide-field">
+                        Not
+                        <textarea id="reservationNote" maxlength="500" rows="2"></textarea>
+                    </label>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-danger" id="btnCancelReservation" type="button">İptal Et</button>
+                    <button class="btn" id="btnDismissModal" type="button">Vazgeç</button>
+                    <button class="btn btn-primary" id="btnSaveReservation" type="submit">Kaydet</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="reservations.js"></script>
+</body>
+
+</html>
