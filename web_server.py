@@ -15,6 +15,7 @@ import os
 import sys
 import io
 import csv
+import copy
 import logging
 import socket
 import subprocess
@@ -108,6 +109,9 @@ SERVER_PORT = 5555
 AUTH_COOKIE_NAME = "ff_auth_token"
 AUTH_SESSION_DAYS = 30
 DASHBOARD_STATUS_TIMEOUT_SECONDS = 0.45
+DASHBOARD_STATUS_CACHE_SECONDS = 10
+DASHBOARD_STATUS_FAILURE_CACHE_SECONDS = 60
+DASHBOARD_STATUS_ERROR_LOG_SECONDS = 300
 DEFAULT_PRINTER_ALERT_MODE = "escpos_buzzer"
 PRINTER_ALERT_MODES = {"escpos_buzzer", "cash_drawer", "both"}
 
@@ -526,6 +530,10 @@ class RestaurantServer:
         # Terminal sunucusu
         self.terminal_thread = None
         self.running = False
+        self.dashboard_status_cache = {}
+        self.dashboard_probe_cache = {}
+        self.dashboard_status_lock = threading.RLock()
+        self.dashboard_error_log_times = {}
 
         # Public QR sipariş güvenlik durumu (DB'siz fallback, runtime memory)
         self.qr_secret = os.getenv("FASTFOOT_QR_SECRET", app.config['SECRET_KEY'])
@@ -1891,6 +1899,11 @@ class RestaurantServer:
 
     def get_dashboard_operational_status(self, kasa_id=None):
         """Ana ekran için teknik detay içermeyen kasa/ÖKC/yazıcı özeti."""
+        cache_key = ("operational", str(kasa_id or ""), self.dashboard_status_signature())
+        cached = self.get_dashboard_cache(cache_key)
+        if cached is not None:
+            return cached
+
         cash_register = self.get_dashboard_cash_register_status(kasa_id)
         okc = self.get_dashboard_okc_status()
         printers = self.get_dashboard_printer_statuses()
@@ -1903,7 +1916,7 @@ class RestaurantServer:
         else:
             overall_state = "ok"
 
-        return {
+        payload = {
             "success": True,
             "updated_at": datetime.datetime.now().isoformat(),
             "overall_state": overall_state,
@@ -1911,6 +1924,56 @@ class RestaurantServer:
             "okc": okc,
             "printers": printers
         }
+        self.set_dashboard_cache(cache_key, payload, DASHBOARD_STATUS_CACHE_SECONDS)
+        return payload
+
+    def dashboard_status_signature(self):
+        printer_targets = []
+        for panel_id in sorted(PREP_PANELS.keys()):
+            printer = self.prep_printers.get(panel_id, {}) or {}
+            printer_targets.append((
+                panel_id,
+                bool(printer.get("enabled")),
+                str(printer.get("ip") or ""),
+                int(printer.get("port") or 9100)
+            ))
+        receipt = self.receipt_printer or {}
+        return (
+            bool(self.pos_enabled),
+            str(self.pos_type or ""),
+            str(self.pos_ip or ""),
+            int(self.pos_port or 0),
+            bool(self.direct_print),
+            bool(receipt.get("enabled")),
+            str(receipt.get("ip") or ""),
+            int(receipt.get("port") or 9100),
+            tuple(printer_targets)
+        )
+
+    def get_dashboard_cache(self, key):
+        now = time.monotonic()
+        with self.dashboard_status_lock:
+            entry = self.dashboard_status_cache.get(key)
+            if not entry:
+                return None
+            expires_at, payload = entry
+            if expires_at <= now:
+                self.dashboard_status_cache.pop(key, None)
+                return None
+            return copy.deepcopy(payload)
+
+    def set_dashboard_cache(self, key, payload, ttl_seconds):
+        with self.dashboard_status_lock:
+            self.dashboard_status_cache[key] = (
+                time.monotonic() + max(1, float(ttl_seconds or 1)),
+                copy.deepcopy(payload)
+            )
+
+    def clear_dashboard_status_cache(self):
+        with self.dashboard_status_lock:
+            self.dashboard_status_cache.clear()
+            self.dashboard_probe_cache.clear()
+            self.dashboard_error_log_times.clear()
 
     def status_item(self, key, label, state, status_text, message=""):
         return {
@@ -1968,14 +2031,21 @@ class RestaurantServer:
         return self.status_item("okc", "POS", "error", "Bağlantı yok", "POS cihazına ulaşılamıyor")
 
     def get_dashboard_token_bridge_status(self):
+        cache_key = ("http_health", str(self.pos_ip or ""), int(self.pos_port or 0), str(self.pos_type or ""))
+        cached = self.get_dashboard_probe_cache(cache_key)
+        if cached is not None:
+            return cached
+
         try:
             url = f"http://{self.pos_ip}:{self.pos_port}/health"
             with urllib.request.urlopen(url, timeout=DASHBOARD_STATUS_TIMEOUT_SECONDS) as response:
                 payload = response.read(4096).decode("utf-8", errors="replace")
             data = json.loads(payload or "{}")
         except Exception as e:
-            logger.warning(f"Dashboard ÖKC bridge durumu alınamadı: {e}")
-            return self.status_item("okc", "ÖKC", "error", "Bağlantı yok", "Bridge yanıt vermiyor")
+            self.log_dashboard_probe_error(cache_key, f"Dashboard ÖKC bridge durumu alınamadı: {e}")
+            result = self.status_item("okc", "ÖKC", "error", "Bağlantı yok", "Bridge yanıt vermiyor")
+            self.set_dashboard_probe_cache(cache_key, result, DASHBOARD_STATUS_FAILURE_CACHE_SECONDS)
+            return result
 
         device_state_known = data.get("deviceStateKnown")
         device_connected = data.get("deviceConnected")
@@ -1986,12 +2056,20 @@ class RestaurantServer:
             uptime_seconds = 0
 
         if device_state_known is True and device_connected is True:
-            return self.status_item("okc", "ÖKC", "ok", "Hazır", "Cihaz hazır")
+            result = self.status_item("okc", "ÖKC", "ok", "Hazır", "Cihaz hazır")
+            self.set_dashboard_probe_cache(cache_key, result, DASHBOARD_STATUS_CACHE_SECONDS)
+            return result
         if device_state_known is True and device_connected is False:
-            return self.status_item("okc", "ÖKC", "error", "Cihaz yok", "ÖKC bağlantısı yok")
+            result = self.status_item("okc", "ÖKC", "error", "Cihaz yok", "ÖKC bağlantısı yok")
+            self.set_dashboard_probe_cache(cache_key, result, DASHBOARD_STATUS_FAILURE_CACHE_SECONDS)
+            return result
         if recovery_active or uptime_seconds < POSManager.TOKEN_BRIDGE_STARTUP_GRACE_SECONDS:
-            return self.status_item("okc", "ÖKC", "warn", "Başlatılıyor", "Cihaz bağlantısı bekleniyor")
-        return self.status_item("okc", "ÖKC", "warn", "Bekleniyor", "Cihaz durumu kesinleşmedi")
+            result = self.status_item("okc", "ÖKC", "warn", "Başlatılıyor", "Cihaz bağlantısı bekleniyor")
+            self.set_dashboard_probe_cache(cache_key, result, DASHBOARD_STATUS_CACHE_SECONDS)
+            return result
+        result = self.status_item("okc", "ÖKC", "warn", "Bekleniyor", "Cihaz durumu kesinleşmedi")
+        self.set_dashboard_probe_cache(cache_key, result, DASHBOARD_STATUS_CACHE_SECONDS)
+        return result
 
     def get_dashboard_printer_statuses(self):
         targets = [
@@ -2033,11 +2111,47 @@ class RestaurantServer:
         return self.status_item(key, label, "error", "Bağlantı yok", "Yazıcıya ulaşılamıyor")
 
     def probe_tcp_service(self, host, port, timeout=DASHBOARD_STATUS_TIMEOUT_SECONDS):
+        cache_key = ("tcp", str(host or ""), int(port or 0))
+        cached = self.get_dashboard_probe_cache(cache_key)
+        if cached is not None:
+            return bool(cached)
+
         try:
             with socket.create_connection((str(host), int(port)), timeout=timeout):
+                self.set_dashboard_probe_cache(cache_key, True, DASHBOARD_STATUS_CACHE_SECONDS)
                 return True
-        except Exception:
+        except Exception as e:
+            self.log_dashboard_probe_error(cache_key, f"Dashboard TCP kontrolü başarısız: {host}:{port} - {e}")
+            self.set_dashboard_probe_cache(cache_key, False, DASHBOARD_STATUS_FAILURE_CACHE_SECONDS)
             return False
+
+    def get_dashboard_probe_cache(self, key):
+        now = time.monotonic()
+        with self.dashboard_status_lock:
+            entry = self.dashboard_probe_cache.get(key)
+            if not entry:
+                return None
+            expires_at, value = entry
+            if expires_at <= now:
+                self.dashboard_probe_cache.pop(key, None)
+                return None
+            return copy.deepcopy(value)
+
+    def set_dashboard_probe_cache(self, key, value, ttl_seconds):
+        with self.dashboard_status_lock:
+            self.dashboard_probe_cache[key] = (
+                time.monotonic() + max(1, float(ttl_seconds or 1)),
+                copy.deepcopy(value)
+            )
+
+    def log_dashboard_probe_error(self, key, message):
+        now = time.monotonic()
+        with self.dashboard_status_lock:
+            last_logged = self.dashboard_error_log_times.get(key, 0)
+            if now - last_logged < DASHBOARD_STATUS_ERROR_LOG_SECONDS:
+                return
+            self.dashboard_error_log_times[key] = now
+        logger.warning(message)
 
     def load_waiters(self):
         """Garson listesini yükle"""
@@ -3973,8 +4087,15 @@ class RestaurantServer:
     def save_active_adisyonlar(self):
         """Aktif adisyonları dosyaya kaydet"""
         try:
-            with open(ACTIVE_ADISYONLAR_FILE, "w", encoding="utf-8") as f:
-                json.dump(self.adisyonlar, f, ensure_ascii=False, indent=2)
+            active_only = {
+                masa: items
+                for masa, items in self.adisyonlar.items()
+                if items
+            }
+            tmp_file = f"{ACTIVE_ADISYONLAR_FILE}.tmp"
+            with open(tmp_file, "w", encoding="utf-8") as f:
+                json.dump(active_only, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_file, ACTIVE_ADISYONLAR_FILE)
             return True
         except Exception as e:
             logger.error(f"Adisyon kaydetme hatası: {e}")
@@ -6256,6 +6377,7 @@ def save_settings():
     
     # POS Manager'ı güncelle
     server.pos_manager = POSManager(server.pos_enabled, server.pos_ip, server.pos_port, server.pos_type)
+    server.clear_dashboard_status_cache()
 
     # Kaydet
     ok = server.save_settings()
