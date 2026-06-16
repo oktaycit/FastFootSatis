@@ -573,6 +573,15 @@
             font-family: inherit;
         }
 
+        .category-name-edit {
+            min-width: 0;
+        }
+
+        .category-name-edit input {
+            width: 100%;
+            font-weight: 700;
+        }
+
         .category-route-list {
             display: grid;
             gap: 8px;
@@ -1967,7 +1976,9 @@
                 const selectedPanel = prepCategoryOverrides[category] || guessPanelForCategory(category);
                 return `
                     <div class="category-route-row">
-                        <strong title="${escapeHtml(category)}">${escapeHtml(category)}</strong>
+                        <div class="category-name-edit">
+                            <input type="text" id="prep_category_name_${index}" data-original-category="${escapeHtml(category)}" value="${escapeHtml(category)}" title="${escapeHtml(category)}">
+                        </div>
                         <select class="settings-select" id="prep_category_route_${index}" data-category="${escapeHtml(category)}">
                             ${panelOptions}
                         </select>
@@ -2033,6 +2044,38 @@
         }
 
         function collectPrepSettings() {
+            const categoryNames = menuCategories.map((category, index) => {
+                const input = document.getElementById(`prep_category_name_${index}`);
+                return {
+                    oldName: category,
+                    newName: (input?.value || '').trim()
+                };
+            });
+            const emptyCategory = categoryNames.find(entry => !entry.newName);
+            if (emptyCategory) {
+                const index = categoryNames.indexOf(emptyCategory);
+                return {
+                    error: 'Kategori adı boş olamaz.',
+                    focusId: `prep_category_name_${index}`
+                };
+            }
+
+            const seenCategories = new Map();
+            const duplicateCategory = categoryNames.find(entry => {
+                const key = normalizeForPrep(entry.newName).trim();
+                if (!key) return false;
+                if (seenCategories.has(key)) return true;
+                seenCategories.set(key, entry.newName);
+                return false;
+            });
+            if (duplicateCategory) {
+                const index = categoryNames.indexOf(duplicateCategory);
+                return {
+                    error: `"${duplicateCategory.newName}" kategori adı birden fazla kez kullanılamaz.`,
+                    focusId: `prep_category_name_${index}`
+                };
+            }
+
             const panels = prepPanels.map(panel => ({
                 id: panel.id,
                 emoji: panel.emoji || '',
@@ -2058,14 +2101,16 @@
             });
 
             const categoryOverrides = {};
-            menuCategories.forEach((category, index) => {
+            const categoryRenames = {};
+            categoryNames.forEach(({ oldName, newName }, index) => {
                 const panelId = document.getElementById(`prep_category_route_${index}`)?.value;
-                if (panelId) categoryOverrides[category] = panelId;
+                if (panelId) categoryOverrides[newName] = panelId;
+                if (newName !== oldName) categoryRenames[oldName] = newName;
             });
 
             const ticketSkipProducts = textToKeywords(document.getElementById('prepTicketSkipProducts')?.value);
 
-            return { panels, printers, categoryOverrides, ticketSkipProducts };
+            return { panels, printers, categoryOverrides, categoryRenames, ticketSkipProducts };
         }
 
         function collectReceiptPrinterSettings() {
@@ -2193,6 +2238,11 @@
                 return;
             }
             const prepSettings = collectPrepSettings();
+            if (prepSettings.error) {
+                if (prepSettings.focusId) focusSettingField(prepSettings.focusId);
+                showToast(prepSettings.error, 'warning');
+                return;
+            }
             const receiptPrinter = collectReceiptPrinterSettings();
             const missingPrinter = prepSettings.panels.find(panel =>
                 prepSettings.printers[panel.id]?.enabled && !prepSettings.printers[panel.id]?.ip
@@ -2232,6 +2282,7 @@
                 prep_printers: prepSettings.printers,
                 receipt_printer: receiptPrinter,
                 prep_category_overrides: prepSettings.categoryOverrides,
+                menu_category_renames: prepSettings.categoryRenames,
                 prep_ticket_skip_products: prepSettings.ticketSkipProducts,
                 mevcut_sifre: mevcutSifre
             };
@@ -2265,6 +2316,13 @@
 
                 // QR Menu & Online Siparis politikasini kaydet
                 await saveQrMenuPolicy(mevcutSifre);
+
+                prepPanels = prepSettings.panels;
+                prepPrinters = prepSettings.printers;
+                prepCategoryOverrides = prepSettings.categoryOverrides;
+                prepTicketSkipProducts = prepSettings.ticketSkipProducts;
+                menuCategories = menuCategories.map(category => prepSettings.categoryRenames[category] || category);
+                renderPrepSettings();
 
                 showToast('✅ Ayarlar başarıyla kaydedildi!', 'success');
 

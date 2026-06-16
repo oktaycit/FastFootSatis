@@ -4510,6 +4510,104 @@ class RestaurantServer:
         except Exception as e:
             logger.error(f"Menü yükleme hatası: {e}")
 
+    def save_menu_data(self, new_menu, daily_meal_categories=None):
+        """Menüyü dosyaya ve varsa veritabanına kaydet."""
+        if not isinstance(new_menu, dict):
+            return False, "Geçersiz menü verisi"
+
+        with open(MENU_FILE, "w", encoding="utf-8") as f:
+            for cat, items in new_menu.items():
+                category = str(cat or "").strip()
+                if not category or not isinstance(items, list):
+                    continue
+                for item in items:
+                    if not isinstance(item, list) or len(item) < 2:
+                        continue
+                    name = str(item[0] or "").strip()
+                    if not name:
+                        continue
+                    price = item[1]
+                    ys = item[2] if len(item) > 2 else 0
+                    ty = item[3] if len(item) > 3 else 0
+                    gt = item[4] if len(item) > 4 else 0
+                    mg = item[5] if len(item) > 5 else 0
+                    image_url = str(item[6]).strip() if len(item) > 6 and item[6] is not None else ""
+                    image_url = image_url.replace(";", "")
+                    menu_visible = "1" if self.is_menu_item_visible(item) else "0"
+                    f.write(f"{category};{name};{price};{ys};{ty};{gt};{mg};{image_url};{menu_visible}\n")
+
+        self.menu_data = new_menu
+        if daily_meal_categories is not None and not self.save_menu_metadata(daily_meal_categories):
+            return False, "Menü metadatası kaydedilemedi"
+
+        if USE_DATABASE:
+            try:
+                db.load_menu_from_file(MENU_FILE)
+            except Exception as e:
+                logger.error(f"Menü DB güncelleme hatası: {e}")
+
+        self.menu_data = new_menu
+        self.load_daily_meals()
+        self.apply_daily_meal_stock(reset_values=False)
+        return True, None
+
+    def rename_menu_categories(self, renames):
+        """Ayarlar ekranından gelen menü kategori adı değişikliklerini uygula."""
+        if not isinstance(renames, dict) or not renames:
+            return True, None
+
+        clean_renames = {}
+        existing_by_key = {
+            self._normalize_text_for_match(category): category
+            for category in self.menu_data.keys()
+        }
+        target_keys = set()
+
+        for old_category, new_category in renames.items():
+            old_name = str(old_category or "").strip()
+            new_name = str(new_category or "").strip()[:80]
+            if not old_name or not new_name:
+                continue
+
+            old_key = self._normalize_text_for_match(old_name)
+            new_key = self._normalize_text_for_match(new_name)
+            canonical_old = existing_by_key.get(old_key)
+            if not canonical_old or not new_key or old_key == new_key:
+                continue
+            if new_key in existing_by_key and existing_by_key[new_key] != canonical_old:
+                return False, f'"{new_name}" kategorisi zaten var'
+            if new_key in target_keys:
+                return False, f'"{new_name}" kategori adı birden fazla kez kullanılamaz'
+
+            clean_renames[canonical_old] = new_name
+            target_keys.add(new_key)
+
+        if not clean_renames:
+            return True, None
+
+        next_menu = {}
+        for category, items in self.menu_data.items():
+            next_menu[clean_renames.get(category, category)] = items
+
+        def renamed_category_name(category):
+            category_key = self._normalize_text_for_match(category)
+            for old_name, new_name in clean_renames.items():
+                if self._normalize_text_for_match(old_name) == category_key:
+                    return new_name
+            return category
+
+        next_daily_categories = [renamed_category_name(category) for category in self.daily_meal_categories]
+        next_overrides = {}
+        for category, panel_id in self.prep_category_overrides.items():
+            next_overrides[renamed_category_name(category)] = panel_id
+
+        ok, error = self.save_menu_data(next_menu, next_daily_categories)
+        if not ok:
+            return ok, error
+
+        self.prep_category_overrides = self.sanitize_prep_category_overrides(next_overrides)
+        return True, None
+
     def _legacy_daily_meal_categories(self):
         return [group["name"] for group in DAILY_MEAL_GROUPS]
 
@@ -6356,6 +6454,10 @@ def save_settings():
     server.prep_panel_settings = server.sanitize_prep_panel_settings(
         data.get('prep_panels', server.prep_panel_settings)
     )
+    ok, rename_error = server.rename_menu_categories(data.get('menu_category_renames'))
+    if not ok:
+        return jsonify({'success': False, 'error': rename_error or 'Menü kategorileri güncellenemedi'}), 400
+
     server.prep_category_overrides = server.sanitize_prep_category_overrides(
         data.get('prep_category_overrides', server.prep_category_overrides)
     )
@@ -8024,39 +8126,10 @@ def save_menu_api():
         new_menu = data['menu']
         daily_meal_categories = data.get('daily_meal_categories')
         
-        # 1. menu.txt dosyasını güncelle
-        with open(MENU_FILE, "w", encoding="utf-8") as f:
-            for cat, items in new_menu.items():
-                for item in items:
-                    # item structure: [name, price, ys, ty, gt, mg, image_url, menu_visible]
-                    name = item[0]
-                    price = item[1]
-                    # Default percentages to 0 if not provided
-                    ys = item[2] if len(item) > 2 else 0
-                    ty = item[3] if len(item) > 3 else 0
-                    gt = item[4] if len(item) > 4 else 0
-                    mg = item[5] if len(item) > 5 else 0
-                    image_url = str(item[6]).strip() if len(item) > 6 and item[6] is not None else ""
-                    image_url = image_url.replace(";", "")
-                    menu_visible = "1" if server.is_menu_item_visible(item) else "0"
-                    f.write(f"{cat};{name};{price};{ys};{ty};{gt};{mg};{image_url};{menu_visible}\n")
-
-        # Kategori metadatası menu_data'ya göre normalize edildiği için cache'i önce yenile.
-        server.menu_data = new_menu
-        if daily_meal_categories is not None and not server.save_menu_metadata(daily_meal_categories):
-            return jsonify({'success': False, 'error': 'Menü metadatası kaydedilemedi'}), 500
-        
-        # 2. Veri tabanını güncelle (eğer kullanılıyorsa)
-        if USE_DATABASE:
-            try:
-                db.load_menu_from_file(MENU_FILE)
-            except Exception as e:
-                logger.error(f"Menü DB güncelleme hatası: {e}")
-        
-        # 3. Sunucu cache'ini yenile
-        server.menu_data = new_menu
-        server.load_daily_meals()
-        server.apply_daily_meal_stock(reset_values=False)
+        # 1. menu.txt, varsa veritabanı ve sunucu cache'ini güncelle
+        ok, error = server.save_menu_data(new_menu, daily_meal_categories)
+        if not ok:
+            return jsonify({'success': False, 'error': error or 'Menü kaydedilemedi'}), 500
         
         # 4. İstemcilere bildir
         socketio.emit('initial_data', server.get_initial_payload())
