@@ -1276,7 +1276,8 @@ class RestaurantServer:
     def add_order_item(self, masa_adi, urun, fiyat, garson='Bilinmiyor', adet=1,
                        not_bilgisi='', tip='normal', terminal_id=None, kategori=None,
                        return_error=False, emit_updates=True, emit_ticket=True,
-                       extra_fields=None, prep_ticket_skipped=None):
+                       extra_fields=None, prep_ticket_skipped=None, persist=True,
+                       consume_stock=True):
         if masa_adi not in self.adisyonlar:
             return (None, 'Masa bulunamadı') if return_error else None
 
@@ -1290,9 +1291,10 @@ class RestaurantServer:
         except Exception:
             return (None, 'Ürün fiyatı geçersiz') if return_error else None
 
-        stock_ok, stock_error = self.consume_portion_stock(urun, adet, not_bilgisi)
-        if not stock_ok:
-            return (None, stock_error) if return_error else None
+        if consume_stock:
+            stock_ok, stock_error = self.consume_portion_stock(urun, adet, not_bilgisi)
+            if not stock_ok:
+                return (None, stock_error) if return_error else None
 
         siparis_id = str(uuid.uuid4())[:8]
         created_at = datetime.datetime.now().astimezone()
@@ -1325,7 +1327,8 @@ class RestaurantServer:
                 if key in extra_fields:
                     siparis[key] = extra_fields[key]
         self.adisyonlar[masa_adi].append(siparis)
-        self.save_active_adisyonlar()
+        if persist:
+            self.save_active_adisyonlar()
 
         if not emit_updates:
             return (siparis, None) if return_error else siparis
@@ -1561,49 +1564,76 @@ class RestaurantServer:
 
         order_items = self.normalize_plate_combo_pricing(order_items)
 
-        stock_ok, stock_error = self.validate_portion_stock_for_order(order_items)
+        prepared_items = []
+        for raw in order_items:
+            if not isinstance(raw, dict):
+                continue
+            urun = str(raw.get('urun') or raw.get('name') or '').strip()
+            if not urun:
+                continue
+            try:
+                fiyat = float(raw.get('fiyat', raw.get('price', 0)))
+            except Exception:
+                return ([], 'Ürün fiyatı geçersiz') if return_error else []
+            plate_group = raw.get('plate_group')
+            if not isinstance(plate_group, dict):
+                plate_group = None
+            item = {
+                'urun': urun,
+                'fiyat': fiyat,
+                'garson': raw.get('garson') or garson,
+                'adet': raw.get('adet', raw.get('quantity', 1)),
+                'not': raw.get('not') or raw.get('not_bilgisi') or '',
+                'tip': raw.get('tip', 'normal'),
+                'kategori': raw.get('kategori') or raw.get('category'),
+                'prep_ticket_skipped': None,
+                'plate_group': plate_group
+            }
+            if 'prep_ticket_skipped' in raw or 'skip_prep_ticket' in raw:
+                item['prep_ticket_skipped'] = bool(raw.get('prep_ticket_skipped') or raw.get('skip_prep_ticket'))
+            prepared_items.append(item)
+
+        if not prepared_items:
+            return ([], 'Geçerli sipariş kalemi bulunamadı') if return_error else []
+
+        stock_ok, stock_error = self.consume_portion_stock_for_order(prepared_items)
         if not stock_ok:
             return ([], stock_error) if return_error else []
 
         added = []
         try:
-            for raw in order_items:
-                if not isinstance(raw, dict):
-                    continue
-                urun = str(raw.get('urun') or raw.get('name') or '').strip()
-                if not urun:
-                    continue
-                plate_group = raw.get('plate_group')
-                if not isinstance(plate_group, dict):
-                    plate_group = None
-                prep_ticket_skipped = None
-                if 'prep_ticket_skipped' in raw or 'skip_prep_ticket' in raw:
-                    prep_ticket_skipped = bool(raw.get('prep_ticket_skipped') or raw.get('skip_prep_ticket'))
+            for raw in prepared_items:
                 siparis, err = self.add_order_item(
                     masa_adi=masa_adi,
-                    urun=urun,
-                    fiyat=raw.get('fiyat', raw.get('price', 0)),
-                    garson=raw.get('garson') or garson,
-                    adet=raw.get('adet', raw.get('quantity', 1)),
-                    not_bilgisi=raw.get('not') or raw.get('not_bilgisi') or '',
+                    urun=raw['urun'],
+                    fiyat=raw['fiyat'],
+                    garson=raw['garson'],
+                    adet=raw['adet'],
+                    not_bilgisi=raw['not'],
                     tip=raw.get('tip', 'normal'),
                     terminal_id=terminal_id,
-                    kategori=raw.get('kategori') or raw.get('category'),
+                    kategori=raw.get('kategori'),
                     return_error=True,
                     emit_updates=False,
                     emit_ticket=False,
-                    prep_ticket_skipped=prep_ticket_skipped,
-                    extra_fields={'plate_group': plate_group} if plate_group else None
+                    prep_ticket_skipped=raw.get('prep_ticket_skipped'),
+                    persist=False,
+                    consume_stock=False,
+                    extra_fields={'plate_group': raw['plate_group']} if raw.get('plate_group') else None
                 )
                 if not siparis:
                     raise ValueError(err or 'Sipariş eklenemedi')
                 added.append(siparis)
         except Exception as e:
+            for item in prepared_items:
+                try:
+                    self.restore_portion_stock(item.get('urun'), item.get('adet', 1), item.get('not', ''))
+                except Exception:
+                    pass
             for item in added:
                 try:
                     if item in self.adisyonlar.get(masa_adi, []):
                         self.adisyonlar[masa_adi].remove(item)
-                    self.restore_portion_stock(item.get('urun'), item.get('adet', 1), item.get('not', ''))
                 except Exception:
                     pass
             self.save_active_adisyonlar()
@@ -5715,6 +5745,64 @@ class RestaurantServer:
                     return False, f"{urun} tükendi"
                 if kalan + 0.001 < required_units:
                     return False, f"{urun} için sadece {self._format_portion_amount(kalan)} porsiyon kaldı"
+        return True, None
+
+    def consume_portion_stock_for_order(self, items):
+        self.reset_daily_portion_stock_if_needed()
+        self.ensure_default_portion_stock()
+        required = defaultdict(float)
+        names = {}
+        for item in items:
+            urun = str(item.get('urun') or item.get('name') or '').strip()
+            if not urun:
+                continue
+            not_bilgisi = item.get('not') or item.get('not_bilgisi') or ''
+            if not self._should_track_portion_order(urun, not_bilgisi):
+                continue
+            units = self.get_portion_units_for_order(urun, item.get('adet', 1))
+            key = self.get_portion_stock_key(urun, not_bilgisi)
+            required[key] += units
+            names[key] = self.get_order_portion_stock_name(urun, not_bilgisi)
+            group_name = self.get_daily_meal_group_for_product(urun)
+            if group_name and self._normalize_product_key(group_name) != key:
+                group_key = self._normalize_product_key(group_name)
+                required[group_key] += units
+                names[group_key] = group_name
+
+        if not required:
+            return True, None
+
+        changed = []
+        with self.portion_lock:
+            for key, required_units in required.items():
+                entry = self.portion_stock.get(key)
+                if not entry:
+                    continue
+                kalan = self._coerce_portion_amount(entry.get('kalan', 0))
+                urun = entry.get('urun') or names.get(key, 'Ürün')
+                if kalan <= 0:
+                    return False, f"{urun} tükendi"
+                if kalan + 0.001 < required_units:
+                    return False, f"{urun} için sadece {self._format_portion_amount(kalan)} porsiyon kaldı"
+
+            now_iso = datetime.datetime.now().isoformat()
+            for key, required_units in required.items():
+                entry = self.portion_stock.get(key)
+                if not entry:
+                    continue
+                kalan = self._coerce_portion_amount(entry.get('kalan', 0))
+                entry['kalan'] = round(kalan - required_units, 2)
+                entry['is_default'] = False
+                entry['updated_at'] = now_iso
+                changed.append({
+                    'urun': entry.get('urun') or names.get(key, 'Ürün'),
+                    'kategori': entry.get('kategori'),
+                    'kalan': self._portion_amount_for_json(entry['kalan']),
+                    'tracked': True
+                })
+            self.save_portion_stock()
+
+        self.emit_portion_stock_update(changed)
         return True, None
 
     def consume_portion_stock(self, urun, adet=1, not_bilgisi=''):

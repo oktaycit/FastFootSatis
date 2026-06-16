@@ -1348,6 +1348,8 @@
         let pendingTransfer = null;
         let pendingWaiterInitHandler = null;
         let plateGroupCounter = 1;
+        let waiterSocketConnectedOnce = false;
+        let lastWaiterSendAttemptAt = 0;
         const sharedTerminalMode = isSharedTerminalMode();
 
         function isSharedTerminalMode() {
@@ -1400,6 +1402,7 @@
 
         function ensureWaiterSocketReady() {
             if (socket.connected) return true;
+            lastWaiterSendAttemptAt = Date.now();
             registerWaiterSession();
             showWaiterToast('Bağlantı yenileniyor. Sipariş sepette kaldı, tekrar gönderin.', 'error', 3600);
             return false;
@@ -2550,6 +2553,10 @@
             updateBasketDisplay();
         });
 
+        socket.on('connect', () => {
+            waiterSocketConnectedOnce = true;
+        });
+
         socket.on('error', (data) => {
             pendingTransfer = null;
             alert((data && data.message) ? data.message : 'Bir hata oluştu');
@@ -2557,7 +2564,8 @@
 
         socket.on('connect_error', (err) => {
             console.warn('Garson socket bağlantısı kurulamadı:', err && err.message ? err.message : err);
-            if (loggedWaiter) {
+            const sendAttemptIsRecent = Date.now() - lastWaiterSendAttemptAt < 5000;
+            if (loggedWaiter && (!waiterSocketConnectedOnce || sendAttemptIsRecent)) {
                 showWaiterToast('Sunucu bağlantısı kurulamadı. Sepet bekletiliyor.', 'error', 3600);
             }
         });
@@ -3593,27 +3601,10 @@
             if (!ensureWaiterSocketReady()) return;
             refreshPlateComboPricing();
             if (!canSendBasket()) return;
-            const hasPlateItems = basket.some(item => item.plateGroup || item.plateServiceFee || item.skipPrepTicket);
-            if (hasPlateItems) {
-                socket.emit('add_items', {
-                    masa: currentTable,
-                    garson: loggedWaiter,
-                    items: basket.map(basketItemPayload)
-                });
-                basket = [];
-                updateBasketDisplay();
-                return;
-            }
-            basket.forEach(item => {
-                socket.emit('add_item', {
-                    masa: currentTable, // Masayı açıkça gönder
-                    urun: getBasketSendName(item),
-                    fiyat: getBasketUnitPrice(item),
-                    adet: getBasketQuantity(item),
-                    kategori: item.category || '',
-                    garson: loggedWaiter,
-                    not: composeBasketItemNote(item)
-                });
+            socket.emit('add_items', {
+                masa: currentTable,
+                garson: loggedWaiter,
+                items: basket.map(basketItemPayload)
             });
             basket = [];
             updateBasketDisplay();
