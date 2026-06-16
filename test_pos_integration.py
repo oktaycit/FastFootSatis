@@ -1,4 +1,5 @@
 import unittest
+import json
 from unittest.mock import patch
 
 from pos_integration import POSManager
@@ -141,6 +142,131 @@ class TokenBridgePayloadTests(unittest.TestCase):
         self.assertEqual(mock_post.call_args.args[0], "http://192.168.1.50:8787/api/sale")
         self.assertEqual(mock_post.call_args.kwargs["json"]["basketID"], "basket-2")
         self.assertEqual(mock_post.call_args.kwargs["timeout"], 130)
+
+    @patch("pos_integration.requests.get")
+    @patch("pos_integration.requests.post")
+    def test_token_bridge_sale_keeps_bridge_error_message_from_json_502(self, mock_post, mock_get):
+        mock_get.return_value = FakeResponse({
+            "success": True,
+            "deviceStateKnown": True,
+            "deviceConnected": True,
+            "pendingSales": 0,
+        })
+        mock_post.return_value = FakeResponse({
+            "success": False,
+            "status": -1,
+            "message": "Yetersiz bakiye",
+        }, status_code=502)
+        manager = POSManager(True, "192.168.1.50", 8787, "token-bridge")
+
+        success, message = manager.sale(
+            30.00,
+            "Masa 1",
+            items=[{"urun": "Bardak Cay", "adet": 1, "fiyat": 30.00}],
+            payments=[{"type": "Kredi Kartı", "amount": 30.00}],
+            order_id="basket-502",
+        )
+
+        self.assertFalse(success)
+        self.assertIn("Yetersiz bakiye", message)
+
+    def test_token_bridge_response_rejects_failed_payment_item_in_raw_sale_info(self):
+        manager = POSManager(True, "192.168.1.50", 8787, "token-bridge")
+        raw_sale_info = json.dumps({
+            "basketID": "basket-card-split",
+            "status": 0,
+            "items": [
+                {"name": "Yemek", "total": 30000000},
+            ],
+            "paymentItems": [
+                {"description": "Kredi Kartı 1", "amount": 10000, "status": 0},
+                {"description": "Kredi Kartı 2", "amount": 20000, "status": -1, "message": "Yetersiz bakiye"},
+            ],
+        })
+
+        success, message = manager._parse_token_bridge_response({
+            "success": True,
+            "status": 0,
+            "rawSaleInfo": raw_sale_info,
+        })
+
+        self.assertFalse(success)
+        self.assertIn("Kredi Kartı 2", message)
+        self.assertIn("Adisyon kapatılmadı", message)
+
+    def test_token_bridge_response_allows_declined_card_completed_with_cash(self):
+        manager = POSManager(True, "192.168.1.50", 8787, "token-bridge")
+        raw_sale_info = json.dumps({
+            "basketID": "basket-card-split",
+            "status": 0,
+            "items": [
+                {"name": "Yemek", "total": 30000000},
+            ],
+            "paymentItems": [
+                {"description": "Kredi Kartı 1", "amount": 10000, "status": 0},
+                {"description": "Kredi Kartı 2", "amount": 20000, "status": -1, "message": "Yetersiz bakiye"},
+                {"description": "Nakit", "amount": 20000, "status": 0},
+            ],
+        })
+
+        success, message = manager._parse_token_bridge_response({
+            "success": True,
+            "status": 0,
+            "receiptNo": 54,
+            "rawSaleInfo": raw_sale_info,
+        })
+
+        self.assertTrue(success)
+        self.assertIn("Fiş: 54", message)
+
+    def test_token_bridge_response_allows_declined_card_retried_successfully(self):
+        manager = POSManager(True, "192.168.1.50", 8787, "token-bridge")
+        raw_sale_info = json.dumps({
+            "basketID": "basket-card-retry",
+            "status": 0,
+            "items": [
+                {"name": "Yemek", "total": 30000000},
+            ],
+            "paymentItems": [
+                {"description": "Kredi Kartı 1", "amount": 30000, "status": -1, "message": "Yetersiz bakiye"},
+                {"description": "Kredi Kartı 1 Tekrar", "amount": 30000, "status": 0},
+            ],
+        })
+
+        success, message = manager._parse_token_bridge_response({
+            "success": True,
+            "status": 0,
+            "receiptNo": 56,
+            "rawSaleInfo": raw_sale_info,
+        })
+
+        self.assertTrue(success)
+        self.assertIn("Fiş: 56", message)
+
+    def test_token_bridge_response_allows_declined_card_completed_with_current_account(self):
+        manager = POSManager(True, "192.168.1.50", 8787, "token-bridge")
+        raw_sale_info = json.dumps({
+            "basketID": "basket-card-current-account",
+            "status": 0,
+            "items": [
+                {"name": "Yemek", "total": 30000000},
+            ],
+            "paymentItems": [
+                {"description": "Kredi Kartı 1", "amount": 10000, "status": 0},
+                {"description": "Kredi Kartı 2", "amount": 20000, "status": -1, "message": "Yetersiz bakiye"},
+                {"description": "Açık Hesap", "amount": 20000, "status": 0},
+            ],
+        })
+
+        success, message = manager._parse_token_bridge_response({
+            "success": True,
+            "status": 0,
+            "receiptNo": 55,
+            "rawSaleInfo": raw_sale_info,
+        })
+
+        self.assertTrue(success)
+        self.assertIn("Fiş: 55", message)
 
 
 class TokenBridgeHealthTests(unittest.TestCase):

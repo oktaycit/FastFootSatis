@@ -332,10 +332,10 @@ class POSManager:
         """Send a Token basket payload to the Windows terminal OKC bridge."""
         url = f"http://{self.ip}:{self.port}/api/sale"
         response = requests.post(url, json=payload, timeout=130)
-        response.raise_for_status()
         try:
             result = response.json()
         except ValueError:
+            response.raise_for_status()
             return {"success": False, "message": response.text[:200]}
 
         # Hata/iptal durumunda Bridge'in DLL ACK döngüsünü tamamlaması için bekle.
@@ -359,6 +359,10 @@ class POSManager:
 
     def _parse_token_bridge_response(self, response, invoice_pending=False):
         """Parse response from the Windows OKC bridge."""
+        payment_error = self._get_token_payment_error(response)
+        if payment_error:
+            return False, f"ÖKC Red: {payment_error}"
+
         if response.get("success") is True or response.get("status") in (0, "success"):
             receipt_no = response.get("receiptNo") or response.get("receipt_no")
             z_no = response.get("zNo") or response.get("z_no")
@@ -371,6 +375,112 @@ class POSManager:
 
         message = response.get("message") or response.get("error") or "ÖKC bridge işlemi reddetti"
         return False, f"ÖKC Red: {message}"
+
+    def _get_token_payment_error(self, response):
+        """Return a cashier-friendly message if any OKC payment item reports failure."""
+        sale_info = response
+        raw_sale_info = response.get("rawSaleInfo") or response.get("raw_sale_info")
+        if isinstance(raw_sale_info, str) and raw_sale_info.strip():
+            try:
+                sale_info = json.loads(raw_sale_info)
+            except json.JSONDecodeError:
+                sale_info = response
+
+        payment_items = (
+            sale_info.get("paymentItems")
+            or sale_info.get("payments")
+            or response.get("paymentItems")
+            or response.get("payments")
+            or []
+        )
+        if not isinstance(payment_items, list):
+            return ""
+
+        failed = []
+        successful_total = 0
+        for index, payment in enumerate(payment_items, start=1):
+            if not isinstance(payment, dict):
+                continue
+
+            if self._is_token_payment_failed(payment):
+                label = payment.get("description") or payment.get("name") or f"Ödeme {index}"
+                failed.append(str(label))
+            else:
+                successful_total += self._token_payment_total_units(payment)
+
+        if not failed:
+            return ""
+
+        # A declined card can be followed by cash/current-account payment on the OKC.
+        # If the successful payment lines cover the fiscal basket total, keep it closed.
+        if self._token_response_success(response):
+            sale_total = self._token_sale_total_units(sale_info)
+            if sale_total <= 0 or successful_total >= sale_total - 10:
+                return ""
+
+        detail = ", ".join(failed)
+        return f"{detail} başarısız. Adisyon kapatılmadı; ödeme tutarlarını kontrol edip tekrar deneyin"
+
+    def _token_response_success(self, response):
+        if response.get("success") is True or response.get("status") == "success":
+            return True
+        try:
+            return int(response.get("status")) == 0
+        except (TypeError, ValueError):
+            return False
+
+    def _is_token_payment_failed(self, payment):
+        status_text = " ".join(str(payment.get(key) or "") for key in (
+            "message", "error", "errorMessage", "statusMessage"
+        ))
+        normalized_text = status_text.casefold()
+        has_decline_text = any(token in normalized_text for token in (
+            "redd", "declin", "fail", "hata", "yetersiz", "bakiye", "iptal"
+        ))
+
+        try:
+            status_code = int(payment.get("status"))
+        except (TypeError, ValueError):
+            status_code = 0
+
+        return status_code < 0 or has_decline_text
+
+    def _token_sale_total_units(self, sale_info):
+        items = sale_info.get("items") or sale_info.get("basketItems") or []
+        if isinstance(items, list):
+            total = 0
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                item_total = self._safe_number(
+                    item.get("total") or item.get("lineTotal") or item.get("line_total")
+                )
+                if item_total > 0:
+                    total += int(round(item_total))
+                    continue
+
+                price = self._safe_number(item.get("price"))
+                quantity = self._safe_number(item.get("quantity"))
+                if price > 0 and quantity > 0:
+                    total += int(round(price * quantity))
+            if total > 0:
+                return total
+
+        total = self._safe_number(
+            sale_info.get("total") or sale_info.get("totalAmount") or sale_info.get("amount")
+        )
+        return int(round(total * 1000)) if total > 0 else 0
+
+    def _token_payment_total_units(self, payment):
+        amount = self._safe_number(payment.get("amount"))
+        return int(round(amount * 1000)) if amount > 0 else 0
+
+    @staticmethod
+    def _safe_number(value):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
 
     def _parse_response(self, response_str):
         """Parse the response from POS device"""
