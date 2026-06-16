@@ -25,12 +25,19 @@ let activeShift = null;
 let cashierOrderEntryOpen = false;
 let operationsStatusTimer = null;
 let operationsStatusInFlight = null;
+let operationsStatusNextRefreshAt = 0;
 let reservationAlertTimer = null;
+let lastSyncedKasaId = null;
+let customerAccountsCache = { expiresAt: 0, items: [] };
+let customerSearchTimer = null;
 const PAYMENT_METHODS = ['Nakit', 'Kredi Kartı', 'Açık Hesap'];
 const Z_REPORT_HOLD_MS = 5000;
 const FINALIZE_PAYMENT_LABEL = '✅ Ödemeyi Tamamla';
 const PAYMENT_WAIT_TIMEOUT_MS = 150000;
 const OPERATIONS_STATUS_REFRESH_MS = 30000;
+const OPERATIONS_STATUS_MIN_REFRESH_MS = 5000;
+const CUSTOMER_SEARCH_DEBOUNCE_MS = 200;
+const CUSTOMER_ACCOUNTS_CACHE_MS = 30000;
 const RESERVATION_ALERT_WINDOW_MINUTES = 60;
 const STAFF_TABLES_PER_WAITER = 4;
 const STAFFING_IGNORED_WAITER_NAMES = new Set([
@@ -454,12 +461,13 @@ function getSelectedKasaId() {
     return parseInt(kasaId, 10);
 }
 
-function syncSelectedKasa() {
+function syncSelectedKasa({ force = false } = {}) {
     if (!socket || !socket.connected) return;
 
     const kasaId = getSelectedKasaId();
-    if (Number.isFinite(kasaId) && kasaId > 0) {
+    if (Number.isFinite(kasaId) && kasaId > 0 && (force || lastSyncedKasaId !== kasaId)) {
         socket.emit('set_kasa', { kasa_id: kasaId });
+        lastSyncedKasaId = kasaId;
     }
 }
 
@@ -469,12 +477,13 @@ function onConnect() {
     refreshOperationsStatus();
 
     // Kasa ID'sini bildir
-    syncSelectedKasa();
+    syncSelectedKasa({ force: true });
 }
 
 function onDisconnect() {
     console.log('❌ Disconnected from server');
     updateConnectionStatus(false);
+    lastSyncedKasaId = null;
 }
 
 function onError(error) {
@@ -966,7 +975,7 @@ function onVardiyaUpdate(data) {
     console.log('⏳ Vardiya update:', data);
     activeShift = data;
     updateVardiyaUI();
-    refreshOperationsStatus();
+    refreshOperationsStatus({ force: true });
 }
 
 function onPortionStockUpdate(data) {
@@ -1393,18 +1402,24 @@ function updateVardiyaUI() {
 
 function startOperationsStatusPolling() {
     if (!elements.operationsStatusList) return;
-    refreshOperationsStatus();
+    refreshOperationsStatus({ force: true });
     if (operationsStatusTimer) {
         clearInterval(operationsStatusTimer);
     }
-    operationsStatusTimer = setInterval(refreshOperationsStatus, OPERATIONS_STATUS_REFRESH_MS);
+    operationsStatusTimer = setInterval(() => refreshOperationsStatus({ force: true }), OPERATIONS_STATUS_REFRESH_MS);
 }
 
-async function refreshOperationsStatus() {
+async function refreshOperationsStatus(options = {}) {
     if (!elements.operationsStatusList) return;
     if (operationsStatusInFlight) {
         return operationsStatusInFlight;
     }
+    const force = options === true || Boolean(options.force);
+    const now = Date.now();
+    if (!force && now < operationsStatusNextRefreshAt) {
+        return;
+    }
+    operationsStatusNextRefreshAt = now + OPERATIONS_STATUS_MIN_REFRESH_MS;
 
     operationsStatusInFlight = fetchOperationsStatus();
     try {
@@ -2805,24 +2820,48 @@ function balancePaymentInputs(changedInput) {
 
 
 
-async function searchCustomers() {
-    const query = elements.customerSearch.value.toLowerCase();
+function searchCustomers() {
+    if (customerSearchTimer) {
+        clearTimeout(customerSearchTimer);
+    }
+    customerSearchTimer = setTimeout(() => runCustomerSearch(), CUSTOMER_SEARCH_DEBOUNCE_MS);
+}
+
+async function getCustomerAccountsForSearch() {
+    const now = Date.now();
+    if (customerAccountsCache.expiresAt > now) {
+        return customerAccountsCache.items;
+    }
+    const response = await fetch('/api/cari/hesaplar');
+    const data = await response.json();
+    if (!data.success) {
+        return [];
+    }
+    customerAccountsCache = {
+        expiresAt: now + CUSTOMER_ACCOUNTS_CACHE_MS,
+        items: Array.isArray(data.hesaplar) ? data.hesaplar : []
+    };
+    return customerAccountsCache.items;
+}
+
+async function runCustomerSearch() {
+    const query = elements.customerSearch.value.toLocaleLowerCase('tr-TR');
     if (query.length < 2) {
         elements.customerResults.style.display = 'none';
         return;
     }
 
     try {
-        const response = await fetch('/api/cari/hesaplar');
-        const data = await response.json();
-
-        if (data.success) {
-            const results = data.hesaplar.filter(h =>
-                h.cari_isim.toLowerCase().includes(query)
-            );
-
-            renderCustomerResults(results);
+        const accounts = await getCustomerAccountsForSearch();
+        const latestQuery = elements.customerSearch.value.toLocaleLowerCase('tr-TR');
+        if (latestQuery.length < 2) {
+            elements.customerResults.style.display = 'none';
+            return;
         }
+        const results = accounts.filter(h =>
+            String(h.cari_isim || '').toLocaleLowerCase('tr-TR').includes(latestQuery)
+        );
+        renderCustomerResults(results);
     } catch (err) {
         console.error('Customer fetch error:', err);
     }

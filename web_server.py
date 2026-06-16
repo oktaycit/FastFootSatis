@@ -15,6 +15,7 @@ import os
 import sys
 import io
 import csv
+import copy
 import logging
 import socket
 import subprocess
@@ -108,6 +109,9 @@ SERVER_PORT = 5555
 AUTH_COOKIE_NAME = "ff_auth_token"
 AUTH_SESSION_DAYS = 30
 DASHBOARD_STATUS_TIMEOUT_SECONDS = 0.45
+DASHBOARD_STATUS_CACHE_SECONDS = 10
+DASHBOARD_STATUS_FAILURE_CACHE_SECONDS = 60
+DASHBOARD_STATUS_ERROR_LOG_SECONDS = 300
 DEFAULT_PRINTER_ALERT_MODE = "escpos_buzzer"
 PRINTER_ALERT_MODES = {"escpos_buzzer", "cash_drawer", "both"}
 
@@ -526,6 +530,10 @@ class RestaurantServer:
         # Terminal sunucusu
         self.terminal_thread = None
         self.running = False
+        self.dashboard_status_cache = {}
+        self.dashboard_probe_cache = {}
+        self.dashboard_status_lock = threading.RLock()
+        self.dashboard_error_log_times = {}
 
         # Public QR sipariş güvenlik durumu (DB'siz fallback, runtime memory)
         self.qr_secret = os.getenv("FASTFOOT_QR_SECRET", app.config['SECRET_KEY'])
@@ -1891,6 +1899,11 @@ class RestaurantServer:
 
     def get_dashboard_operational_status(self, kasa_id=None):
         """Ana ekran için teknik detay içermeyen kasa/ÖKC/yazıcı özeti."""
+        cache_key = ("operational", str(kasa_id or ""), self.dashboard_status_signature())
+        cached = self.get_dashboard_cache(cache_key)
+        if cached is not None:
+            return cached
+
         cash_register = self.get_dashboard_cash_register_status(kasa_id)
         okc = self.get_dashboard_okc_status()
         printers = self.get_dashboard_printer_statuses()
@@ -1903,7 +1916,7 @@ class RestaurantServer:
         else:
             overall_state = "ok"
 
-        return {
+        payload = {
             "success": True,
             "updated_at": datetime.datetime.now().isoformat(),
             "overall_state": overall_state,
@@ -1911,6 +1924,56 @@ class RestaurantServer:
             "okc": okc,
             "printers": printers
         }
+        self.set_dashboard_cache(cache_key, payload, DASHBOARD_STATUS_CACHE_SECONDS)
+        return payload
+
+    def dashboard_status_signature(self):
+        printer_targets = []
+        for panel_id in sorted(PREP_PANELS.keys()):
+            printer = self.prep_printers.get(panel_id, {}) or {}
+            printer_targets.append((
+                panel_id,
+                bool(printer.get("enabled")),
+                str(printer.get("ip") or ""),
+                int(printer.get("port") or 9100)
+            ))
+        receipt = self.receipt_printer or {}
+        return (
+            bool(self.pos_enabled),
+            str(self.pos_type or ""),
+            str(self.pos_ip or ""),
+            int(self.pos_port or 0),
+            bool(self.direct_print),
+            bool(receipt.get("enabled")),
+            str(receipt.get("ip") or ""),
+            int(receipt.get("port") or 9100),
+            tuple(printer_targets)
+        )
+
+    def get_dashboard_cache(self, key):
+        now = time.monotonic()
+        with self.dashboard_status_lock:
+            entry = self.dashboard_status_cache.get(key)
+            if not entry:
+                return None
+            expires_at, payload = entry
+            if expires_at <= now:
+                self.dashboard_status_cache.pop(key, None)
+                return None
+            return copy.deepcopy(payload)
+
+    def set_dashboard_cache(self, key, payload, ttl_seconds):
+        with self.dashboard_status_lock:
+            self.dashboard_status_cache[key] = (
+                time.monotonic() + max(1, float(ttl_seconds or 1)),
+                copy.deepcopy(payload)
+            )
+
+    def clear_dashboard_status_cache(self):
+        with self.dashboard_status_lock:
+            self.dashboard_status_cache.clear()
+            self.dashboard_probe_cache.clear()
+            self.dashboard_error_log_times.clear()
 
     def status_item(self, key, label, state, status_text, message=""):
         return {
@@ -1968,14 +2031,21 @@ class RestaurantServer:
         return self.status_item("okc", "POS", "error", "Bağlantı yok", "POS cihazına ulaşılamıyor")
 
     def get_dashboard_token_bridge_status(self):
+        cache_key = ("http_health", str(self.pos_ip or ""), int(self.pos_port or 0), str(self.pos_type or ""))
+        cached = self.get_dashboard_probe_cache(cache_key)
+        if cached is not None:
+            return cached
+
         try:
             url = f"http://{self.pos_ip}:{self.pos_port}/health"
             with urllib.request.urlopen(url, timeout=DASHBOARD_STATUS_TIMEOUT_SECONDS) as response:
                 payload = response.read(4096).decode("utf-8", errors="replace")
             data = json.loads(payload or "{}")
         except Exception as e:
-            logger.warning(f"Dashboard ÖKC bridge durumu alınamadı: {e}")
-            return self.status_item("okc", "ÖKC", "error", "Bağlantı yok", "Bridge yanıt vermiyor")
+            self.log_dashboard_probe_error(cache_key, f"Dashboard ÖKC bridge durumu alınamadı: {e}")
+            result = self.status_item("okc", "ÖKC", "error", "Bağlantı yok", "Bridge yanıt vermiyor")
+            self.set_dashboard_probe_cache(cache_key, result, DASHBOARD_STATUS_FAILURE_CACHE_SECONDS)
+            return result
 
         device_state_known = data.get("deviceStateKnown")
         device_connected = data.get("deviceConnected")
@@ -1986,12 +2056,20 @@ class RestaurantServer:
             uptime_seconds = 0
 
         if device_state_known is True and device_connected is True:
-            return self.status_item("okc", "ÖKC", "ok", "Hazır", "Cihaz hazır")
+            result = self.status_item("okc", "ÖKC", "ok", "Hazır", "Cihaz hazır")
+            self.set_dashboard_probe_cache(cache_key, result, DASHBOARD_STATUS_CACHE_SECONDS)
+            return result
         if device_state_known is True and device_connected is False:
-            return self.status_item("okc", "ÖKC", "error", "Cihaz yok", "ÖKC bağlantısı yok")
+            result = self.status_item("okc", "ÖKC", "error", "Cihaz yok", "ÖKC bağlantısı yok")
+            self.set_dashboard_probe_cache(cache_key, result, DASHBOARD_STATUS_FAILURE_CACHE_SECONDS)
+            return result
         if recovery_active or uptime_seconds < POSManager.TOKEN_BRIDGE_STARTUP_GRACE_SECONDS:
-            return self.status_item("okc", "ÖKC", "warn", "Başlatılıyor", "Cihaz bağlantısı bekleniyor")
-        return self.status_item("okc", "ÖKC", "warn", "Bekleniyor", "Cihaz durumu kesinleşmedi")
+            result = self.status_item("okc", "ÖKC", "warn", "Başlatılıyor", "Cihaz bağlantısı bekleniyor")
+            self.set_dashboard_probe_cache(cache_key, result, DASHBOARD_STATUS_CACHE_SECONDS)
+            return result
+        result = self.status_item("okc", "ÖKC", "warn", "Bekleniyor", "Cihaz durumu kesinleşmedi")
+        self.set_dashboard_probe_cache(cache_key, result, DASHBOARD_STATUS_CACHE_SECONDS)
+        return result
 
     def get_dashboard_printer_statuses(self):
         targets = [
@@ -2033,11 +2111,47 @@ class RestaurantServer:
         return self.status_item(key, label, "error", "Bağlantı yok", "Yazıcıya ulaşılamıyor")
 
     def probe_tcp_service(self, host, port, timeout=DASHBOARD_STATUS_TIMEOUT_SECONDS):
+        cache_key = ("tcp", str(host or ""), int(port or 0))
+        cached = self.get_dashboard_probe_cache(cache_key)
+        if cached is not None:
+            return bool(cached)
+
         try:
             with socket.create_connection((str(host), int(port)), timeout=timeout):
+                self.set_dashboard_probe_cache(cache_key, True, DASHBOARD_STATUS_CACHE_SECONDS)
                 return True
-        except Exception:
+        except Exception as e:
+            self.log_dashboard_probe_error(cache_key, f"Dashboard TCP kontrolü başarısız: {host}:{port} - {e}")
+            self.set_dashboard_probe_cache(cache_key, False, DASHBOARD_STATUS_FAILURE_CACHE_SECONDS)
             return False
+
+    def get_dashboard_probe_cache(self, key):
+        now = time.monotonic()
+        with self.dashboard_status_lock:
+            entry = self.dashboard_probe_cache.get(key)
+            if not entry:
+                return None
+            expires_at, value = entry
+            if expires_at <= now:
+                self.dashboard_probe_cache.pop(key, None)
+                return None
+            return copy.deepcopy(value)
+
+    def set_dashboard_probe_cache(self, key, value, ttl_seconds):
+        with self.dashboard_status_lock:
+            self.dashboard_probe_cache[key] = (
+                time.monotonic() + max(1, float(ttl_seconds or 1)),
+                copy.deepcopy(value)
+            )
+
+    def log_dashboard_probe_error(self, key, message):
+        now = time.monotonic()
+        with self.dashboard_status_lock:
+            last_logged = self.dashboard_error_log_times.get(key, 0)
+            if now - last_logged < DASHBOARD_STATUS_ERROR_LOG_SECONDS:
+                return
+            self.dashboard_error_log_times[key] = now
+        logger.warning(message)
 
     def load_waiters(self):
         """Garson listesini yükle"""
@@ -3973,8 +4087,15 @@ class RestaurantServer:
     def save_active_adisyonlar(self):
         """Aktif adisyonları dosyaya kaydet"""
         try:
-            with open(ACTIVE_ADISYONLAR_FILE, "w", encoding="utf-8") as f:
-                json.dump(self.adisyonlar, f, ensure_ascii=False, indent=2)
+            active_only = {
+                masa: items
+                for masa, items in self.adisyonlar.items()
+                if items
+            }
+            tmp_file = f"{ACTIVE_ADISYONLAR_FILE}.tmp"
+            with open(tmp_file, "w", encoding="utf-8") as f:
+                json.dump(active_only, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_file, ACTIVE_ADISYONLAR_FILE)
             return True
         except Exception as e:
             logger.error(f"Adisyon kaydetme hatası: {e}")
@@ -4388,6 +4509,104 @@ class RestaurantServer:
             logger.info(f"✓ Menü dosyadan yüklendi: {len(self.menu_data)} kategori")
         except Exception as e:
             logger.error(f"Menü yükleme hatası: {e}")
+
+    def save_menu_data(self, new_menu, daily_meal_categories=None):
+        """Menüyü dosyaya ve varsa veritabanına kaydet."""
+        if not isinstance(new_menu, dict):
+            return False, "Geçersiz menü verisi"
+
+        with open(MENU_FILE, "w", encoding="utf-8") as f:
+            for cat, items in new_menu.items():
+                category = str(cat or "").strip()
+                if not category or not isinstance(items, list):
+                    continue
+                for item in items:
+                    if not isinstance(item, list) or len(item) < 2:
+                        continue
+                    name = str(item[0] or "").strip()
+                    if not name:
+                        continue
+                    price = item[1]
+                    ys = item[2] if len(item) > 2 else 0
+                    ty = item[3] if len(item) > 3 else 0
+                    gt = item[4] if len(item) > 4 else 0
+                    mg = item[5] if len(item) > 5 else 0
+                    image_url = str(item[6]).strip() if len(item) > 6 and item[6] is not None else ""
+                    image_url = image_url.replace(";", "")
+                    menu_visible = "1" if self.is_menu_item_visible(item) else "0"
+                    f.write(f"{category};{name};{price};{ys};{ty};{gt};{mg};{image_url};{menu_visible}\n")
+
+        self.menu_data = new_menu
+        if daily_meal_categories is not None and not self.save_menu_metadata(daily_meal_categories):
+            return False, "Menü metadatası kaydedilemedi"
+
+        if USE_DATABASE:
+            try:
+                db.load_menu_from_file(MENU_FILE)
+            except Exception as e:
+                logger.error(f"Menü DB güncelleme hatası: {e}")
+
+        self.menu_data = new_menu
+        self.load_daily_meals()
+        self.apply_daily_meal_stock(reset_values=False)
+        return True, None
+
+    def rename_menu_categories(self, renames):
+        """Ayarlar ekranından gelen menü kategori adı değişikliklerini uygula."""
+        if not isinstance(renames, dict) or not renames:
+            return True, None
+
+        clean_renames = {}
+        existing_by_key = {
+            self._normalize_text_for_match(category): category
+            for category in self.menu_data.keys()
+        }
+        target_keys = set()
+
+        for old_category, new_category in renames.items():
+            old_name = str(old_category or "").strip()
+            new_name = str(new_category or "").strip()[:80]
+            if not old_name or not new_name:
+                continue
+
+            old_key = self._normalize_text_for_match(old_name)
+            new_key = self._normalize_text_for_match(new_name)
+            canonical_old = existing_by_key.get(old_key)
+            if not canonical_old or not new_key or old_key == new_key:
+                continue
+            if new_key in existing_by_key and existing_by_key[new_key] != canonical_old:
+                return False, f'"{new_name}" kategorisi zaten var'
+            if new_key in target_keys:
+                return False, f'"{new_name}" kategori adı birden fazla kez kullanılamaz'
+
+            clean_renames[canonical_old] = new_name
+            target_keys.add(new_key)
+
+        if not clean_renames:
+            return True, None
+
+        next_menu = {}
+        for category, items in self.menu_data.items():
+            next_menu[clean_renames.get(category, category)] = items
+
+        def renamed_category_name(category):
+            category_key = self._normalize_text_for_match(category)
+            for old_name, new_name in clean_renames.items():
+                if self._normalize_text_for_match(old_name) == category_key:
+                    return new_name
+            return category
+
+        next_daily_categories = [renamed_category_name(category) for category in self.daily_meal_categories]
+        next_overrides = {}
+        for category, panel_id in self.prep_category_overrides.items():
+            next_overrides[renamed_category_name(category)] = panel_id
+
+        ok, error = self.save_menu_data(next_menu, next_daily_categories)
+        if not ok:
+            return ok, error
+
+        self.prep_category_overrides = self.sanitize_prep_category_overrides(next_overrides)
+        return True, None
 
     def _legacy_daily_meal_categories(self):
         return [group["name"] for group in DAILY_MEAL_GROUPS]
@@ -6235,6 +6454,10 @@ def save_settings():
     server.prep_panel_settings = server.sanitize_prep_panel_settings(
         data.get('prep_panels', server.prep_panel_settings)
     )
+    ok, rename_error = server.rename_menu_categories(data.get('menu_category_renames'))
+    if not ok:
+        return jsonify({'success': False, 'error': rename_error or 'Menü kategorileri güncellenemedi'}), 400
+
     server.prep_category_overrides = server.sanitize_prep_category_overrides(
         data.get('prep_category_overrides', server.prep_category_overrides)
     )
@@ -6256,6 +6479,7 @@ def save_settings():
     
     # POS Manager'ı güncelle
     server.pos_manager = POSManager(server.pos_enabled, server.pos_ip, server.pos_port, server.pos_type)
+    server.clear_dashboard_status_cache()
 
     # Kaydet
     ok = server.save_settings()
@@ -7902,39 +8126,10 @@ def save_menu_api():
         new_menu = data['menu']
         daily_meal_categories = data.get('daily_meal_categories')
         
-        # 1. menu.txt dosyasını güncelle
-        with open(MENU_FILE, "w", encoding="utf-8") as f:
-            for cat, items in new_menu.items():
-                for item in items:
-                    # item structure: [name, price, ys, ty, gt, mg, image_url, menu_visible]
-                    name = item[0]
-                    price = item[1]
-                    # Default percentages to 0 if not provided
-                    ys = item[2] if len(item) > 2 else 0
-                    ty = item[3] if len(item) > 3 else 0
-                    gt = item[4] if len(item) > 4 else 0
-                    mg = item[5] if len(item) > 5 else 0
-                    image_url = str(item[6]).strip() if len(item) > 6 and item[6] is not None else ""
-                    image_url = image_url.replace(";", "")
-                    menu_visible = "1" if server.is_menu_item_visible(item) else "0"
-                    f.write(f"{cat};{name};{price};{ys};{ty};{gt};{mg};{image_url};{menu_visible}\n")
-
-        # Kategori metadatası menu_data'ya göre normalize edildiği için cache'i önce yenile.
-        server.menu_data = new_menu
-        if daily_meal_categories is not None and not server.save_menu_metadata(daily_meal_categories):
-            return jsonify({'success': False, 'error': 'Menü metadatası kaydedilemedi'}), 500
-        
-        # 2. Veri tabanını güncelle (eğer kullanılıyorsa)
-        if USE_DATABASE:
-            try:
-                db.load_menu_from_file(MENU_FILE)
-            except Exception as e:
-                logger.error(f"Menü DB güncelleme hatası: {e}")
-        
-        # 3. Sunucu cache'ini yenile
-        server.menu_data = new_menu
-        server.load_daily_meals()
-        server.apply_daily_meal_stock(reset_values=False)
+        # 1. menu.txt, varsa veritabanı ve sunucu cache'ini güncelle
+        ok, error = server.save_menu_data(new_menu, daily_meal_categories)
+        if not ok:
+            return jsonify({'success': False, 'error': error or 'Menü kaydedilemedi'}), 500
         
         # 4. İstemcilere bildir
         socketio.emit('initial_data', server.get_initial_payload())
