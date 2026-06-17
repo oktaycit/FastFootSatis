@@ -1173,7 +1173,9 @@ function getOrderPortionDisplayName(portionLabel, baseName) {
     const name = String(baseName || '').trim();
     const normalized = normalizeDailyText(label);
     if (normalized.startsWith('tam')) return name;
-    if (normalized.startsWith('yar')) return `Yarım ${name}`.trim();
+    if (normalized.startsWith('yar')) {
+        return normalizeDailyText(name).startsWith('yar') ? name : `Yarım ${name}`.trim();
+    }
     return label ? `${label.replace(/\s+porsiyon\s*$/i, '')} ${name}`.trim() : name;
 }
 

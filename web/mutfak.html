@@ -396,8 +396,12 @@
             const name = String(baseName || '').trim();
             const normalized = normalizeTextForMatch(label);
             if (normalized.startsWith('tam')) return name;
-            if (normalized.startsWith('yarim')) return `Yarım ${name}`.trim();
-            if (normalized.startsWith('bir bucuk')) return `Bir Buçuk ${name}`.trim();
+            if (normalized.startsWith('yarim')) {
+                return normalizeTextForMatch(name).startsWith('yarim ') ? name : `Yarım ${name}`.trim();
+            }
+            if (normalized.startsWith('bir bucuk')) {
+                return normalizeTextForMatch(name).startsWith('bir bucuk ') ? name : `Bir Buçuk ${name}`.trim();
+            }
             return label ? `${label.replace(/\s+porsiyon\s*$/i, '')} ${name}`.trim() : name;
         }
 

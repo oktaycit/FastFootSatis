@@ -3218,8 +3218,12 @@ class RestaurantServer:
         if label_key.startswith("tam"):
             return name
         if label_key.startswith("yarim"):
+            if self._normalize_text_for_match(name).startswith("yarim "):
+                return name
             return f"Yarım {name}".strip()
         if label_key.startswith("bir bucuk"):
+            if self._normalize_text_for_match(name).startswith("bir bucuk "):
+                return name
             return f"Bir Buçuk {name}".strip()
         label = re.sub(r'\s+porsiyon\s*$', '', str(portion_label or "").strip(), flags=re.IGNORECASE)
         return f"{label} {name}".strip() if label else name
