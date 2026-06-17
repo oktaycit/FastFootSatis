@@ -482,6 +482,52 @@ class Database:
             """, (tarih,))
             return cursor.fetchall()
 
+    def get_invoice_requests_by_date(self, tarih=None):
+        """Gün sonu için e-fatura/e-arşiv isteklerini adisyon bazında grupla."""
+        if tarih is None:
+            tarih = datetime.now().strftime("%Y-%m-%d")
+
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                SELECT
+                    MIN(id) AS ilk_satis_id,
+                    tarih_saat,
+                    COALESCE(NULLIF(TRIM(masa), ''), 'Kasa') AS masa,
+                    COALESCE(NULLIF(TRIM(odeme), ''), 'Diğer') AS odeme,
+                    terminal_id,
+                    vardiya_id,
+                    invoice_document_type,
+                    invoice_tax_id,
+                    invoice_serial_no,
+                    invoice_note,
+                    COALESCE(SUM(CASE WHEN COALESCE(tip, 'normal') = 'ikram' THEN 0 ELSE adet END), 0) AS satis_adet,
+                    COALESCE(SUM(CASE WHEN COALESCE(tip, 'normal') = 'ikram' THEN 0 ELSE fiyat * adet END), 0) AS toplam,
+                    COUNT(*) AS kalem_sayisi,
+                    STRING_AGG(
+                        CONCAT(
+                            COALESCE(NULLIF(TRIM(urun), ''), 'Ürün'),
+                            ' x ',
+                            TRIM(TRAILING '.' FROM TRIM(TRAILING '0' FROM adet::TEXT))
+                        ),
+                        ', ' ORDER BY urun
+                    ) AS urunler
+                FROM satislar
+                WHERE DATE(tarih_saat) = %s
+                  AND invoice_pending = TRUE
+                GROUP BY
+                    tarih_saat,
+                    COALESCE(NULLIF(TRIM(masa), ''), 'Kasa'),
+                    COALESCE(NULLIF(TRIM(odeme), ''), 'Diğer'),
+                    terminal_id,
+                    vardiya_id,
+                    invoice_document_type,
+                    invoice_tax_id,
+                    invoice_serial_no,
+                    invoice_note
+                ORDER BY tarih_saat DESC, ilk_satis_id DESC
+            """, (tarih,))
+            return cursor.fetchall()
+
     def get_operational_reports(self, baslangic=None, bitis=None):
         """Talep, yoğunluk ve zaman odaklı operasyon raporlarını getir."""
         today = datetime.now().strftime("%Y-%m-%d")

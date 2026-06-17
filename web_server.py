@@ -6923,6 +6923,54 @@ def get_gunsonu_detay():
         logger.error(f"Gün sonu detay hatası: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/gunsonu/fatura-istekleri')
+def get_gunsonu_fatura_istekleri():
+    """Günlük e-fatura/e-arşiv isteklerini adisyon bazında grupla."""
+    if not USE_DATABASE:
+        return jsonify({'success': False, 'error': 'Veri tabanı bağlantısı yok'}), 503
+    tarih = request.args.get('tarih', datetime.datetime.now().strftime('%Y-%m-%d'))
+    type_map = {
+        9005: 'Matbu',
+        9006: 'E-Fatura',
+        9007: 'E-Arşiv',
+    }
+    try:
+        rows = db.get_invoice_requests_by_date(tarih)
+        result = []
+        toplam = 0.0
+        for r in rows:
+            tutar = _float_value(r.get('toplam'))
+            toplam += tutar
+            document_type = _int_value(r.get('invoice_document_type') or 0)
+            tarih_saat = r.get('tarih_saat')
+            result.append({
+                'id': r.get('ilk_satis_id'),
+                'tarih_saat': tarih_saat.isoformat() if hasattr(tarih_saat, 'isoformat') else str(tarih_saat or ''),
+                'masa': r.get('masa') or 'Kasa',
+                'odeme': r.get('odeme') or 'Diğer',
+                'terminal_id': r.get('terminal_id') or '',
+                'vardiya_id': r.get('vardiya_id'),
+                'invoice_document_type': document_type or None,
+                'invoice_document_label': type_map.get(document_type, 'Fatura'),
+                'invoice_tax_id': r.get('invoice_tax_id') or '',
+                'invoice_serial_no': r.get('invoice_serial_no') or '',
+                'invoice_note': r.get('invoice_note') or '',
+                'satis_adet': _float_value(r.get('satis_adet')),
+                'kalem_sayisi': _int_value(r.get('kalem_sayisi')),
+                'toplam': tutar,
+                'urunler': r.get('urunler') or '',
+            })
+        return jsonify({
+            'success': True,
+            'fatura_istekleri': result,
+            'adet': len(result),
+            'toplam': toplam,
+            'tarih': tarih
+        })
+    except Exception as e:
+        logger.error(f"Gün sonu fatura istekleri hatası: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/raporlar/operasyon')
 def get_operasyon_raporlari():
     """Talep, yoğunluk ve zaman raporları"""

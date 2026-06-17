@@ -234,6 +234,32 @@
             flex: 1;
         }
 
+        .wide-panel {
+            min-height: 260px;
+        }
+
+        .panel-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .mini-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 5px 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 700;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .mini-btn:hover {
+            background: rgba(255, 255, 255, 0.14);
+        }
+
         .panel-card {
             background: var(--surface);
             border: 1px solid var(--border);
@@ -551,6 +577,38 @@
                 </div>
             </div>
         </div>
+
+        <div class="panel-card wide-panel">
+            <div class="panel-header">
+                <h3>🧾 Fatura İstekleri</h3>
+                <div class="panel-actions">
+                    <button class="mini-btn" onclick="exportFaturaCsv()">CSV</button>
+                    <span class="badge" id="faturaSayi">0 istek</span>
+                </div>
+            </div>
+            <div class="detay-wrapper">
+                <table class="detay-table">
+                    <thead>
+                        <tr>
+                            <th>Saat</th>
+                            <th>Masa/Kanal</th>
+                            <th>Tür</th>
+                            <th>VKN/TCKN</th>
+                            <th>Seri No</th>
+                            <th>Ürünler</th>
+                            <th>Not</th>
+                            <th>Tutar</th>
+                        </tr>
+                    </thead>
+                    <tbody id="faturaBody">
+                        <tr>
+                            <td colspan="8" class="empty-state"
+                                style="padding:30px; text-align:center; color:var(--muted);">Yükleniyor...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <!-- Gizli bilgi -->
@@ -559,11 +617,12 @@
     <script>
         // Bugünü seç
         const ds = document.getElementById('dateSelector');
+        let faturaIstekleri = [];
         ds.value = new Date().toISOString().split('T')[0];
         ds.addEventListener('change', loadAll);
 
         async function loadAll() {
-            await Promise.all([loadOzet(), loadDetay()]);
+            await Promise.all([loadOzet(), loadDetay(), loadFaturaIstekleri()]);
         }
 
         async function loadSystemInfo() {
@@ -605,7 +664,7 @@
                 const digerToplam = genel - nakit - kart;
                 const statParts = [];
                 if (digerToplam > 0.01) statParts.push(`+ ${formatTL(digerToplam)} diğer`);
-                if (faturaBekleyenAdet > 0) statParts.push(`Fatura bekleyen: ${faturaBekleyenAdet}`);
+                if (faturaBekleyenAdet > 0) statParts.push(`Fatura kalemi: ${faturaBekleyenAdet}`);
                 document.getElementById('statOtherPayments').textContent = statParts.join(' • ');
 
                 if (!satisOzet.length) {
@@ -683,6 +742,41 @@
             }
         }
 
+        async function loadFaturaIstekleri() {
+            const tarih = document.getElementById('dateSelector').value;
+            try {
+                const r = await fetch(`/api/gunsonu/fatura-istekleri?tarih=${tarih}`);
+                const d = await r.json();
+                if (!d.success) { showFaturaError(d.error); return; }
+
+                faturaIstekleri = d.fatura_istekleri || [];
+                document.getElementById('faturaSayi').textContent =
+                    `${faturaIstekleri.length} istek • ${formatTL(d.toplam || 0)}`;
+
+                if (!faturaIstekleri.length) {
+                    document.getElementById('faturaBody').innerHTML =
+                        `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">🧾</div><p>Fatura isteği yok</p><span>${tarih} tarihinde fatura bekleyen kayıt bulunamadı</span></div></td></tr>`;
+                    return;
+                }
+
+                document.getElementById('faturaBody').innerHTML = faturaIstekleri.map((s) => {
+                    return `<tr>
+                    <td>${formatSaat(s.tarih_saat)}</td>
+                    <td style="font-weight:600;">${escHtml(s.masa)}</td>
+                    <td><span class="fatura-badge">${escHtml(s.invoice_document_label)}</span></td>
+                    <td>${escHtml(s.invoice_tax_id) || '-'}</td>
+                    <td>${escHtml(s.invoice_serial_no) || '-'}</td>
+                    <td style="max-width:280px;">${escHtml(s.urunler)}</td>
+                    <td style="max-width:220px;color:var(--muted);">${escHtml(s.invoice_note) || '-'}</td>
+                    <td class="tutar-cell">${formatTL(s.toplam || 0)}</td>
+                </tr>`;
+                }).join('');
+
+            } catch (e) {
+                showFaturaError('Bağlantı hatası');
+            }
+        }
+
         function showOzetError(msg) {
             document.getElementById('ozetBody').innerHTML =
                 `<tr><td colspan="3" style="padding:20px;text-align:center;color:#fca5a5;">⚠️ ${escHtml(msg)}</td></tr>`;
@@ -690,6 +784,38 @@
         function showDetayError(msg) {
             document.getElementById('detayBody').innerHTML =
                 `<tr><td colspan="4" style="padding:20px;text-align:center;color:#fca5a5;">⚠️ ${escHtml(msg)}</td></tr>`;
+        }
+        function showFaturaError(msg) {
+            document.getElementById('faturaBody').innerHTML =
+                `<tr><td colspan="8" style="padding:20px;text-align:center;color:#fca5a5;">⚠️ ${escHtml(msg)}</td></tr>`;
+            document.getElementById('faturaSayi').textContent = 'Hata';
+        }
+
+        function exportFaturaCsv() {
+            if (!faturaIstekleri.length) return;
+            const headers = ['Saat', 'Masa/Kanal', 'Tür', 'VKN/TCKN', 'Seri No', 'Ürünler', 'Not', 'Tutar'];
+            const rows = faturaIstekleri.map(s => [
+                formatSaat(s.tarih_saat),
+                s.masa,
+                s.invoice_document_label,
+                s.invoice_tax_id,
+                s.invoice_serial_no,
+                s.urunler,
+                s.invoice_note,
+                Number(s.toplam || 0).toFixed(2)
+            ]);
+            const csv = [headers, ...rows].map(row =>
+                row.map(value => `"${String(value || '').replace(/"/g, '""')}"`).join(';')
+            ).join('\n');
+            const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `fatura-istekleri-${document.getElementById('dateSelector').value}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
         }
 
         // ── Yardımcılar ──
