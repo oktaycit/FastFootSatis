@@ -1137,22 +1137,65 @@ function getOrderPortionLabel(name) {
         prefixMatch = rawName.match(/^(tam|yarım|yarim)\s+/i);
     }
     if (prefixMatch) {
-        return normalizeDailyText(prefixMatch[1]).startsWith('yar') ? 'Yarım Porsiyon' : 'Tam Porsiyon';
+        return normalizeDailyText(prefixMatch[1]).startsWith('yar') ? 'Yarım' : 'Tam';
     }
 
     const trailing = rawName.match(/\(\s*(\d+(?:[,.]\d+)?)\s*porsiyon\s*\)\s*$/i);
     if (!trailing) return '';
 
     const parsed = Number(trailing[1].replace(',', '.'));
-    return Number.isFinite(parsed) && parsed > 0 ? `${formatPortionAmount(parsed)} Porsiyon` : '';
+    return Number.isFinite(parsed) && parsed > 0 ? formatPortionAmount(parsed) : '';
+}
+
+function getOrderPortionInfo(name) {
+    const rawName = String(name || '').trim();
+    let match = rawName.match(/^(tam|yarım|yarim)\s+porsiyon\s+(.+)$/i);
+    if (!match) {
+        match = rawName.match(/^(tam|yarım|yarim)\s+(.+)$/i);
+    }
+    if (match) {
+        return {
+            label: normalizeDailyText(match[1]).startsWith('yar') ? 'Yarım' : 'Tam',
+            baseName: match[2].trim()
+        };
+    }
+
+    const trailing = rawName.match(/\(\s*(\d+(?:[,.]\d+)?)\s*porsiyon\s*\)\s*$/i);
+    if (!trailing) return { label: '', baseName: rawName };
+
+    const label = getOrderPortionLabel(rawName);
+    const baseName = rawName.replace(/\s*\(\s*\d+(?:[,.]\d+)?\s*porsiyon\s*\)\s*$/i, '').trim();
+    return { label, baseName };
+}
+
+function getOrderPortionDisplayName(portionLabel, baseName) {
+    const label = String(portionLabel || '').trim();
+    const name = String(baseName || '').trim();
+    const normalized = normalizeDailyText(label);
+    if (normalized.startsWith('tam')) return `Tam ${name}`.trim();
+    if (normalized.startsWith('yar')) return `Yarım ${name}`.trim();
+    return label ? `${label.replace(/\s+porsiyon\s*$/i, '')} ${name}`.trim() : name;
+}
+
+function getOrderMealDisplayName(productName, mealName) {
+    const mealInfo = getOrderPortionInfo(mealName);
+    if (mealInfo.label && mealInfo.baseName) {
+        return getOrderPortionDisplayName(mealInfo.label, mealInfo.baseName);
+    }
+
+    const productInfo = getOrderPortionInfo(productName);
+    if (productInfo.label) {
+        return getOrderPortionDisplayName(productInfo.label, mealName);
+    }
+
+    return String(mealName || '').trim();
 }
 
 function getOrderDisplayName(item) {
     const { mealName } = splitOrderNoteDetails(item?.not);
     if (!mealName) return item?.urun || '';
 
-    const portionLabel = getOrderPortionLabel(item?.urun);
-    return portionLabel ? `${portionLabel} ${mealName}` : mealName;
+    return getOrderMealDisplayName(item?.urun, mealName);
 }
 
 function getOrderGroupName(item) {

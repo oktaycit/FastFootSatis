@@ -3199,6 +3199,11 @@ class RestaurantServer:
             label = "Yarım Porsiyon" if self._normalize_text_for_match(match.group(1)) == "yarim" else "Tam Porsiyon"
             return label, match.group(2).strip()
 
+        match = re.match(r'^(tam|yarım|yarim)\s+(.+)$', name, flags=re.IGNORECASE)
+        if match:
+            label = "Yarım Porsiyon" if self._normalize_text_for_match(match.group(1)) == "yarim" else "Tam Porsiyon"
+            return label, match.group(2).strip()
+
         match = re.search(r'\(\s*(\d+(?:[,.]\d+)?)\s*porsiyon\s*\)\s*$', name, flags=re.IGNORECASE)
         if match:
             label = self.prep_ticket_portion_label(match.group(1).replace(',', '.'))
@@ -3211,13 +3216,24 @@ class RestaurantServer:
         name = str(base_name or "").strip()
         label_key = self._normalize_text_for_match(portion_label)
         if label_key.startswith("tam"):
-            return name
+            return f"Tam {name}".strip()
         if label_key.startswith("yarim"):
             return f"Yarım {name}".strip()
         if label_key.startswith("bir bucuk"):
             return f"Bir Buçuk {name}".strip()
         label = re.sub(r'\s+porsiyon\s*$', '', str(portion_label or "").strip(), flags=re.IGNORECASE)
         return f"{label} {name}".strip() if label else name
+
+    def prep_ticket_meal_display_name(self, urun, meal_name):
+        meal_label, meal_base_name = self.prep_ticket_explicit_portion_info(meal_name)
+        if meal_label and meal_base_name:
+            return self.prep_ticket_portion_display_name(meal_label, meal_base_name)
+
+        label, _ = self.prep_ticket_explicit_portion_info(urun)
+        if label:
+            return self.prep_ticket_portion_display_name(label, meal_name)
+
+        return str(meal_name or "").strip()
 
     def is_dynamic_prep_portion_order(self, raw, urun, adet):
         if not self.prep_ticket_portion_label(adet):
@@ -3339,11 +3355,7 @@ class RestaurantServer:
 
             if meal_name:
                 # Tam porsiyon yazısını fişte sadeleştir, yarım gibi hazırlık bilgisini koru.
-                label, _ = self.prep_ticket_explicit_portion_info(urun)
-                if label:
-                    display_urun = self.prep_ticket_portion_display_name(label, meal_name)
-                else:
-                    display_urun = meal_name
+                display_urun = self.prep_ticket_meal_display_name(urun, meal_name)
                 display_adet = adet
                 note = extra_note
             else:
