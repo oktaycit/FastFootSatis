@@ -4147,6 +4147,27 @@ class RestaurantServer:
             logger.error(f"Adisyon kaydetme hatası: {e}")
             return False
 
+    def normalize_active_prep_order_names(self):
+        """Eski aktif siparişlerde kalan porsiyon öneki tekrarlarını temizle."""
+        changed = False
+        for items in self.adisyonlar.values():
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                urun = str(item.get("urun") or "").strip()
+                if not urun:
+                    continue
+                if not re.match(r"^(tam|yarım|yarim)\s+(?:porsiyon\s+)?", urun, flags=re.IGNORECASE):
+                    continue
+                label, base_name = self.prep_ticket_explicit_portion_info(urun)
+                normalized_name = self.prep_ticket_portion_display_name(label, base_name) if label else urun
+                if normalized_name and normalized_name != urun:
+                    item["urun"] = normalized_name
+                    changed = True
+        return changed
+
     def load_active_adisyonlar(self):
         """Aktif adisyonları dosyadan yükle"""
         if os.path.exists(ACTIVE_ADISYONLAR_FILE):
@@ -4157,6 +4178,8 @@ class RestaurantServer:
                     for masa, items in loaded_adisyonlar.items():
                         if masa in self.adisyonlar:
                             self.adisyonlar[masa] = items
+                if self.normalize_active_prep_order_names():
+                    self.save_active_adisyonlar()
                 logger.info("✓ Aktif adisyonlar geri yüklendi")
             except Exception as e:
                 logger.error(f"Adisyon yükleme hatası: {e}")
