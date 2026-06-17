@@ -279,6 +279,7 @@
                         <th>Açılış</th>
                         <th>Kapanış Nakit</th>
                         <th>Kapanış Kart</th>
+                        <th>Kapanış Toplam</th>
                         <th>Durum</th>
                         <th>İşlem</th>
                     </tr>
@@ -359,6 +360,48 @@
             ekranGuncelle();
         }
 
+        function paraFormat(value) {
+            const numberValue = Number(value || 0);
+            return numberValue.toFixed(2);
+        }
+
+        function vardiyaOzetindenKapanisToplamlari(summary) {
+            const totals = { nakit: 0, kart: 0, diger: 0 };
+            (summary || []).forEach(row => {
+                const odeme = String(row.odeme || '').toLocaleLowerCase('tr-TR');
+                const tutar = Number(row.toplam || 0);
+                if (odeme.includes('nakit')) {
+                    totals.nakit += tutar;
+                } else if (odeme.includes('kart') || odeme.includes('kredi')) {
+                    totals.kart += tutar;
+                } else {
+                    totals.diger += tutar;
+                }
+            });
+            return totals;
+        }
+
+        async function kapanisToplamlariniDoldur() {
+            if (!activeShift) return;
+            try {
+                const res = await fetch(`/api/vardiya/ozet/${activeShift.id}`);
+                const data = await res.json();
+                if (!data.success) return;
+
+                const totals = vardiyaOzetindenKapanisToplamlari(data.summary);
+                const nakitInput = document.getElementById('kapanisNakit');
+                const kartInput = document.getElementById('kapanisKart');
+                const digerInput = document.getElementById('kapanisDiger');
+                const toplamEl = document.getElementById('kapanisToplam');
+                if (nakitInput && !nakitInput.value) nakitInput.value = paraFormat(totals.nakit);
+                if (kartInput && !kartInput.value) kartInput.value = paraFormat(totals.kart);
+                if (digerInput) digerInput.value = paraFormat(totals.diger);
+                if (toplamEl) toplamEl.textContent = `${paraFormat(totals.nakit + totals.kart + totals.diger)} TL`;
+            } catch (error) {
+                console.error('Vardiya kapanış toplamları alınamadı:', error);
+            }
+        }
+
         function ekranGuncelle() {
             const container = document.getElementById('vardiyaDetay');
             if (!activeShift) {
@@ -397,15 +440,24 @@
                     <div style="margin-top: 20px;">
                         <div class="form-group">
                             <label>Teslim Edilen Nakit (TL)</label>
-                            <input type="number" id="kapanisNakit" placeholder="Kasayı sayın ve yazın">
+                            <input type="number" id="kapanisNakit" min="0" step="0.01" required placeholder="Kasayı sayın ve yazın">
                         </div>
                         <div class="form-group">
                             <label>Z-Raporu Kart Toplamı (TL)</label>
-                            <input type="number" id="kapanisKart" placeholder="Pos cihazından bakın">
+                            <input type="number" id="kapanisKart" min="0" step="0.01" required placeholder="Pos cihazından bakın">
+                        </div>
+                        <div class="form-group">
+                            <label>Parçalı / Diğer Sistem Toplamı (TL)</label>
+                            <input type="number" id="kapanisDiger" min="0" step="0.01" value="0.00" readonly>
+                        </div>
+                        <div class="stat-box" style="margin-bottom: 15px;">
+                            <div class="stat-label">Kapanış Toplamı</div>
+                            <div class="stat-value" id="kapanisToplam">0.00 TL</div>
                         </div>
                         <button class="btn btn-danger" onclick="vardiyaKapat()">VARDİYAYI KAPAT VE TESLİM ET</button>
                     </div>
                 `;
+                kapanisToplamlariniDoldur();
             }
         }
 
@@ -433,10 +485,14 @@
         }
 
         async function vardiyaKapat() {
-            if (!confirm("Vardiyayı kapatmak istediğinize emin misiniz?")) return;
-
             const nakit = document.getElementById('kapanisNakit').value;
             const kart = document.getElementById('kapanisKart').value;
+            const diger = document.getElementById('kapanisDiger').value || "0";
+            if (nakit === "" || kart === "") {
+                return alert("Kapanış nakit ve kart tutarları boş bırakılamaz.");
+            }
+
+            if (!confirm(`Vardiyayı kapatmak istediğinize emin misiniz?\n\nNakit: ${paraFormat(nakit)} TL\nKart: ${paraFormat(kart)} TL\nParçalı/Diğer: ${paraFormat(diger)} TL`)) return;
 
             const res = await fetch('/api/vardiya/kapat', {
                 method: 'POST',
@@ -444,7 +500,8 @@
                 body: JSON.stringify({
                     shift_id: activeShift.id,
                     nakit: nakit,
-                    kart: kart
+                    kart: kart,
+                    diger: diger
                 })
             });
             const data = await res.json();
@@ -483,6 +540,7 @@
                     <td>${s.acilis_bakiyesi} TL</td>
                     <td>${s.kapanis_nakit || '-'} TL</td>
                     <td>${s.kapanis_kart || '-'} TL</td>
+                    <td>${s.kapanis_bakiyesi || '-'} TL</td>
                     <td><span class="status-badge ${s.durum === 'acik' ? 'status-open' : 'status-closed'}">${s.durum.toUpperCase()}</span></td>
                     <td>
                         <button class="back-btn" onclick="detayGoster(${s.id})" style="padding:5px 10px; font-size:0.8rem">
@@ -504,7 +562,7 @@
                     msg += `- ${s.odeme}: ${s.toplam} TL\n`;
                 });
                 if (data.info.durum === 'kapali') {
-                    msg += `\nKapanış Beyanı:\nNakit: ${data.info.kapanis_nakit} TL\nKart: ${data.info.kapanis_kart} TL`;
+                    msg += `\nKapanış Beyanı:\nNakit: ${data.info.kapanis_nakit} TL\nKart: ${data.info.kapanis_kart} TL\nToplam: ${data.info.kapanis_bakiyesi || '-'} TL`;
                 }
                 alert(msg);
             }

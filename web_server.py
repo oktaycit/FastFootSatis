@@ -7390,22 +7390,44 @@ def api_vardiya_ac():
 @app.route('/api/vardiya/kapat', methods=['POST'])
 def api_vardiya_kapat():
     if not USE_DATABASE: return jsonify({'success': False, 'error': 'DB yok'})
-    data = request.json
+    data = request.json or {}
     shift_id = data.get('shift_id')
-    
-    # Boş string gelirse 0 kabul et (ValueError önlemek için)
-    val_nakit = data.get('nakit')
-    val_kart = data.get('kart')
-    nakit = float(val_nakit) if val_nakit and str(val_nakit).strip() != "" else 0.0
-    kart = float(val_kart) if val_kart and str(val_kart).strip() != "" else 0.0
-    
+
     if not shift_id: return jsonify({'success': False, 'error': 'Vardiya ID gerekli'})
     try:
-        db.close_shift(shift_id, nakit, kart)
+        totals = db.get_shift_closing_totals(shift_id)
+
+        def parse_closing_amount(field_name, default_value):
+            raw_value = data.get(field_name)
+            if raw_value is None or str(raw_value).strip() == "":
+                logger.warning(
+                    f"Vardiya kapatma {field_name} boş geldi; DB satış toplamı kullanıldı "
+                    f"(shift_id={shift_id}, tutar={default_value})"
+                )
+                return float(default_value)
+            try:
+                amount = float(str(raw_value).replace(",", "."))
+            except (TypeError, ValueError):
+                raise ValueError(f"{field_name} tutarı geçersiz")
+            if amount < 0:
+                raise ValueError(f"{field_name} tutarı negatif olamaz")
+            return amount
+
+        nakit = parse_closing_amount('nakit', totals['nakit'])
+        kart = parse_closing_amount('kart', totals['kart'])
+        diger = parse_closing_amount('diger', totals['diger'])
+        kapanis_bakiyesi = nakit + kart + diger
+        db.close_shift(shift_id, nakit, kart, kapanis_bakiyesi)
         server.revoke_public_sessions_for_shift(int(shift_id))
         # Tüm bağlı istemcilere vardiya kapandığını bildir
         socketio.emit('vardiya_update', None)
-        return jsonify({'success': True})
+        return jsonify({
+            'success': True,
+            'nakit': nakit,
+            'kart': kart,
+            'diger': diger,
+            'kapanis_bakiyesi': kapanis_bakiyesi
+        })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 

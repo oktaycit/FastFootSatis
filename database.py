@@ -9,6 +9,7 @@ from psycopg2 import pool, sql
 from psycopg2.extras import Json, RealDictCursor
 from datetime import datetime
 from contextlib import contextmanager
+from decimal import Decimal
 from db_config import DB_CONFIG
 
 class Database:
@@ -874,17 +875,20 @@ class Database:
             """, (kasa_id, kasiyer, acilis_bakiyesi))
             return cursor.fetchone()['id']
 
-    def close_shift(self, shift_id, kapanis_nakit, kapanis_kart):
+    def close_shift(self, shift_id, kapanis_nakit, kapanis_kart, kapanis_bakiyesi=None):
         """Vardiya kapat"""
+        if kapanis_bakiyesi is None:
+            kapanis_bakiyesi = kapanis_nakit + kapanis_kart
         with self.get_cursor() as cursor:
             cursor.execute("""
                 UPDATE vardiyalar
                 SET kapanis_zamani = CURRENT_TIMESTAMP,
                     kapanis_nakit = %s,
                     kapanis_kart = %s,
+                    kapanis_bakiyesi = %s,
                     durum = 'kapali'
                 WHERE id = %s
-            """, (kapanis_nakit, kapanis_kart, shift_id))
+            """, (kapanis_nakit, kapanis_kart, kapanis_bakiyesi, shift_id))
 
     def get_shift_totals(self, shift_id):
         """Vardiya toplamlarını hesapla"""
@@ -899,6 +903,26 @@ class Database:
                 GROUP BY odeme
             """, (shift_id,))
             return cursor.fetchall()
+
+    def get_shift_closing_totals(self, shift_id):
+        """Vardiya kapama için nakit/kart toplamlarını hesapla."""
+        totals = {
+            'nakit': Decimal('0'),
+            'kart': Decimal('0'),
+            'diger': Decimal('0'),
+            'toplam': Decimal('0'),
+        }
+        for row in self.get_shift_totals(shift_id):
+            payment = (row.get('odeme') or '').strip().lower()
+            amount = row.get('toplam') or Decimal('0')
+            totals['toplam'] += amount
+            if 'nakit' in payment:
+                totals['nakit'] += amount
+            elif 'kart' in payment or 'kredi' in payment:
+                totals['kart'] += amount
+            else:
+                totals['diger'] += amount
+        return totals
     
     def get_shift_by_id(self, shift_id):
         """ID'ye göre vardiya bilgilerini getir"""
