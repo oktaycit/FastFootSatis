@@ -3216,7 +3216,7 @@ class RestaurantServer:
         name = str(base_name or "").strip()
         label_key = self._normalize_text_for_match(portion_label)
         if label_key.startswith("tam"):
-            return f"Tam {name}".strip()
+            return name
         if label_key.startswith("yarim"):
             return f"Yarım {name}".strip()
         if label_key.startswith("bir bucuk"):

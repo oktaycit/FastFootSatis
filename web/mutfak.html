@@ -395,7 +395,7 @@
             const label = String(portionLabel || '').trim();
             const name = String(baseName || '').trim();
             const normalized = normalizeTextForMatch(label);
-            if (normalized.startsWith('tam')) return `Tam ${name}`.trim();
+            if (normalized.startsWith('tam')) return name;
             if (normalized.startsWith('yarim')) return `Yarım ${name}`.trim();
             if (normalized.startsWith('bir bucuk')) return `Bir Buçuk ${name}`.trim();
             return label ? `${label.replace(/\s+porsiyon\s*$/i, '')} ${name}`.trim() : name;
@@ -718,6 +718,30 @@
             };
         }
 
+        function getOrderTicketDisplayInfo(data) {
+            const displayInfo = getOrderDisplayInfo(data);
+            const mealName = extractMealNameFromNote(data?.not, data?.urun);
+            if (!mealName) {
+                return {
+                    ...displayInfo,
+                    ticketProductName: displayInfo.productName,
+                    ticketAggregateProductName: displayInfo.aggregateProductName,
+                    ticketNote: data?.not || ''
+                };
+            }
+
+            return {
+                ...displayInfo,
+                productName: mealName,
+                aggregateProductName: mealName,
+                ticketProductName: mealName,
+                ticketAggregateProductName: mealName,
+                portionLabel: '',
+                portionSort: 99,
+                ticketNote: ''
+            };
+        }
+
         function getPlateGroupLabel(data) {
             const plate = data?.plate_group;
             if (!plate || typeof plate !== 'object') return '';
@@ -1017,8 +1041,8 @@
         }
 
         function getAggregateKey(data) {
-            const displayInfo = getOrderDisplayInfo(data);
-            return `${normalizeProductKey(displayInfo.aggregateProductName)}|${normalizeProductKey(data.not || '')}`;
+            const displayInfo = getOrderTicketDisplayInfo(data);
+            return `${normalizeProductKey(displayInfo.ticketAggregateProductName)}|${normalizeProductKey(displayInfo.ticketNote || '')}`;
         }
 
         function findAggregateCard(groupKey) {
@@ -1123,9 +1147,9 @@
 
         function buildOrderItemHtml(data, options = {}) {
             ensureOrderFifoMetadata(data);
-            const displayInfo = getOrderDisplayInfo(data);
+            const displayInfo = getOrderTicketDisplayInfo(data);
             const mealName = extractMealNameFromNote(data.not, data.urun);
-            const ticketProductName = mealName || displayInfo.productName;
+            const ticketProductName = displayInfo.ticketProductName || displayInfo.productName;
             const noteParts = [];
             const plateLabel = getPlateGroupLabel(data);
             if (plateLabel) noteParts.push(plateLabel);
@@ -1254,8 +1278,9 @@
             card.className = showNewEffect ? 'order-card new' : 'order-card';
             card.dataset.aggregate = '1';
             card.dataset.groupKey = groupKey;
-            card.dataset.urun = getOrderDisplayInfo(data).aggregateProductName;
-            card.dataset.note = data.not || '';
+            const displayInfo = getOrderTicketDisplayInfo(data);
+            card.dataset.urun = displayInfo.ticketAggregateProductName;
+            card.dataset.note = displayInfo.ticketNote || '';
             card.dataset.panel = currentPanelId;
             const cardId = `order-agg-${Date.now()}-${Math.random().toString(36).slice(2)}`;
             card.id = cardId;
@@ -1491,11 +1516,10 @@
             };
             if (!data.kategori) data.kategori = getMenuCategoryForProduct(data.urun);
             if (!data.panel) data.panel = getOrderPanelId(data);
-            const displayInfo = getOrderDisplayInfo(data);
-            const mealName = extractMealNameFromNote(data.not, data.urun);
-            const productName = mealName || displayInfo.productName;
+            const displayInfo = getOrderTicketDisplayInfo(data);
+            const productName = displayInfo.ticketProductName || displayInfo.productName;
             const note = [
-                mealName ? '' : cleanPrepTicketNote(data.not)
+                displayInfo.ticketNote ? cleanPrepTicketNote(displayInfo.ticketNote) : ''
             ].filter(Boolean).join(' / ');
             const parsedQuantity = parseOrderQuantity(displayInfo.quantity, 1);
             const quantity = parsedQuantity > 0 ? parsedQuantity : 1;
