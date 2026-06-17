@@ -2999,8 +2999,9 @@ function finalizeSplitPayment() {
     }
 
     const posType = systemInfo.pos_type || '';
+    const hasCariPayment = cari > 0;
     const shouldWaitForPos = systemInfo.pos_enabled && (
-        kart > 0 || tokenBridgeTypes.includes(posType)
+        !hasCariPayment && (kart > 0 || tokenBridgeTypes.includes(posType))
     );
 
     if (shouldWaitForPos) {

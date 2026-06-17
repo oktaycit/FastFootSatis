@@ -9368,6 +9368,7 @@ def handle_payment(data):
     if not payments:
         emit('error', {'message': 'Geçerli ödeme tutarı bulunamadı'})
         return
+    has_current_account_payment = any(p.get('type') == 'Açık Hesap' for p in payments)
 
     payment_total_cents = int(round(sum(p['amount'] for p in payments) * 100))
     payable_total_cents = int(round(payable_total * 100))
@@ -9380,7 +9381,7 @@ def handle_payment(data):
         })
         return
 
-    if invoice_pending and server.pos_enabled:
+    if invoice_pending and server.pos_enabled and not has_current_account_payment:
         token_bridge_enabled_for_invoice = server.pos_type in POSManager.TOKEN_BRIDGE_TYPES
         card_amount_for_invoice = sum(p['amount'] for p in payments if p.get('type') == 'Kredi Kartı')
         if token_bridge_enabled_for_invoice:
@@ -9410,7 +9411,7 @@ def handle_payment(data):
         timestamp = datetime.datetime.now()
         
         # POS/ÖKC işlemi
-        if server.pos_enabled:
+        if server.pos_enabled and not has_current_account_payment:
             card_amount = sum(p['amount'] for p in payments if p.get('type') == 'Kredi Kartı')
             token_bridge_enabled = server.pos_type in POSManager.TOKEN_BRIDGE_TYPES
             pos_amount = sum(p['amount'] for p in payments) if token_bridge_enabled else card_amount
@@ -9428,6 +9429,8 @@ def handle_payment(data):
                 if not success:
                     raise Exception(msg)
                 logger.info(f"✅ POS/ÖKC satış başarılı: {msg}")
+        elif server.pos_enabled and has_current_account_payment:
+            logger.info("📝 Açık hesap ödemesi ÖKC'ye gönderilmedi; cari borç olarak kaydedilecek.")
 
         cari_adisyon_base = {
             'masa': masa_adi,
