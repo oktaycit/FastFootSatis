@@ -708,7 +708,11 @@
             const portion = getOrderPortionInfo(data);
             if (portion) {
                 const productName = prepTicketPortionDisplayName(portion.label, portion.baseName);
-                const displayPortionLabel = portion.label === 'Tam' ? '' : portion.label;
+                const productNameKey = normalizeTextForMatch(productName);
+                const labelKey = normalizeTextForMatch(portion.label);
+                const displayPortionLabel = portion.label === 'Tam' || (labelKey && productNameKey.startsWith(`${labelKey} `))
+                    ? ''
+                    : portion.label;
                 return {
                     quantity: portion.quantity,
                     productName,
