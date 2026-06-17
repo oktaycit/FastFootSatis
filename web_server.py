@@ -4318,6 +4318,83 @@ class RestaurantServer:
             reservation.get("customer_name") or "",
         )
 
+    def find_order_menu_item(self, urun, kategori=None):
+        target = self._normalize_product_key(urun)
+        category_target = self._normalize_text_for_match(kategori)
+        for category, items in self.get_order_menu_data().items():
+            if category_target and self._normalize_text_for_match(category) != category_target:
+                continue
+            for item in items:
+                if not isinstance(item, (list, tuple)) or not item:
+                    continue
+                name = str(item[0] or "").strip()
+                if self._normalize_product_key(name) == target:
+                    return category, name, item
+        return None, None, None
+
+    def normalize_reservation_menu_items(self, items, validate_menu=True):
+        """Rezervasyon için menüden seçilen ürünleri reyon bilgisiyle sakla."""
+        if not isinstance(items, list):
+            return [], None
+
+        normalized = []
+        for raw in items[:80]:
+            if not isinstance(raw, dict):
+                continue
+            urun = self.sanitize_reservation_text(
+                raw.get("urun") or raw.get("name"),
+                max_len=140
+            )
+            if not urun:
+                continue
+            requested_category = self.sanitize_reservation_text(
+                raw.get("kategori") or raw.get("category"),
+                max_len=100
+            )
+            kategori, menu_name, menu_item = self.find_order_menu_item(urun, requested_category)
+            if not menu_item:
+                if validate_menu:
+                    return None, f"Menüde bulunamayan ürün: {urun}"
+                kategori = requested_category
+                menu_name = urun
+
+            try:
+                adet = self.coerce_order_quantity(raw.get("adet", raw.get("quantity", 1)))
+            except Exception:
+                adet = 0
+            if adet <= 0 or adet > 999:
+                return None, f"{menu_name} için adet 1-999 arasında olmalı"
+
+            note = self.sanitize_reservation_text(raw.get("not") or raw.get("note"), max_len=180)
+            panel = self.get_preparation_panel_for_product(menu_name, kategori)
+            panel_info = self.get_prep_panel_info(panel)
+            normalized.append({
+                "urun": menu_name,
+                "kategori": kategori,
+                "adet": adet,
+                "not": note,
+                "panel": panel,
+                "panel_adi": panel_info.get("name") or panel,
+            })
+
+        return normalized, None
+
+    def reservation_menu_summary(self, menu_items):
+        parts = []
+        for item in menu_items or []:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("urun") or "").strip()
+            if not name:
+                continue
+            adet = self.format_order_quantity(item.get("adet", 1))
+            note = str(item.get("not") or "").strip()
+            label = f"{adet}x {name}"
+            if note:
+                label = f"{label} ({note})"
+            parts.append(label)
+        return "\n".join(parts)
+
     def normalize_reservation_record(self, data, existing=None, allow_unknown_masa=False):
         """API ve dosya kayıtlarını tek rezervasyon şemasına dönüştür."""
         existing = existing or {}
@@ -4366,6 +4443,27 @@ class RestaurantServer:
         status = self.normalize_reservation_status(data.get("status", existing.get("status")))
         source = self.normalize_reservation_source(data.get("source", existing.get("source")))
         reservation_id = str(existing.get("id") or data.get("id") or uuid.uuid4().hex)
+        if "menu_items" in data:
+            menu_items, menu_error = self.normalize_reservation_menu_items(
+                data.get("menu_items"),
+                validate_menu=not allow_unknown_masa
+            )
+            if menu_error:
+                return None, menu_error
+        else:
+            menu_items = existing.get("menu_items") if isinstance(existing.get("menu_items"), list) else []
+
+        menu_preferences = self.sanitize_reservation_text(
+            data.get("menu_preferences", existing.get("menu_preferences")),
+            max_len=600,
+            multiline=True
+        )
+        if menu_items and not menu_preferences:
+            menu_preferences = self.sanitize_reservation_text(
+                self.reservation_menu_summary(menu_items),
+                max_len=600,
+                multiline=True
+            )
 
         record = {
             "id": reservation_id,
@@ -4378,11 +4476,8 @@ class RestaurantServer:
             "time": time_key,
             "masa": masa,
             "guest_count": guest_count,
-            "menu_preferences": self.sanitize_reservation_text(
-                data.get("menu_preferences", existing.get("menu_preferences")),
-                max_len=600,
-                multiline=True
-            ),
+            "menu_items": menu_items,
+            "menu_preferences": menu_preferences,
             "note": self.sanitize_reservation_text(
                 data.get("note", existing.get("note")),
                 max_len=500,
@@ -4464,6 +4559,100 @@ class RestaurantServer:
         if not self.save_reservations():
             return None, "Rezervasyon dosyaya kaydedilemedi"
         return record, None
+
+    def build_reservation_menu_notice(self, reservation):
+        menu_items = reservation.get("menu_items") if isinstance(reservation.get("menu_items"), list) else []
+        if not menu_items:
+            return None
+
+        panels = []
+        grouped = defaultdict(list)
+        for item in menu_items:
+            if not isinstance(item, dict):
+                continue
+            panel = item.get("panel") or self.get_preparation_panel_for_product(
+                item.get("urun"),
+                item.get("kategori")
+            )
+            item = dict(item)
+            item["panel"] = panel
+            item["panel_adi"] = self.get_prep_panel_info(panel).get("name") or panel
+            grouped[panel].append(item)
+
+        for panel, items in grouped.items():
+            panel_info = self.get_prep_panel_info(panel)
+            panels.append({
+                "panel": panel,
+                "panel_adi": panel_info.get("name") or panel,
+                "items": items,
+            })
+
+        label = f"{reservation.get('date', '')} {reservation.get('time', '')}".strip()
+        return {
+            "id": reservation.get("id"),
+            "customer_name": reservation.get("customer_name"),
+            "phone": reservation.get("phone"),
+            "date": reservation.get("date"),
+            "day": reservation.get("day"),
+            "time": reservation.get("time"),
+            "masa": reservation.get("masa"),
+            "guest_count": reservation.get("guest_count"),
+            "note": reservation.get("note") or "",
+            "menu_preferences": reservation.get("menu_preferences") or "",
+            "menu_items": menu_items,
+            "panels": panels,
+            "message": (
+                f"Rezervasyon menüsü: {label} {reservation.get('masa', '')} - "
+                f"{reservation.get('customer_name', '')}"
+            ).strip()
+        }
+
+    def notify_reservation_menu(self, reservation):
+        notice = self.build_reservation_menu_notice(reservation)
+        if not notice or reservation.get("status") != "planlandi":
+            return False
+
+        socketio.emit("reservation_menu_notice", notice)
+        for panel_entry in notice.get("panels", []):
+            panel = panel_entry.get("panel")
+            items = panel_entry.get("items") or []
+            if not panel or not items:
+                continue
+            ticket_payload = {
+                "uid": f"reservation:{notice.get('id')}:{panel}",
+                "masa": f"Rezervasyon {notice.get('masa') or ''}".strip(),
+                "urun": "Rezervasyon Menüsü",
+                "kategori": "Rezervasyon",
+                "panel": panel,
+                "panel_adi": panel_entry.get("panel_adi") or panel,
+                "adet": 1,
+                "not": "Bilgi fişi",
+                "saat": notice.get("time") or "",
+                "created_at": datetime.datetime.now().isoformat(timespec="seconds"),
+                "garson": "Rezervasyon",
+                "items": [
+                    {
+                        "uid": f"reservation:{notice.get('id')}:{panel}:{idx}",
+                        "urun": item.get("urun"),
+                        "kategori": item.get("kategori"),
+                        "panel": panel,
+                        "adet": item.get("adet", 1),
+                        "not": " / ".join(part for part in [
+                            item.get("not") or "",
+                            notice.get("customer_name") or "",
+                            notice.get("phone") or "",
+                            f"{notice.get('date') or ''} {notice.get('time') or ''}".strip(),
+                            f"{notice.get('guest_count') or ''} kişi" if notice.get("guest_count") else "",
+                            notice.get("note") or "",
+                        ] if part),
+                        "saat": notice.get("time") or "",
+                        "garson": "Rezervasyon",
+                    }
+                    for idx, item in enumerate(items, start=1)
+                ]
+            }
+            self.send_prep_ticket_to_printer(panel, ticket_payload)
+        return True
 
     def update_reservation(self, reservation_id, data):
         reservation_id = str(reservation_id or "").strip()
@@ -6793,6 +6982,11 @@ CARI_CSV_FIELDS = {
         "telefon_no", "tel no", "tel_no", "cep tel", "cep_tel",
         "telefon numarası", "telefon numarasi", "phone"
     ),
+    "vergi_no": _csv_aliases(
+        "vkn", "tckn", "vkn/tckn", "vkn tckn", "vergi no",
+        "vergi_no", "vergi numarası", "vergi numarasi", "tc kimlik no",
+        "tc kimlik", "t.c. kimlik", "tax id", "tax_id"
+    ),
     "adres": _csv_aliases(
         "adres", "address", "müşteri adresi", "musteri adresi",
         "teslimat adresi", "teslimat_adresi"
@@ -6889,6 +7083,10 @@ def _parse_csv_money(value):
     return -amount if is_negative else amount
 
 
+def _normalize_tax_id(value):
+    return re.sub(r"\D", "", str(value or ""))[:11]
+
+
 def _has_csv_column(fieldnames, field_name):
     aliases = CARI_CSV_FIELDS[field_name]
     return any(_csv_key_matches(field, aliases) for field in (fieldnames or []))
@@ -6907,6 +7105,7 @@ def get_cari_hesaplar():
                 'cari_isim': h['cari_isim'],
                 'telefon': h.get('telefon') or '',
                 'adres': h.get('adres') or '',
+                'vergi_no': h.get('vergi_no') or '',
                 'bakiye': float(h['bakiye']),
                 'olusturma_tarihi': str(h['olusturma_tarihi']) if h['olusturma_tarihi'] else ''
             })
@@ -6929,7 +7128,8 @@ def get_cari_hareketler(cari_isim):
                 'id': h['id'],
                 'islem': h['islem'],
                 'tutar': float(h['tutar']),
-                'tarih': str(h['tarih']) if h['tarih'] else ''
+                'tarih': str(h['tarih']) if h['tarih'] else '',
+                'adisyon_detay': h.get('adisyon_detay')
             })
         return jsonify({'success': True, 'hareketler': result, 'bakiye': bakiye})
     except Exception as e:
@@ -6970,6 +7170,80 @@ def add_cari_islem():
         return jsonify({'success': True, 'bakiye': bakiye})
     except Exception as e:
         logger.error(f"Cari işlem hatası: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/cari/fatura', methods=['POST'])
+def create_cari_invoice():
+    """Cari hesabın açık borç bakiyesini e-fatura/e-arşiv taslağına gönder."""
+    if not USE_DATABASE:
+        return jsonify({'success': False, 'error': 'Veri tabanı bağlantısı yok'}), 503
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'Geçersiz veri'}), 400
+
+    cari_isim = data.get('cari_isim', '').strip()
+    if not cari_isim:
+        return jsonify({'success': False, 'error': 'Müşteri adı boş olamaz'}), 400
+
+    customer = next(
+        (h for h in db.get_all_cari_accounts() if h['cari_isim'] == cari_isim),
+        None
+    )
+    data = dict(data)
+    if not _normalize_tax_id(data.get('invoice_tax_id')) and customer:
+        data['invoice_tax_id'] = customer.get('vergi_no') or ''
+    invoice_info = normalize_invoice_info(data)
+    invoice_error = validate_okc_invoice_info(invoice_info)
+    if invoice_error:
+        return jsonify({'success': False, 'error': invoice_error}), 400
+
+    try:
+        bakiye = db.get_cari_balance(cari_isim)
+        if bakiye <= 0.01:
+            return jsonify({'success': False, 'error': 'Faturaya dönüştürülecek açık borç yok'}), 400
+
+        invoice_note = invoice_info['note'] or f"{cari_isim} cari hesap borç bakiyesi"
+        timestamp = datetime.datetime.now()
+        order_data = {
+            'masa': f"Cari-{cari_isim}",
+            'customer': cari_isim,
+            'items': [{
+                'urun': 'Cari hesap borç bakiyesi',
+                'adet': 1,
+                'fiyat': round(float(bakiye), 2),
+            }],
+            'total': round(float(bakiye), 2),
+            'ikram_total': 0,
+            'payment_type': 'Cari',
+            'invoice_pending': True,
+            'invoice_document_type': invoice_info['document_type'],
+            'invoice_document_label': invoice_info['document_label'],
+            'invoice_tax_id': invoice_info['tax_id'],
+            'invoice_serial_no': invoice_info['serial_no'],
+            'invoice_note': invoice_note,
+            'timestamp': timestamp
+        }
+        if customer:
+            contact_bits = [
+                customer.get('telefon') or '',
+                customer.get('adres') or ''
+            ]
+            order_data['invoice_note'] = invoice_note or ' | '.join(bit for bit in contact_bits if bit)
+
+        success, message = server.integration_manager.send_to_accounting(order_data)
+        if not success:
+            return jsonify({'success': False, 'error': message}), 502
+
+        logger.info(f"🧾 Cari fatura taslağı: {cari_isim} | {bakiye:.2f} TL")
+        return jsonify({
+            'success': True,
+            'message': 'Cari borç e-fatura taslağına gönderildi',
+            'bakiye': round(float(bakiye), 2)
+        })
+    except Exception as e:
+        logger.error(f"Cari fatura oluşturma hatası: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
@@ -7020,6 +7294,7 @@ def import_cari_csv():
 
         telefon = _row_value(row, 'telefon') or None
         adres = _row_value(row, 'adres') or None
+        vergi_no = _normalize_tax_id(_row_value(row, 'vergi_no')) or None
 
         if has_borc or has_alacak:
             devreden_bakiye = _parse_csv_money(_row_value(row, 'devreden_borc'))
@@ -7031,8 +7306,8 @@ def import_cari_csv():
 
         try:
             db.get_or_create_cari(cari_isim)
-            if telefon or adres:
-                db.update_cari_details(cari_isim, telefon, adres)
+            if telefon or adres or vergi_no:
+                db.update_cari_details(cari_isim, telefon, adres, vergi_no)
             if abs(devreden_bakiye) >= 0.01:
                 islem = 'borc' if devreden_bakiye > 0 else 'odeme'
                 db.save_cari_transaction(cari_isim, islem, round(devreden_bakiye, 2))
@@ -7168,6 +7443,9 @@ def add_cari_hesap():
 
     telefon = (data.get('telefon') or '').strip() or None
     adres = (data.get('adres') or '').strip() or None
+    vergi_no = _normalize_tax_id(data.get('vergi_no'))
+    if vergi_no and len(vergi_no) not in (10, 11):
+        return jsonify({'success': False, 'error': 'VKN/TCKN 10 veya 11 haneli olmalı'}), 400
     raw_devreden = data.get('devreden_bakiye', '')
     raw_devreden_text = str(raw_devreden or '').strip()
     if raw_devreden_text and not re.search(r'\d', raw_devreden_text):
@@ -7176,8 +7454,8 @@ def add_cari_hesap():
     
     try:
         db.get_or_create_cari(cari_isim)
-        if telefon or adres:
-            db.update_cari_details(cari_isim, telefon, adres)
+        if telefon or adres or vergi_no:
+            db.update_cari_details(cari_isim, telefon, adres, vergi_no)
         if abs(devreden_bakiye) >= 0.01:
             islem = 'borc' if devreden_bakiye > 0 else 'odeme'
             db.save_cari_transaction(cari_isim, islem, round(devreden_bakiye, 2))
@@ -7216,6 +7494,7 @@ def lookup_customer(phone):
                     'cari_isim': customer['cari_isim'],
                     'telefon': customer['telefon'],
                     'adres': customer['adres'],
+                    'vergi_no': customer.get('vergi_no') or '',
                     'bakiye': bakiye
                 },
                 'history': [
@@ -7237,15 +7516,20 @@ def update_cari_details_api():
     if not USE_DATABASE:
         return jsonify({'success': False, 'error': 'Veri tabanı bağlantısı yok'})
     data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'Geçersiz veri'}), 400
     cari_isim = data.get('cari_isim')
     telefon = data.get('telefon')
     adres = data.get('adres')
+    vergi_no = _normalize_tax_id(data.get('vergi_no'))
+    if vergi_no and len(vergi_no) not in (10, 11):
+        return jsonify({'success': False, 'error': 'VKN/TCKN 10 veya 11 haneli olmalı'}), 400
     
     if not cari_isim:
         return jsonify({'success': False, 'error': 'Müşteri adı gerekli'})
         
     try:
-        db.update_cari_details(cari_isim, telefon, adres)
+        db.update_cari_details(cari_isim, telefon, adres, vergi_no)
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
@@ -8288,6 +8572,11 @@ def get_menu():
     """Menüyü getir"""
     return jsonify(server.menu_data)
 
+@app.route('/api/order-menu')
+def get_order_menu_api():
+    """Sipariş girişlerinde kullanılan menüyü getir."""
+    return jsonify(server.get_order_menu_data())
+
 @app.route('/api/prep-panels')
 def get_prep_panels():
     """Ürün gruplarının hazırlık paneli yönlendirmelerini getir"""
@@ -8334,6 +8623,7 @@ def reservations_api():
         return jsonify({'success': False, 'error': err}), 400
     payload = server.get_reservations_payload()
     socketio.emit('reservations_update', payload)
+    server.notify_reservation_menu(reservation)
     return jsonify({'success': True, 'reservation': reservation, 'reservations': payload})
 
 @app.route('/api/reservations/<reservation_id>', methods=['PUT', 'PATCH', 'DELETE'])
@@ -8351,6 +8641,7 @@ def reservation_detail_api(reservation_id):
 
     payload = server.get_reservations_payload()
     socketio.emit('reservations_update', payload)
+    server.notify_reservation_menu(reservation)
     return jsonify({'success': True, 'reservation': reservation, 'reservations': payload})
 
 @app.route('/api/adisyon/<masa_adi>')
@@ -9138,13 +9429,46 @@ def handle_payment(data):
                     raise Exception(msg)
                 logger.info(f"✅ POS/ÖKC satış başarılı: {msg}")
 
+        cari_adisyon_base = {
+            'masa': masa_adi,
+            'tarih': timestamp.isoformat(timespec='seconds'),
+            'toplam': round(float(payable_total), 2),
+            'ikram_toplam': round(float(ikram_total), 2),
+            'odeme_tipi': 'Parçalı' if len(payments) > 1 else payments[0]['type'],
+            'items': [
+                {
+                    'urun': item.get('urun', ''),
+                    'adet': server.coerce_order_quantity(item.get('adet', 1)),
+                    'fiyat': round(float(item.get('fiyat', 0) or 0), 2),
+                    'tutar': round(
+                        server.coerce_order_quantity(item.get('adet', 1))
+                        * float(item.get('fiyat', 0) or 0),
+                        2
+                    ),
+                    'tip': item.get('tip', 'normal'),
+                    'not': item.get('not', '')
+                }
+                for item in items
+            ],
+            'payments': [
+                {
+                    'type': p.get('type', ''),
+                    'amount': round(float(p.get('amount', 0) or 0), 2),
+                    'customer': p.get('customer', '')
+                }
+                for p in payments
+            ]
+        }
+
         # Cari işlemleri POS/ÖKC başarılı olduktan sonra kaydet
         for p in payments:
             if p.get('type') == 'Açık Hesap' and USE_DATABASE:
                 customer = p.get('customer', 'Genel Müşteri')
                 amount = float(p.get('amount', 0))
                 if amount > 0:
-                    db.save_cari_transaction(customer, 'borc', amount)
+                    cari_adisyon_detay = dict(cari_adisyon_base)
+                    cari_adisyon_detay['cari_tutar'] = round(amount, 2)
+                    db.save_cari_transaction(customer, 'borc', amount, cari_adisyon_detay)
                     logger.info(f"📝 Cari Borç: {customer} | {amount:.2f} TL")
 
         # Satışları kaydet

@@ -408,6 +408,7 @@ function connectToServer() {
     socket.on('masa_update', onMasaUpdate);
     socket.on('table_note_update', onTableNoteUpdate);
     socket.on('reservations_update', onReservationsUpdate);
+    socket.on('reservation_menu_notice', onReservationMenuNotice);
     socket.on('payment_completed', onPaymentCompleted);
     socket.on('incoming_call', onIncomingCall);
     socket.on('success', onSuccess);
@@ -900,6 +901,22 @@ function formatReservationAlertMessage(reservation) {
         `${Number(reservation.guest_count || 0)} kişi`
     ].filter(Boolean);
     return `Yaklaşan rezervasyon: ${parts.join(' · ')}`;
+}
+
+function onReservationMenuNotice(data) {
+    if (getTerminalRole() !== 'kasa') return;
+    const itemCount = Array.isArray(data?.menu_items) ? data.menu_items.length : 0;
+    const panelNames = Array.isArray(data?.panels)
+        ? data.panels.map(panel => panel.panel_adi || panel.panel).filter(Boolean).join(', ')
+        : '';
+    const detail = [
+        data?.time,
+        data?.masa,
+        data?.customer_name,
+        itemCount ? `${itemCount} kalem` : '',
+        panelNames ? `Reyon: ${panelNames}` : ''
+    ].filter(Boolean).join(' · ');
+    showNotification(`Rezervasyon menüsü girildi: ${detail}`, 'warning');
 }
 
 function checkUpcomingReservationAlerts() {

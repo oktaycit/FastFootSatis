@@ -172,6 +172,53 @@
             background: #dc2626;
         }
 
+        .reservation-notice-card {
+            border: 2px solid #f59e0b;
+            border-radius: 12px;
+            background: #fffbeb;
+            color: #111827;
+            padding: 14px;
+            margin-bottom: 14px;
+            box-shadow: 0 8px 20px rgba(245, 158, 11, 0.22);
+        }
+
+        .reservation-notice-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+
+        .reservation-notice-title {
+            font-size: 18px;
+            font-weight: 900;
+            line-height: 1.2;
+        }
+
+        .reservation-notice-meta,
+        .reservation-notice-note {
+            color: #78350f;
+            font-size: 13px;
+            font-weight: 800;
+            line-height: 1.35;
+        }
+
+        .reservation-notice-items {
+            display: grid;
+            gap: 6px;
+            margin-top: 10px;
+        }
+
+        .reservation-notice-item {
+            padding: 8px 10px;
+            border-radius: 8px;
+            background: #fff7ed;
+            color: #111827;
+            font-size: 15px;
+            font-weight: 900;
+        }
+
         .portion-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -734,6 +781,15 @@
             playNotificationSound();
         });
 
+        socket.on('reservation_menu_notice', (data) => {
+            const panelEntry = (data?.panels || []).find(panel => panel.panel === currentPanelId);
+            if (!panelEntry || !Array.isArray(panelEntry.items) || !panelEntry.items.length) {
+                return;
+            }
+            addReservationNoticeToGrid(data, panelEntry);
+            playNotificationSound();
+        });
+
         socket.on('kitchen_cancel_order', (data) => {
             console.log('Order cancelled:', data);
             let card = document.querySelector(`.order-card[data-masa="${data.masa}"]`);
@@ -1219,6 +1275,42 @@
                     setTimeout(() => card.classList.remove('new'), 5000);
                 }
             }
+        }
+
+        function formatReservationNoticeItem(item) {
+            const qty = formatOrderQuantity(item.adet || 1);
+            const note = item.not ? ` (${escapeHtml(item.not)})` : '';
+            return `<div class="reservation-notice-item">${escapeHtml(qty)}x ${escapeHtml(item.urun || '')}${note}</div>`;
+        }
+
+        function addReservationNoticeToGrid(data, panelEntry) {
+            const id = `reservation-notice-${String(data.id || Date.now()).replace(/[^a-zA-Z0-9_-]/g, '')}-${currentPanelId}`;
+            const existing = document.getElementById(id);
+            if (existing) existing.remove();
+
+            const card = document.createElement('div');
+            card.id = id;
+            card.className = 'reservation-notice-card';
+            const meta = [
+                data.date,
+                data.time,
+                data.masa,
+                data.guest_count ? `${data.guest_count} kişi` : '',
+                data.phone
+            ].filter(Boolean).join(' • ');
+            const items = (panelEntry.items || []).map(formatReservationNoticeItem).join('');
+            card.innerHTML = `
+                <div class="reservation-notice-head">
+                    <div>
+                        <div class="reservation-notice-title">REZERVASYON MENÜSÜ - ${escapeHtml(data.customer_name || '')}</div>
+                        <div class="reservation-notice-meta">${escapeHtml(meta)}</div>
+                    </div>
+                    <button class="btn btn-kitchen-all" type="button" onclick="this.closest('.reservation-notice-card').remove()">KAPAT</button>
+                </div>
+                <div class="reservation-notice-items">${items}</div>
+                ${data.note ? `<div class="reservation-notice-note">Not: ${escapeHtml(data.note)}</div>` : ''}
+            `;
+            kitchenGrid.prepend(card);
         }
 
         function completeOrder(id, explicitItemUids = null) {

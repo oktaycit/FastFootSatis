@@ -187,7 +187,9 @@
         .search:focus,
         .form-grid input:focus,
         .form-grid select:focus,
-        .wide-field textarea:focus {
+        .wide-field textarea:focus,
+        .menu-builder input:focus,
+        .menu-builder select:focus {
             border-color: var(--blue);
         }
 
@@ -360,6 +362,75 @@
             margin-top: 12px;
         }
 
+        .menu-builder {
+            display: grid;
+            grid-template-columns: minmax(150px, 1fr) minmax(180px, 1.3fr) 90px minmax(140px, 1fr) auto;
+            gap: 8px;
+            align-items: end;
+            margin-top: 12px;
+            padding: 10px;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: #f8fafc;
+        }
+
+        .menu-builder input,
+        .menu-builder select {
+            width: 100%;
+            min-height: 38px;
+            min-width: 0;
+            padding: 9px 10px;
+            border: 1px solid var(--line-strong);
+            border-radius: var(--radius);
+            color: var(--text);
+            font-size: 14px;
+            font-weight: 700;
+            outline: none;
+        }
+
+        .reservation-menu-items {
+            display: grid;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .reservation-menu-chip {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 9px 10px;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: #fff;
+        }
+
+        .reservation-menu-chip strong,
+        .reservation-menu-chip span {
+            display: block;
+        }
+
+        .reservation-menu-chip strong {
+            color: var(--text);
+            font-size: 14px;
+            line-height: 1.25;
+        }
+
+        .reservation-menu-chip span,
+        .menu-empty {
+            margin-top: 3px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .menu-empty {
+            padding: 10px;
+            border: 1px dashed var(--line-strong);
+            border-radius: var(--radius);
+            background: #fff;
+        }
+
         .wide-field textarea {
             min-height: 76px;
             resize: vertical;
@@ -423,6 +494,10 @@
             }
 
             .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .menu-builder {
                 grid-template-columns: 1fr;
             }
         }
@@ -544,6 +619,31 @@
                                 <option value="iptal">İptal</option>
                             </select>
                         </label>
+                    </div>
+                    <div class="wide-field">
+                        <label>Menüden Yemek</label>
+                        <div class="menu-builder">
+                            <label>
+                                Kategori
+                                <select id="reservationMenuCategory"></select>
+                            </label>
+                            <label>
+                                Ürün
+                                <select id="reservationMenuProduct"></select>
+                            </label>
+                            <label>
+                                Adet
+                                <input type="number" id="reservationMenuQty" min="1" max="999" step="1" value="1">
+                            </label>
+                            <label>
+                                Ürün Notu
+                                <input type="text" id="reservationMenuNote" maxlength="180">
+                            </label>
+                            <button class="btn btn-primary" id="btnAddReservationMenuItem" type="button">Ekle</button>
+                        </div>
+                        <div class="reservation-menu-items" id="reservationMenuItems">
+                            <div class="menu-empty">Menü ürünü eklenmedi</div>
+                        </div>
                     </div>
                     <label class="wide-field">
                         Menü Tercihleri

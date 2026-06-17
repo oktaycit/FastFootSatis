@@ -1,7 +1,10 @@
 let systemInfo = {};
+let menuData = {};
+let prepPanels = [];
 let reservationsPayload = { reservations: [], active_by_table: {}, active_count: 0, today_count: 0 };
 let reservationFilter = 'active';
 let reservationSearchTerm = '';
+let reservationMenuItems = [];
 let socket = null;
 
 const elements = {};
@@ -29,6 +32,12 @@ const elementIds = [
     'reservationTable',
     'reservationGuests',
     'reservationStatus',
+    'reservationMenuCategory',
+    'reservationMenuProduct',
+    'reservationMenuQty',
+    'reservationMenuNote',
+    'btnAddReservationMenuItem',
+    'reservationMenuItems',
     'reservationMenu',
     'reservationNote',
     'btnCancelReservation',
@@ -70,6 +79,20 @@ function setupEventListeners() {
         renderReservations();
     };
 
+    elements.reservationMenuCategory.onchange = () => {
+        populateReservationProductOptions();
+    };
+    elements.btnAddReservationMenuItem.onclick = addReservationMenuItemFromForm;
+    elements.reservationMenuItems.onclick = event => {
+        const button = event.target.closest('button[data-menu-remove]');
+        if (!button) return;
+        const index = Number(button.dataset.menuRemove);
+        if (!Number.isNaN(index)) {
+            reservationMenuItems.splice(index, 1);
+            renderReservationMenuItems();
+        }
+    };
+
     elements.reservationTableBody.onclick = event => {
         const button = event.target.closest('button[data-action][data-id]');
         if (!button) return;
@@ -91,16 +114,23 @@ function setupEventListeners() {
 
 async function loadInitialData() {
     try {
-        const [systemResponse, reservationsResponse] = await Promise.all([
+        const [systemResponse, reservationsResponse, menuResponse, prepResponse] = await Promise.all([
             fetch('/api/system/info', { cache: 'no-store' }),
-            fetch('/api/reservations', { cache: 'no-store' })
+            fetch('/api/reservations', { cache: 'no-store' }),
+            fetch('/api/order-menu', { cache: 'no-store' }),
+            fetch('/api/prep-panels', { cache: 'no-store' })
         ]);
         if (!systemResponse.ok) throw new Error('Sistem bilgisi alınamadı');
         if (!reservationsResponse.ok) throw new Error('Rezervasyonlar alınamadı');
+        if (!menuResponse.ok) throw new Error('Menü alınamadı');
 
         systemInfo = await systemResponse.json();
         reservationsPayload = normalizeReservationsPayload(await reservationsResponse.json());
+        menuData = await menuResponse.json();
+        const prepData = prepResponse.ok ? await prepResponse.json() : {};
+        prepPanels = Array.isArray(prepData.panels) ? prepData.panels : [];
         populateReservationTableOptions();
+        populateReservationMenuCategories();
         renderReservations();
     } catch (error) {
         showToast(error.message || 'Rezervasyon sayfası yüklenemedi', 'error');
@@ -179,6 +209,7 @@ function getReservationSearchHaystack(reservation) {
         reservation.phone,
         reservation.masa,
         reservation.menu_preferences,
+        formatReservationMenuItems(reservation.menu_items),
         reservation.note,
         reservation.date,
         reservation.time,
@@ -250,8 +281,9 @@ function renderReservationRow(reservation) {
             <button class="btn btn-danger" type="button" data-action="cancel" data-id="${id}">İptal</button>
         `
         : '';
+    const structuredMenu = formatReservationMenuItems(reservation.menu_items);
     const menuNote = [
-        reservation.menu_preferences ? `Menü: ${reservation.menu_preferences}` : '',
+        structuredMenu ? `Menü: ${structuredMenu}` : (reservation.menu_preferences ? `Menü: ${reservation.menu_preferences}` : ''),
         reservation.note ? `Not: ${reservation.note}` : ''
     ].filter(Boolean).join('\n');
     return `
@@ -323,6 +355,132 @@ function populateReservationTableOptions(selectedTable = '') {
     }
 }
 
+function getMenuCategories() {
+    return Object.keys(menuData || {}).filter(category => Array.isArray(menuData[category]) && menuData[category].length);
+}
+
+function getMenuItemsForCategory(category) {
+    return Array.isArray(menuData?.[category]) ? menuData[category] : [];
+}
+
+function getPrepPanelName(panelId) {
+    const panel = (prepPanels || []).find(item => item.id === panelId);
+    return panel?.name || panelId || 'Reyon';
+}
+
+function populateReservationMenuCategories(selectedCategory = '') {
+    const categories = getMenuCategories();
+    elements.reservationMenuCategory.innerHTML = '';
+    if (!categories.length) {
+        elements.reservationMenuCategory.innerHTML = '<option value="">Menü yok</option>';
+        populateReservationProductOptions();
+        return;
+    }
+    categories.forEach(category => {
+        const option = document.createElement('option');
+        option.value = category;
+        option.textContent = category;
+        elements.reservationMenuCategory.appendChild(option);
+    });
+    if (selectedCategory && categories.includes(selectedCategory)) {
+        elements.reservationMenuCategory.value = selectedCategory;
+    }
+    populateReservationProductOptions();
+}
+
+function populateReservationProductOptions() {
+    const category = elements.reservationMenuCategory.value;
+    const items = getMenuItemsForCategory(category);
+    elements.reservationMenuProduct.innerHTML = '';
+    if (!items.length) {
+        elements.reservationMenuProduct.innerHTML = '<option value="">Ürün yok</option>';
+        return;
+    }
+    items.forEach(item => {
+        const name = String(item?.[0] || '').trim();
+        if (!name) return;
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        elements.reservationMenuProduct.appendChild(option);
+    });
+}
+
+function getPanelForMenuItem(productName, category) {
+    const productText = normalizeSearchText(productName);
+    for (const panel of prepPanels || []) {
+        const keywords = [...(panel.product_keywords || []), ...(panel.category_keywords || [])];
+        if (keywords.some(keyword => productText.includes(normalizeSearchText(keyword)))) {
+            return panel.id;
+        }
+    }
+    return '';
+}
+
+function addReservationMenuItemFromForm() {
+    const category = elements.reservationMenuCategory.value;
+    const product = elements.reservationMenuProduct.value;
+    const qty = Number(elements.reservationMenuQty.value || 1);
+    if (!category || !product) {
+        showToast('Menü ürünü seçin', 'error');
+        return;
+    }
+    if (!Number.isFinite(qty) || qty <= 0 || qty > 999) {
+        showToast('Geçerli adet girin', 'error');
+        return;
+    }
+    const panel = getPanelForMenuItem(product, category);
+    reservationMenuItems.push({
+        urun: product,
+        kategori: category,
+        adet: qty,
+        not: elements.reservationMenuNote.value.trim(),
+        panel,
+        panel_adi: getPrepPanelName(panel)
+    });
+    elements.reservationMenuQty.value = '1';
+    elements.reservationMenuNote.value = '';
+    renderReservationMenuItems();
+}
+
+function formatReservationMenuItem(item) {
+    if (!item) return '';
+    const qty = Number(item.adet || 1);
+    const qtyText = Number.isInteger(qty) ? String(qty) : String(qty).replace('.', ',');
+    const note = item.not ? ` (${item.not})` : '';
+    return `${qtyText}x ${item.urun || ''}${note}`;
+}
+
+function formatReservationMenuItems(items) {
+    if (!Array.isArray(items) || !items.length) return '';
+    return items.map(formatReservationMenuItem).filter(Boolean).join('\n');
+}
+
+function syncReservationMenuSummary() {
+    const summary = formatReservationMenuItems(reservationMenuItems);
+    if (summary) {
+        elements.reservationMenu.value = summary;
+    }
+}
+
+function renderReservationMenuItems() {
+    if (!reservationMenuItems.length) {
+        elements.reservationMenuItems.innerHTML = '<div class="menu-empty">Menü ürünü eklenmedi</div>';
+        elements.reservationMenu.value = '';
+        return;
+    }
+    elements.reservationMenuItems.innerHTML = reservationMenuItems.map((item, index) => `
+        <div class="reservation-menu-chip">
+            <div>
+                <strong>${escapeHtml(formatReservationMenuItem(item))}</strong>
+                <span>${escapeHtml(item.kategori || '')}${item.panel_adi ? ` · ${escapeHtml(item.panel_adi)}` : ''}</span>
+            </div>
+            <button class="btn btn-danger" type="button" data-menu-remove="${index}">Sil</button>
+        </div>
+    `).join('');
+    syncReservationMenuSummary();
+}
+
 function openReservationModal(reservation = null) {
     populateReservationTableOptions(reservation?.masa || '');
     elements.reservationModalTitle.textContent = reservation ? 'Rezervasyon Düzenle' : 'Yeni Rezervasyon';
@@ -334,6 +492,10 @@ function openReservationModal(reservation = null) {
     elements.reservationTime.value = reservation?.time || getDefaultReservationTime();
     elements.reservationGuests.value = reservation?.guest_count || 2;
     elements.reservationStatus.value = reservation?.status || 'planlandi';
+    reservationMenuItems = Array.isArray(reservation?.menu_items)
+        ? reservation.menu_items.map(item => ({ ...item }))
+        : [];
+    renderReservationMenuItems();
     elements.reservationMenu.value = reservation?.menu_preferences || '';
     elements.reservationNote.value = reservation?.note || '';
     elements.btnCancelReservation.style.display = reservation?.id ? '' : 'none';
@@ -355,6 +517,12 @@ function getReservationFormPayload() {
         masa: elements.reservationTable.value,
         guest_count: Number(elements.reservationGuests.value || 0),
         status: elements.reservationStatus.value,
+        menu_items: reservationMenuItems.map(item => ({
+            urun: item.urun,
+            kategori: item.kategori,
+            adet: item.adet,
+            not: item.not || ''
+        })),
         menu_preferences: elements.reservationMenu.value,
         note: elements.reservationNote.value
     };

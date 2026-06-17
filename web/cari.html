@@ -412,6 +412,17 @@
             color: white;
         }
 
+        .btn-fatura {
+            background: linear-gradient(135deg, #2563eb, #4f46e5);
+            color: white;
+        }
+
+        .btn-info {
+            background: rgba(99, 102, 241, 0.16);
+            color: #c7d2fe;
+            border: 1px solid rgba(99, 102, 241, 0.34);
+        }
+
         .btn-sil {
             background: rgba(239, 68, 68, 0.15);
             color: #fca5a5;
@@ -507,6 +518,63 @@
         .tutar-odeme {
             color: #6ee7b7;
             font-weight: 700;
+        }
+
+        .btn-detail {
+            background: rgba(99, 102, 241, 0.16);
+            border: 1px solid rgba(99, 102, 241, 0.34);
+            color: #c7d2fe;
+            padding: 6px 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 700;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .btn-detail:hover {
+            background: rgba(99, 102, 241, 0.26);
+        }
+
+        .btn-detail:disabled {
+            cursor: not-allowed;
+            opacity: 0.42;
+        }
+
+        .adisyon-meta {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.6;
+            margin-bottom: 14px;
+            padding: 10px 12px;
+        }
+
+        .adisyon-meta strong {
+            color: var(--text);
+        }
+
+        .adisyon-items {
+            max-height: 320px;
+            overflow: auto;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+
+        .adisyon-items table {
+            min-width: 520px;
+        }
+
+        .adisyon-total-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 14px;
+            font-size: 14px;
+            font-weight: 800;
         }
 
         /* Placeholder */
@@ -853,6 +921,8 @@
                         <div class="action-buttons">
                             <button class="btn-action btn-borc" onclick="showIslemModal('borc')">📌 Borçlandır</button>
                             <button class="btn-action btn-odeme" onclick="showIslemModal('odeme')">✅ Ödeme Al</button>
+                            <button class="btn-action btn-info" onclick="showDetailsModal()">Bilgiler</button>
+                            <button class="btn-action btn-fatura" id="btnFatura" onclick="showFaturaModal()">🧾 E-Fatura</button>
                             <button class="btn-action btn-sil" onclick="deleteHesap()">🗑 Sil</button>
                         </div>
                     </div>
@@ -864,6 +934,7 @@
                                     <th>Tarih & Saat</th>
                                     <th>İşlem</th>
                                     <th>Tutar</th>
+                                    <th>Adisyon</th>
                                 </tr>
                             </thead>
                             <tbody id="hareketlerBody">
@@ -885,7 +956,7 @@
                 <input type="file" id="cariCsvFile" accept=".csv,text/csv">
             </div>
             <div class="import-note">
-                Kolonlar: cari_isim, telefon, adres, devreden_borc. Bakiye ve devreden_alacak kolonları da desteklenir.
+                Kolonlar: cari_isim, telefon, vkn/tckn, adres, devreden_borc. Bakiye ve devreden_alacak kolonları da desteklenir.
             </div>
             <div class="import-result" id="importResult"></div>
             <div class="modal-actions">
@@ -908,6 +979,11 @@
                 <input type="text" id="newCariTelefon" placeholder="05XX XXX XX XX" autocomplete="off">
             </div>
             <div class="form-group">
+                <label>VKN/TCKN</label>
+                <input type="text" id="newCariVergiNo" placeholder="10 haneli VKN veya 11 haneli TCKN" inputmode="numeric"
+                    autocomplete="off">
+            </div>
+            <div class="form-group">
                 <label>Adres</label>
                 <input type="text" id="newCariAdres" placeholder="Müşteri adresi..." autocomplete="off">
             </div>
@@ -919,6 +995,30 @@
             <div class="modal-actions">
                 <button class="btn-cancel" onclick="closeModal('addModal')">İptal</button>
                 <button class="btn-primary" onclick="addHesap()">Ekle</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Cari Bilgileri -->
+    <div class="modal-overlay" id="detailsModal">
+        <div class="modal">
+            <h3>Cari Bilgileri</h3>
+            <div class="form-group">
+                <label>Telefon</label>
+                <input type="text" id="editCariTelefon" placeholder="05XX XXX XX XX" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label>VKN/TCKN</label>
+                <input type="text" id="editCariVergiNo" placeholder="10 haneli VKN veya 11 haneli TCKN" inputmode="numeric"
+                    autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label>Adres</label>
+                <input type="text" id="editCariAdres" placeholder="Müşteri adresi..." autocomplete="off">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeModal('detailsModal')">İptal</button>
+                <button class="btn-primary" onclick="submitCariDetails()">Kaydet</button>
             </div>
         </div>
     </div>
@@ -945,12 +1045,58 @@
         </div>
     </div>
 
+    <!-- MODAL: Cari E-Fatura -->
+    <div class="modal-overlay" id="faturaModal">
+        <div class="modal">
+            <h3>Cari Borcu E-Faturaya Dönüştür</h3>
+            <div class="import-note" id="faturaSummary"></div>
+            <div class="form-group" style="margin-top:16px;">
+                <label>Fatura Türü</label>
+                <select id="faturaDocumentType">
+                    <option value="9006">E-Fatura</option>
+                    <option value="9007">E-Arşiv</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>VKN/TCKN</label>
+                <input type="text" id="faturaTaxId" placeholder="10 haneli VKN veya 11 haneli TCKN" inputmode="numeric"
+                    autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label>Fatura Seri / No</label>
+                <input type="text" id="faturaSerialNo" placeholder="Örn: GIB2026000000001" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label>Not</label>
+                <input type="text" id="faturaNote" placeholder="Cari hesap borç bakiyesi" autocomplete="off">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeModal('faturaModal')">İptal</button>
+                <button class="btn-primary" id="faturaSubmitBtn" onclick="submitCariFatura()">E-Faturaya Gönder</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Adisyon Detayı -->
+    <div class="modal-overlay" id="adisyonModal">
+        <div class="modal modal-wide">
+            <h3>Adisyon Detayı</h3>
+            <div id="adisyonDetailContent"></div>
+            <div class="modal-actions">
+                <button class="btn-primary" onclick="closeModal('adisyonModal')">Kapat</button>
+            </div>
+        </div>
+    </div>
+
     <!-- TOAST -->
     <div class="toast" id="toast"></div>
 
     <script>
         let allHesaplar = [];
         let selectedCari = null;
+        let selectedCustomer = null;
+        let selectedHareketler = [];
+        let selectedBakiye = 0;
 
         // ── Sistem Bilgisi ──
         async function loadSystemInfo() {
@@ -1011,7 +1157,7 @@
         function filterList() {
             const q = document.getElementById('searchInput').value.toLowerCase();
             renderList(allHesaplar.filter(h => {
-                const searchable = `${h.cari_isim || ''} ${h.telefon || ''} ${h.adres || ''}`.toLowerCase();
+                const searchable = `${h.cari_isim || ''} ${h.telefon || ''} ${h.vergi_no || ''} ${h.adres || ''}`.toLowerCase();
                 return searchable.includes(q);
             }));
         }
@@ -1021,11 +1167,12 @@
             selectedCari = isim;
             renderList(allHesaplar.filter(h => {
                 const q = document.getElementById('searchInput').value.toLowerCase();
-                const searchable = `${h.cari_isim || ''} ${h.telefon || ''} ${h.adres || ''}`.toLowerCase();
+                const searchable = `${h.cari_isim || ''} ${h.telefon || ''} ${h.vergi_no || ''} ${h.adres || ''}`.toLowerCase();
                 return searchable.includes(q);
             }));
 
             const customer = allHesaplar.find(h => h.cari_isim === isim);
+            selectedCustomer = customer || null;
 
             try {
                 const r = await fetch(`/api/cari/hareketler/${encodeURIComponent(isim)}`);
@@ -1042,32 +1189,42 @@
                 const contactEl = document.getElementById('detailContact');
                 contactEl.innerHTML = '';
                 if (customer && customer.telefon) contactEl.innerHTML += `📞 ${escHtml(customer.telefon)} `;
+                if (customer && customer.vergi_no) contactEl.innerHTML += `${customer && customer.telefon ? '<br>' : ''}VKN/TCKN: ${escHtml(customer.vergi_no)}`;
                 if (customer && customer.adres) contactEl.innerHTML += `<br>🏠 ${escHtml(customer.adres)}`;
 
                 const b = d.bakiye;
+                selectedBakiye = Number(b || 0);
                 const bEl = document.getElementById('detailBakiye');
                 if (b > 0) { bEl.textContent = `📌 ${formatTL(b)} BORÇLU`; bEl.style.color = '#fca5a5'; }
                 else if (b < 0) { bEl.textContent = `✅ ${formatTL(Math.abs(b))} ALACAKLI`; bEl.style.color = '#6ee7b7'; }
                 else { bEl.textContent = '0.00 TL'; bEl.style.color = '#94a3b8'; }
+                document.getElementById('btnFatura').disabled = selectedBakiye <= 0.01;
 
                 const tbody = document.getElementById('hareketlerBody');
                 const emptyEl = document.getElementById('hareketEmpty');
+                selectedHareketler = d.hareketler || [];
 
-                if (!d.hareketler.length) {
+                if (!selectedHareketler.length) {
                     tbody.innerHTML = '';
                     emptyEl.style.display = 'block';
                 } else {
                     emptyEl.style.display = 'none';
-                    tbody.innerHTML = d.hareketler.map((h, i) => {
+                    tbody.innerHTML = selectedHareketler.map((h, i) => {
                         const isBorc = h.islem === 'borc';
                         const tutarVal = Math.abs(h.tutar);
                         const tarihStr = formatTarih(h.tarih);
+                        const hasAdisyon = Boolean(h.adisyon_detay && Array.isArray(h.adisyon_detay.items) && h.adisyon_detay.items.length);
                         return `
                         <tr>
                             <td style="color:var(--muted);font-size:12px;">${i + 1}</td>
                             <td style="color:var(--muted);font-size:13px;">${tarihStr}</td>
                             <td><span class="islem-chip ${isBorc ? 'islem-borc' : 'islem-odeme'}">${isBorc ? '📌 Borç' : '✅ Ödeme'}</span></td>
                             <td class="${isBorc ? 'tutar-borc' : 'tutar-odeme'}">${isBorc ? '+' : '-'}${formatTL(tutarVal)}</td>
+                            <td>
+                                <button class="btn-detail" ${hasAdisyon ? '' : 'disabled'} onclick="showAdisyonDetail(${i})">
+                                    ${hasAdisyon ? 'Görüntüle' : '-'}
+                                </button>
+                            </td>
                         </tr>`;
                     }).join('');
                 }
@@ -1153,6 +1310,7 @@
         function showAddModal() {
             document.getElementById('newCariIsim').value = '';
             document.getElementById('newCariTelefon').value = '';
+            document.getElementById('newCariVergiNo').value = '';
             document.getElementById('newCariAdres').value = '';
             document.getElementById('newCariDevir').value = '';
             document.getElementById('addModal').classList.add('show');
@@ -1162,10 +1320,15 @@
         async function addHesap() {
             const isim = document.getElementById('newCariIsim').value.trim();
             const telefon = document.getElementById('newCariTelefon').value.trim();
+            const vergiNo = document.getElementById('newCariVergiNo').value.replace(/\D/g, '');
             const adres = document.getElementById('newCariAdres').value.trim();
             const devredenBakiye = document.getElementById('newCariDevir').value.trim();
 
             if (!isim) { showToast('Müşteri adı boş olamaz', 'error'); return; }
+            if (vergiNo && ![10, 11].includes(vergiNo.length)) {
+                showToast('VKN/TCKN 10 veya 11 haneli olmalı', 'error');
+                return;
+            }
             try {
                 const r = await fetch('/api/cari/hesap', {
                     method: 'POST',
@@ -1173,6 +1336,7 @@
                     body: JSON.stringify({
                         cari_isim: isim,
                         telefon,
+                        vergi_no: vergiNo,
                         adres,
                         devreden_bakiye: devredenBakiye
                     })
@@ -1188,6 +1352,49 @@
                     showToast(d.error || 'Hata', 'error');
                 }
             } catch (e) { showToast('Bağlantı hatası', 'error'); }
+        }
+
+        function showDetailsModal() {
+            if (!selectedCari) return;
+            document.getElementById('editCariTelefon').value = selectedCustomer?.telefon || '';
+            document.getElementById('editCariVergiNo').value = selectedCustomer?.vergi_no || '';
+            document.getElementById('editCariAdres').value = selectedCustomer?.adres || '';
+            document.getElementById('detailsModal').classList.add('show');
+            setTimeout(() => document.getElementById('editCariTelefon').focus(), 100);
+        }
+
+        async function submitCariDetails() {
+            if (!selectedCari) return;
+            const telefon = document.getElementById('editCariTelefon').value.trim();
+            const vergiNo = document.getElementById('editCariVergiNo').value.replace(/\D/g, '');
+            const adres = document.getElementById('editCariAdres').value.trim();
+            if (vergiNo && ![10, 11].includes(vergiNo.length)) {
+                showToast('VKN/TCKN 10 veya 11 haneli olmalı', 'error');
+                return;
+            }
+            try {
+                const r = await fetch('/api/cari/update_details', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        cari_isim: selectedCari,
+                        telefon,
+                        vergi_no: vergiNo,
+                        adres
+                    })
+                });
+                const d = await r.json();
+                if (d.success) {
+                    showToast('Cari bilgileri güncellendi', 'success');
+                    closeModal('detailsModal');
+                    await loadHesaplar();
+                    await selectCari(selectedCari);
+                } else {
+                    showToast(d.error || 'Bilgiler kaydedilemedi', 'error');
+                }
+            } catch (e) {
+                showToast('Bağlantı hatası', 'error');
+            }
         }
 
         // ── Yeni İşlem ──
@@ -1223,6 +1430,127 @@
             } catch (e) { showToast('Bağlantı hatası', 'error'); }
         }
 
+        function showFaturaModal() {
+            if (!selectedCari) return;
+            if (selectedBakiye <= 0.01) {
+                showToast('Faturaya dönüştürülecek açık borç yok', 'info');
+                return;
+            }
+            document.getElementById('faturaSummary').innerHTML =
+                `<strong>${escHtml(selectedCari)}</strong> için açık borç: <strong>${formatTL(selectedBakiye)}</strong>`;
+            document.getElementById('faturaDocumentType').value = '9006';
+            document.getElementById('faturaTaxId').value = selectedCustomer?.vergi_no || '';
+            document.getElementById('faturaSerialNo').value = '';
+            document.getElementById('faturaNote').value = `${selectedCari} cari hesap borç bakiyesi`;
+            document.getElementById('faturaModal').classList.add('show');
+            setTimeout(() => {
+                const focusEl = selectedCustomer?.vergi_no
+                    ? document.getElementById('faturaSerialNo')
+                    : document.getElementById('faturaTaxId');
+                focusEl.focus();
+            }, 100);
+        }
+
+        async function submitCariFatura() {
+            if (!selectedCari) return;
+            const taxId = document.getElementById('faturaTaxId').value.replace(/\D/g, '');
+            const serialNo = document.getElementById('faturaSerialNo').value.trim();
+            const note = document.getElementById('faturaNote').value.trim();
+            if (![10, 11].includes(taxId.length)) {
+                showToast('10 haneli VKN veya 11 haneli TCKN girin', 'error');
+                return;
+            }
+            if (!serialNo) {
+                showToast('Fatura seri/no girin', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('faturaSubmitBtn');
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = 'Gönderiliyor...';
+
+            try {
+                const r = await fetch('/api/cari/fatura', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        cari_isim: selectedCari,
+                        invoice_document_type: document.getElementById('faturaDocumentType').value,
+                        invoice_tax_id: taxId,
+                        invoice_serial_no: serialNo,
+                        invoice_note: note
+                    })
+                });
+                const d = await r.json();
+                if (d.success) {
+                    showToast('Cari borç e-fatura taslağına gönderildi', 'success');
+                    closeModal('faturaModal');
+                } else {
+                    showToast(d.error || 'E-fatura gönderilemedi', 'error');
+                }
+            } catch (e) {
+                showToast('E-fatura gönderiminde bağlantı hatası', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        }
+
+        function showAdisyonDetail(index) {
+            const hareket = selectedHareketler[index];
+            const detay = hareket && hareket.adisyon_detay;
+            if (!detay || !Array.isArray(detay.items) || !detay.items.length) return;
+
+            const payments = Array.isArray(detay.payments) ? detay.payments : [];
+            const paymentText = payments.length
+                ? payments.map(p => `${escHtml(p.type || '-')} ${formatTL(p.amount || 0)}`).join(', ')
+                : escHtml(detay.odeme_tipi || '-');
+
+            const rows = detay.items.map(item => {
+                const adet = Number(item.adet || 0);
+                const fiyat = Number(item.fiyat || 0);
+                const tutar = Number(item.tutar || (adet * fiyat));
+                const note = item.not ? `<div style="color:var(--muted);font-size:12px;">${escHtml(item.not)}</div>` : '';
+                return `
+                    <tr>
+                        <td>${escHtml(item.urun || '-')} ${note}</td>
+                        <td>${formatQuantity(adet)}</td>
+                        <td>${formatTL(fiyat)}</td>
+                        <td>${formatTL(tutar)}</td>
+                    </tr>`;
+            }).join('');
+
+            document.getElementById('adisyonDetailContent').innerHTML = `
+                <div class="adisyon-meta">
+                    <div><strong>Masa/Adisyon:</strong> ${escHtml(detay.masa || '-')}</div>
+                    <div><strong>Tarih:</strong> ${formatTarih(detay.tarih || hareket.tarih)}</div>
+                    <div><strong>Ödeme:</strong> ${paymentText}</div>
+                </div>
+                <div class="adisyon-items">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Ürün</th>
+                                <th>Adet</th>
+                                <th>Birim</th>
+                                <th>Tutar</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+                <div class="adisyon-total-row">
+                    <span>Cari Borç</span>
+                    <span class="tutar-borc">${formatTL(detay.cari_tutar || hareket.tutar || 0)}</span>
+                </div>
+                <div class="adisyon-total-row" style="color:var(--muted);font-size:13px;font-weight:700;">
+                    <span>Adisyon Toplamı</span>
+                    <span>${formatTL(detay.toplam || 0)}</span>
+                </div>`;
+            document.getElementById('adisyonModal').classList.add('show');
+        }
+
         // ── Hesap Sil ──
         async function deleteHesap() {
             if (!selectedCari) return;
@@ -1233,6 +1561,7 @@
                 if (d.success) {
                     showToast(`"${selectedCari}" silindi`, 'success');
                     selectedCari = null;
+                    selectedCustomer = null;
                     document.getElementById('detailContent').style.display = 'none';
                     document.getElementById('placeholder').style.display = 'flex';
                     await loadHesaplar();
@@ -1246,6 +1575,10 @@
         function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 
         function formatTL(n) { return Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' TL'; }
+
+        function formatQuantity(n) {
+            return Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
+        }
 
         function formatTarih(str) {
             if (!str) return '-';

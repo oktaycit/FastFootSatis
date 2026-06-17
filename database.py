@@ -6,7 +6,7 @@ Restoran Projesi
 
 import psycopg2
 from psycopg2 import pool, sql
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import Json, RealDictCursor
 from datetime import datetime
 from contextlib import contextmanager
 from db_config import DB_CONFIG
@@ -131,6 +131,7 @@ class Database:
                     cari_isim TEXT NOT NULL UNIQUE,
                     telefon TEXT,
                     adres TEXT,
+                    vergi_no TEXT,
                     olusturma_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -138,6 +139,7 @@ class Database:
             # Tablo zaten varsa kolonları ekle (migration)
             cursor.execute("ALTER TABLE cari_hesaplar ADD COLUMN IF NOT EXISTS telefon TEXT")
             cursor.execute("ALTER TABLE cari_hesaplar ADD COLUMN IF NOT EXISTS adres TEXT")
+            cursor.execute("ALTER TABLE cari_hesaplar ADD COLUMN IF NOT EXISTS vergi_no TEXT")
             
             # CARİ HAREKETLER TABLOSU
             cursor.execute("""
@@ -147,9 +149,11 @@ class Database:
                     tarih TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     islem TEXT NOT NULL,
                     tutar DECIMAL(10, 2) NOT NULL,
+                    adisyon_detay JSONB,
                     FOREIGN KEY (cari_id) REFERENCES cari_hesaplar(id) ON DELETE CASCADE
                 )
             """)
+            cursor.execute("ALTER TABLE cari_hareketler ADD COLUMN IF NOT EXISTS adisyon_detay JSONB")
             
             # STOKLAR TABLOSU
             cursor.execute("""
@@ -593,15 +597,16 @@ class Database:
             """, (cari_isim,))
             return cursor.fetchone()['id']
     
-    def update_cari_details(self, cari_isim, telefon=None, adres=None):
+    def update_cari_details(self, cari_isim, telefon=None, adres=None, vergi_no=None):
         """Cari detaylarını güncelle"""
         with self.get_cursor() as cursor:
             cursor.execute("""
                 UPDATE cari_hesaplar
                 SET telefon = COALESCE(%s, telefon),
-                    adres = COALESCE(%s, adres)
+                    adres = COALESCE(%s, adres),
+                    vergi_no = COALESCE(%s, vergi_no)
                 WHERE cari_isim = %s
-            """, (telefon, adres, cari_isim))
+            """, (telefon, adres, vergi_no, cari_isim))
 
     def get_cari_by_phone(self, telefon):
         """Telefon numarasına göre cari getir"""
@@ -628,15 +633,15 @@ class Database:
             """, (cari_isim, limit))
             return cursor.fetchall()
     
-    def save_cari_transaction(self, cari_isim, islem, tutar):
+    def save_cari_transaction(self, cari_isim, islem, tutar, adisyon_detay=None):
         """Cari hesap hareketi ekle"""
         with self.get_cursor() as cursor:
             cari_id = self.get_or_create_cari(cari_isim)
             cursor.execute("""
-                INSERT INTO cari_hareketler (cari_id, islem, tutar)
-                VALUES (%s, %s, %s)
+                INSERT INTO cari_hareketler (cari_id, islem, tutar, adisyon_detay)
+                VALUES (%s, %s, %s, %s)
                 RETURNING id
-            """, (cari_id, islem, tutar))
+            """, (cari_id, islem, tutar, Json(adisyon_detay) if adisyon_detay else None))
             return cursor.fetchone()['id']
     
     def get_cari_balance(self, cari_isim):
@@ -659,11 +664,12 @@ class Database:
                     ch.cari_isim,
                     ch.telefon,
                     ch.adres,
+                    ch.vergi_no,
                     ch.olusturma_tarihi,
                     COALESCE(SUM(chr.tutar), 0) as bakiye
                 FROM cari_hesaplar ch
                 LEFT JOIN cari_hareketler chr ON ch.id = chr.cari_id
-                GROUP BY ch.id, ch.cari_isim, ch.telefon, ch.adres, ch.olusturma_tarihi
+                GROUP BY ch.id, ch.cari_isim, ch.telefon, ch.adres, ch.vergi_no, ch.olusturma_tarihi
                 ORDER BY ch.cari_isim
             """)
             return cursor.fetchall()
