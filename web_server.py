@@ -4979,6 +4979,9 @@ class RestaurantServer:
         match = re.match(r'^(tam|yarım|yarim)\s+porsiyon\s+(.+)$', name, flags=re.IGNORECASE)
         if match:
             name = match.group(2).strip()
+        match = re.match(r'^(tam|yarım|yarim)\s+(.+)$', name, flags=re.IGNORECASE)
+        if match and self._normalize_text_for_match(match.group(1)).startswith('tam'):
+            name = match.group(2).strip()
         name = re.sub(r'\(\s*\d+(?:[,.]\d+)?\s*porsiyon\s*\)\s*$', '', name, flags=re.IGNORECASE).strip()
         return name
 

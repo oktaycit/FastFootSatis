@@ -653,6 +653,9 @@
         function parseExplicitPortionName(name) {
             const rawName = String(name ?? '').trim();
             let match = rawName.match(/^(tam|yarım|yarim)\s+porsiyon\s+(.+)$/i);
+            if (!match) {
+                match = rawName.match(/^(tam|yarım|yarim)\s+(.+)$/i);
+            }
             if (match) {
                 const isHalf = normalizeTextForMatch(match[1]) === 'yarim';
                 return {
@@ -700,12 +703,14 @@
         function getOrderDisplayInfo(data) {
             const portion = getOrderPortionInfo(data);
             if (portion) {
+                const productName = prepTicketPortionDisplayName(portion.label, portion.baseName);
+                const displayPortionLabel = portion.label === 'Tam' ? '' : portion.label;
                 return {
                     quantity: portion.quantity,
-                    productName: `${portion.label} ${portion.baseName}`.trim(),
-                    aggregateProductName: portion.baseName,
-                    portionLabel: portion.label,
-                    portionSort: portion.sort
+                    productName,
+                    aggregateProductName: productName,
+                    portionLabel: displayPortionLabel,
+                    portionSort: displayPortionLabel ? portion.sort : 99
                 };
             }
 

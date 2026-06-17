@@ -3247,11 +3247,25 @@
             if (!isBasketPortionAdjustable(item)) return item?.name || '';
             const amount = getBasketPortionAmount(item);
             const mappedName = getMappedPortionValue(item, item?.portionNames, amount);
-            if (mappedName) return mappedName;
+            if (mappedName) return normalizeBasketPortionSendName(mappedName);
             const baseName = String(item.name || '').trim();
-            if (Math.abs(amount - 0.5) < 0.001) return `Yarım Porsiyon ${baseName}`;
-            if (Math.abs(amount - 1) < 0.001) return `Tam Porsiyon ${baseName}`;
-            return `${baseName} (${formatPortionAmount(amount)} porsiyon)`;
+            const parsedBase = parsePortionVariantName(baseName);
+            const cleanBaseName = parsedBase?.baseName || baseName;
+            if (Math.abs(amount - 0.5) < 0.001) {
+                return parsedBase?.type === 'half' ? baseName : `Yarım ${cleanBaseName}`.trim();
+            }
+            if (Math.abs(amount - 1) < 0.001) return cleanBaseName;
+            return `${cleanBaseName} (${formatPortionAmount(amount)} porsiyon)`;
+        }
+
+        function normalizeBasketPortionSendName(name) {
+            const rawName = String(name || '').trim();
+            const parsed = parsePortionVariantName(rawName);
+            if (!parsed?.baseName) return rawName;
+            const nested = parsePortionVariantName(parsed.baseName);
+            if (parsed.type === 'full') return nested?.type === 'half' ? parsed.baseName : parsed.baseName;
+            if (parsed.type === 'half') return nested?.type === 'half' ? parsed.baseName : `Yarım ${parsed.baseName}`.trim();
+            return rawName;
         }
 
         function getMealNameFromBaseNote(note) {
