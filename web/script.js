@@ -896,7 +896,7 @@ function getReservationAlertKey(reservation) {
 function formatReservationAlertMessage(reservation) {
     const parts = [
         reservation.time,
-        reservation.masa,
+        reservation.masa || 'Masa tercihi açık',
         reservation.customer_name,
         `${Number(reservation.guest_count || 0)} kişi`
     ].filter(Boolean);
@@ -911,7 +911,7 @@ function onReservationMenuNotice(data) {
         : '';
     const detail = [
         data?.time,
-        data?.masa,
+        data?.masa || 'Masa tercihi açık',
         data?.customer_name,
         itemCount ? `${itemCount} kalem` : '',
         panelNames ? `Reyon: ${panelNames}` : ''

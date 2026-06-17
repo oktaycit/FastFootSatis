@@ -1,6 +1,7 @@
 let systemInfo = {};
 let menuData = {};
 let prepPanels = [];
+let cariAccounts = [];
 let reservationsPayload = { reservations: [], active_by_table: {}, active_count: 0, today_count: 0 };
 let reservationFilter = 'active';
 let reservationSearchTerm = '';
@@ -24,6 +25,8 @@ const elementIds = [
     'btnDismissModal',
     'reservationForm',
     'reservationId',
+    'reservationCariSelect',
+    'reservationCustomerMeta',
     'reservationCustomer',
     'reservationPhone',
     'reservationSource',
@@ -79,6 +82,10 @@ function setupEventListeners() {
         renderReservations();
     };
 
+    elements.reservationCariSelect.onchange = () => {
+        applySelectedCariAccount(elements.reservationCariSelect.value);
+    };
+
     elements.reservationMenuCategory.onchange = () => {
         populateReservationProductOptions();
     };
@@ -114,11 +121,12 @@ function setupEventListeners() {
 
 async function loadInitialData() {
     try {
-        const [systemResponse, reservationsResponse, menuResponse, prepResponse] = await Promise.all([
+        const [systemResponse, reservationsResponse, menuResponse, prepResponse, cariResponse] = await Promise.all([
             fetch('/api/system/info', { cache: 'no-store' }),
             fetch('/api/reservations', { cache: 'no-store' }),
             fetch('/api/order-menu', { cache: 'no-store' }),
-            fetch('/api/prep-panels', { cache: 'no-store' })
+            fetch('/api/prep-panels', { cache: 'no-store' }),
+            fetch('/api/cari/hesaplar', { cache: 'no-store' }).catch(() => null)
         ]);
         if (!systemResponse.ok) throw new Error('Sistem bilgisi alınamadı');
         if (!reservationsResponse.ok) throw new Error('Rezervasyonlar alınamadı');
@@ -129,6 +137,11 @@ async function loadInitialData() {
         menuData = await menuResponse.json();
         const prepData = prepResponse.ok ? await prepResponse.json() : {};
         prepPanels = Array.isArray(prepData.panels) ? prepData.panels : [];
+        if (cariResponse?.ok) {
+            const cariData = await cariResponse.json();
+            cariAccounts = Array.isArray(cariData.hesaplar) ? cariData.hesaplar : [];
+        }
+        populateCariAccountOptions();
         populateReservationTableOptions();
         populateReservationMenuCategories();
         renderReservations();
@@ -206,6 +219,7 @@ function normalizeSearchText(value) {
 function getReservationSearchHaystack(reservation) {
     return normalizeSearchText([
         reservation.customer_name,
+        reservation.cari_isim,
         reservation.phone,
         reservation.masa,
         reservation.menu_preferences,
@@ -290,11 +304,14 @@ function renderReservationRow(reservation) {
         <tr>
             <td>${escapeHtml(formatShortDate(reservation.date))}<div class="muted">${escapeHtml(reservation.day || '')}</div></td>
             <td><strong>${escapeHtml(reservation.time || '')}</strong></td>
-            <td>${escapeHtml(reservation.masa || '')}</td>
+            <td>${escapeHtml(formatReservationTableLabel(reservation.masa))}</td>
             <td>${Number(reservation.guest_count || 0)}</td>
             <td class="customer-cell">
                 <strong>${escapeHtml(reservation.customer_name || '')}</strong>
-                <span>${escapeHtml(reservation.phone || '')}</span>
+                <span>${escapeHtml([
+                    reservation.phone || '',
+                    reservation.cari_isim ? `Cari: ${reservation.cari_isim}` : ''
+                ].filter(Boolean).join(' · '))}</span>
             </td>
             <td><div class="line-clamp">${escapeHtml(menuNote || '-')}</div></td>
             <td>${renderStatusBadge(reservation)}</td>
@@ -331,17 +348,18 @@ function getReservationTableNames() {
     return [];
 }
 
+function formatReservationTableLabel(masa) {
+    return String(masa || '').trim() || 'Masa tercihi açık';
+}
+
 function populateReservationTableOptions(selectedTable = '') {
     const tables = getReservationTableNames();
     elements.reservationTable.innerHTML = '';
 
-    if (!tables.length) {
-        const option = document.createElement('option');
-        option.value = '';
-        option.textContent = 'Masa yok';
-        elements.reservationTable.appendChild(option);
-        return;
-    }
+    const flexibleOption = document.createElement('option');
+    flexibleOption.value = '';
+    flexibleOption.textContent = 'Masa tercihi açık';
+    elements.reservationTable.appendChild(flexibleOption);
 
     tables.forEach(table => {
         const option = document.createElement('option');
@@ -352,6 +370,52 @@ function populateReservationTableOptions(selectedTable = '') {
 
     if (selectedTable && tables.includes(selectedTable)) {
         elements.reservationTable.value = selectedTable;
+    } else {
+        elements.reservationTable.value = '';
+    }
+}
+
+function populateCariAccountOptions(selectedCari = '') {
+    elements.reservationCariSelect.innerHTML = '<option value="">Cari seçmeden devam et</option>';
+    cariAccounts.forEach(account => {
+        const name = String(account?.cari_isim || '').trim();
+        if (!name) return;
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = account.telefon ? `${name} - ${account.telefon}` : name;
+        elements.reservationCariSelect.appendChild(option);
+    });
+    const selectedAccount = getSelectedCariAccount(selectedCari);
+    if (selectedAccount) {
+        elements.reservationCariSelect.value = selectedCari;
+    }
+    updateCariMeta(selectedAccount);
+}
+
+function getSelectedCariAccount(cariName) {
+    return (cariAccounts || []).find(account => account.cari_isim === cariName) || null;
+}
+
+function updateCariMeta(account = null) {
+    if (!elements.reservationCustomerMeta) return;
+    if (!account) {
+        elements.reservationCustomerMeta.textContent = 'Kayıtlı değilse ad ve telefonu elle yazabilirsiniz.';
+        return;
+    }
+    const details = [
+        account.telefon || '',
+        account.bakiye ? `Bakiye: ${Number(account.bakiye).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TL` : ''
+    ].filter(Boolean).join(' · ');
+    elements.reservationCustomerMeta.textContent = details || 'Cari kart seçildi.';
+}
+
+function applySelectedCariAccount(cariName) {
+    const account = getSelectedCariAccount(cariName);
+    updateCariMeta(account);
+    if (!account) return;
+    elements.reservationCustomer.value = account.cari_isim || '';
+    if (account.telefon) {
+        elements.reservationPhone.value = account.telefon;
     }
 }
 
@@ -483,6 +547,7 @@ function renderReservationMenuItems() {
 
 function openReservationModal(reservation = null) {
     populateReservationTableOptions(reservation?.masa || '');
+    populateCariAccountOptions(reservation?.cari_isim || '');
     elements.reservationModalTitle.textContent = reservation ? 'Rezervasyon Düzenle' : 'Yeni Rezervasyon';
     elements.reservationId.value = reservation?.id || '';
     elements.reservationCustomer.value = reservation?.customer_name || '';
@@ -511,6 +576,7 @@ function getReservationFormPayload() {
     return {
         customer_name: elements.reservationCustomer.value,
         phone: elements.reservationPhone.value,
+        cari_isim: elements.reservationCariSelect.value,
         source: elements.reservationSource.value,
         date: elements.reservationDate.value,
         time: elements.reservationTime.value,

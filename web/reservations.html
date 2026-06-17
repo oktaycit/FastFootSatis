@@ -358,6 +358,13 @@
             outline: none;
         }
 
+        .field-hint {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1.3;
+        }
+
         .wide-field {
             margin-top: 12px;
         }
@@ -581,6 +588,13 @@
                     <input type="hidden" id="reservationId">
                     <div class="form-grid">
                         <label>
+                            Cari Karttan Seç
+                            <select id="reservationCariSelect">
+                                <option value="">Cari seçmeden devam et</option>
+                            </select>
+                            <span class="field-hint" id="reservationCustomerMeta">Kayıtlı değilse ad ve telefonu elle yazabilirsiniz.</span>
+                        </label>
+                        <label>
                             Ad Soyad
                             <input type="text" id="reservationCustomer" maxlength="120" required>
                         </label>
@@ -605,7 +619,8 @@
                         </label>
                         <label>
                             Masa
-                            <select id="reservationTable" required></select>
+                            <select id="reservationTable"></select>
+                            <span class="field-hint">Boş bırakılırsa masa tercihi açık planlanır.</span>
                         </label>
                         <label>
                             Kişi
@@ -651,7 +666,7 @@
                     </label>
                     <label class="wide-field">
                         Not
-                        <textarea id="reservationNote" maxlength="500" rows="2"></textarea>
+                        <textarea id="reservationNote" maxlength="500" rows="2" placeholder="Örn: Hava iyi olursa bahçede, olmazsa içeride uygun masa"></textarea>
                     </label>
                 </div>
                 <div class="modal-actions">

@@ -4448,6 +4448,10 @@ class RestaurantServer:
             data.get("phone", existing.get("phone")),
             max_len=60
         )
+        cari_isim = self.sanitize_reservation_text(
+            data.get("cari_isim", existing.get("cari_isim")),
+            max_len=120
+        )
         date_key, day_name, date_error = self.normalize_reservation_date(
             data.get("date", existing.get("date"))
         )
@@ -4467,9 +4471,7 @@ class RestaurantServer:
             return None, date_error
         if time_error:
             return None, time_error
-        if not masa:
-            return None, "Masa seçimi gerekli"
-        if not allow_unknown_masa and masa not in self.adisyonlar:
+        if masa and not allow_unknown_masa and masa not in self.adisyonlar:
             return None, "Geçerli masa seçin"
 
         try:
@@ -4508,6 +4510,7 @@ class RestaurantServer:
             "id": reservation_id,
             "customer_name": customer_name,
             "phone": phone,
+            "cari_isim": cari_isim,
             "source": source,
             "source_label": self.reservation_source_label(source),
             "date": date_key,
