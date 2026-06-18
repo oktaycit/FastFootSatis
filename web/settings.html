@@ -2315,7 +2315,7 @@
                 await saveIntegrationSettings();
 
                 // QR Menu & Online Siparis politikasini kaydet
-                await saveQrMenuPolicy(mevcutSifre);
+                await saveQrMenuPolicy(yeniSifre || mevcutSifre);
 
                 prepPanels = prepSettings.panels;
                 prepPrinters = prepSettings.printers;

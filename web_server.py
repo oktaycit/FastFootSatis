@@ -2698,6 +2698,28 @@ class RestaurantServer:
             logger.error(f"Kullanıcı kaydetme hatası: {e}")
             return False
 
+    def sync_admin_password_to_auth_user(self, pin):
+        """Legacy ayar şifresi değişince varsayılan Yönetici PIN'ini de güncelle."""
+        pin = str(pin or "")
+        updated = False
+        for user in self.users:
+            if user.get("role") != "admin":
+                continue
+            is_default_admin = (
+                user.get("id") == "bootstrap-admin"
+                or self.auth_user_name_key(user.get("name")) == "yönetici"
+            )
+            if not is_default_admin:
+                continue
+            salt, pin_hash = self.hash_pin(pin)
+            user["pin_salt"] = salt
+            user["pin_hash"] = pin_hash
+            updated = True
+
+        if not updated:
+            return True
+        return self.save_users()
+
     def public_user(self, user, include_permissions=True):
         if not user:
             return None
@@ -6734,6 +6756,8 @@ def save_settings():
     yeni_sifre = data.get('yeni_sifre', '')
     if yeni_sifre:
         server.admin_password = yeni_sifre
+        if not server.sync_admin_password_to_auth_user(yeni_sifre):
+            return jsonify({'success': False, 'error': 'Yönetici şifresi güncellenemedi'}), 500
 
     # Diğer ayarları güncelle
     server.company_name  = data.get('firma_ismi',   server.company_name)
