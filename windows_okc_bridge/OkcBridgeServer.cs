@@ -15,7 +15,8 @@ namespace FastFootOkcBridge
     internal static class OkcBridgeServer
     {
         private const int DefaultPort = 8787;
-        private const int SaleTimeoutSeconds = 120;
+        private const int SaleTimeoutSeconds = 180;
+        private const int MaxSaleTimeoutSeconds = 300;
         private const int StalePendingThresholdSeconds = 180;
         private const int CallbackRecoveryInitialDelaySeconds = 15;
         private const int CallbackRecoveryRetrySeconds = 15;
@@ -456,6 +457,7 @@ namespace FastFootOkcBridge
             {
                 var pending = new PendingSale { BasketId = basketId, CreatedAt = DateTime.Now };
                 PendingSales[basketId] = pending;
+                var saleTimeoutSeconds = GetSaleTimeoutSeconds(basket);
 
                 Console.WriteLine(string.Format("{0:yyyy-MM-dd HH:mm:ss} Satis basladi: {1}", DateTime.Now, basketId));
                 int sendStatus;
@@ -498,11 +500,11 @@ namespace FastFootOkcBridge
                     return;
                 }
 
-                if (!pending.Done.Wait(TimeSpan.FromSeconds(SaleTimeoutSeconds)))
+                if (!pending.Done.Wait(TimeSpan.FromSeconds(saleTimeoutSeconds)))
                 {
                     PendingSale removed;
                     PendingSales.TryRemove(basketId, out removed);
-                    Console.WriteLine(string.Format("{0:yyyy-MM-dd HH:mm:ss} ZAMAN ASIMI: {1} ({2}s)", DateTime.Now, basketId, SaleTimeoutSeconds));
+                    Console.WriteLine(string.Format("{0:yyyy-MM-dd HH:mm:ss} ZAMAN ASIMI: {1} ({2}s)", DateTime.Now, basketId, saleTimeoutSeconds));
                     WriteJson(context, new Dictionary<string, object>
                     {
                         { "success", false },
@@ -531,6 +533,22 @@ namespace FastFootOkcBridge
             {
                 SaleLock.Release();
             }
+        }
+
+        private static int GetSaleTimeoutSeconds(Dictionary<string, object> basket)
+        {
+            var requested = GetInt(basket, "saleTimeoutSeconds", SaleTimeoutSeconds);
+            if (requested < SaleTimeoutSeconds)
+            {
+                return SaleTimeoutSeconds;
+            }
+
+            if (requested > MaxSaleTimeoutSeconds)
+            {
+                return MaxSaleTimeoutSeconds;
+            }
+
+            return requested;
         }
 
         /// <summary>

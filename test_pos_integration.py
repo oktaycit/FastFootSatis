@@ -75,6 +75,19 @@ class TokenBridgePayloadTests(unittest.TestCase):
         self.assertEqual([p["type"] for p in payload["paymentItems"]], [3, 3, 3])
         self.assertEqual([p["amount"] for p in payload["paymentItems"]], [10000, 8000, 12000])
         self.assertEqual(payload["paymentItems"][1]["description"], "Kredi Kartı 2")
+        self.assertEqual(payload["saleTimeoutSeconds"], 300)
+
+    def test_token_bridge_payload_uses_default_timeout_for_single_payment(self):
+        manager = POSManager(True, "192.168.1.50", 8787, "token-bridge")
+
+        payload = manager._create_token_bridge_payload(
+            table_name="Masa 3",
+            order_id="basket-single-card",
+            items=[{"urun": "Yemek", "adet": 1, "fiyat": 300.00}],
+            payments=[{"type": "Kredi Kartı", "amount": 300.00}],
+        )
+
+        self.assertEqual(payload["saleTimeoutSeconds"], 180)
 
     def test_token_bridge_payload_uses_e_invoice_info_receipt(self):
         manager = POSManager(True, "192.168.1.50", 8787, "token-bridge")
@@ -141,7 +154,7 @@ class TokenBridgePayloadTests(unittest.TestCase):
         mock_post.assert_called_once()
         self.assertEqual(mock_post.call_args.args[0], "http://192.168.1.50:8787/api/sale")
         self.assertEqual(mock_post.call_args.kwargs["json"]["basketID"], "basket-2")
-        self.assertEqual(mock_post.call_args.kwargs["timeout"], 130)
+        self.assertEqual(mock_post.call_args.kwargs["timeout"], 195)
 
     @patch("pos_integration.requests.get")
     @patch("pos_integration.requests.post")

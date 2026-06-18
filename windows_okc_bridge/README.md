@@ -9,6 +9,10 @@ Bu küçük Windows console uygulaması, `oktayraspian` üzerindeki FastFood sun
 3. ÖKC satış callback'i (`type == 3`) dönene kadar HTTP cevabı bekletilir.
 4. Başarılı callback gelirse FastFood adisyonu kapatır; hata veya timeout olursa adisyon açık kalır.
 
+Tek ödeme için varsayılan callback bekleme süresi 180 saniyedir. FastFood
+parçalı ödeme sepetlerinde `saleTimeoutSeconds: 300` gönderir; bridge bu değeri
+300 saniye üst sınırıyla kullanır.
+
 ## Kurulum
 
 1. Token/Arçelik sürücüsünü Windows'a kurun.

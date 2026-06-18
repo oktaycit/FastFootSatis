@@ -33,6 +33,8 @@ class POSManager:
     TOKEN_BRIDGE_STARTUP_GRACE_SECONDS = 180
     TOKEN_BRIDGE_STARTUP_WAIT_SECONDS = 45
     TOKEN_BRIDGE_HEALTH_POLL_SECONDS = 3
+    TOKEN_BRIDGE_SALE_TIMEOUT_SECONDS = 180
+    TOKEN_BRIDGE_SPLIT_SALE_TIMEOUT_SECONDS = 300
     PAYMENT_TYPE_CODES = {
         "nakit": 1,
         "kredi kartı": 3,
@@ -165,6 +167,7 @@ class POSManager:
             "infoReceiptInfo": None,
             "isWayBill": False,
             "note": table_name[:64] if table_name else None,
+            "saleTimeoutSeconds": self._token_sale_timeout_seconds(token_payments),
         }
 
         if invoice_pending:
@@ -186,6 +189,13 @@ class POSManager:
             payload["note"] = " | ".join(part for part in note_parts if part)[:64] or None
 
         return payload
+
+    def _token_sale_timeout_seconds(self, token_payments):
+        """Give cashiers more OKC interaction time for split card payments."""
+        payment_count = len(token_payments or [])
+        if payment_count > 1:
+            return self.TOKEN_BRIDGE_SPLIT_SALE_TIMEOUT_SECONDS
+        return self.TOKEN_BRIDGE_SALE_TIMEOUT_SECONDS
 
     def _create_token_item(self, item):
         name = str(item.get("urun") or item.get("name") or "").strip()
@@ -331,7 +341,11 @@ class POSManager:
     def _send_token_bridge_request(self, payload):
         """Send a Token basket payload to the Windows terminal OKC bridge."""
         url = f"http://{self.ip}:{self.port}/api/sale"
-        response = requests.post(url, json=payload, timeout=130)
+        sale_timeout = self._safe_int(
+            payload.get("saleTimeoutSeconds"),
+            fallback=self.TOKEN_BRIDGE_SALE_TIMEOUT_SECONDS,
+        )
+        response = requests.post(url, json=payload, timeout=sale_timeout + 15)
         try:
             result = response.json()
         except ValueError:
