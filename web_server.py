@@ -493,6 +493,9 @@ class RestaurantServer:
         else:
             self.courier_manager = None
         self.pos_manager = POSManager()
+        self.okc_busy = False
+        self.okc_busy_context = {}
+        self.okc_busy_lock = threading.RLock()
 
         self.cid_port = 101 # Caller ID Port (Signal 7 standardı)
         self.cid_type = 'tcp' # 'tcp' veya 'serial'
@@ -1892,11 +1895,42 @@ class RestaurantServer:
             'prep_category_overrides': self.prep_category_overrides,
             'prep_ticket_skip_products': self.prep_ticket_skip_products,
             'portion_stock': self.get_portion_stock_snapshot(),
-            'daily_meals': self.get_daily_meals_payload()
+            'daily_meals': self.get_daily_meals_payload(),
+            'okc_busy': self.get_okc_busy_payload()
         }
         if sid is not None:
             payload['active_shift'] = self.get_sid_active_shift(sid)
         return payload
+
+    def get_okc_busy_payload(self):
+        with self.okc_busy_lock:
+            payload = dict(self.okc_busy_context or {})
+            payload['busy'] = bool(self.okc_busy)
+            return payload
+
+    def try_start_okc_operation(self, context=None):
+        with self.okc_busy_lock:
+            if self.okc_busy:
+                return False, self.get_okc_busy_payload()
+
+            self.okc_busy = True
+            self.okc_busy_context = dict(context or {})
+            self.okc_busy_context['started_at'] = datetime.datetime.now().isoformat(timespec='seconds')
+            payload = self.get_okc_busy_payload()
+
+        socketio.emit('okc_busy_update', payload)
+        return True, payload
+
+    def finish_okc_operation(self):
+        with self.okc_busy_lock:
+            if not self.okc_busy:
+                return
+
+            self.okc_busy = False
+            self.okc_busy_context = {}
+            payload = self.get_okc_busy_payload()
+
+        socketio.emit('okc_busy_update', payload)
 
     def get_sid_active_shift(self, sid):
         """Socket SID'ine bağlı aktif vardiyayı getir"""
@@ -9555,19 +9589,36 @@ def handle_payment(data):
             token_bridge_enabled = server.pos_type in POSManager.TOKEN_BRIDGE_TYPES
             pos_amount = sum(p['amount'] for p in payments) if token_bridge_enabled else card_amount
             if pos_amount > 0:
+                okc_started, busy_payload = server.try_start_okc_operation({
+                    'masa': masa_adi,
+                    'amount': round(float(pos_amount), 2),
+                    'payment_count': len(payments),
+                    'pos_type': server.pos_type,
+                    'message': 'ÖKC işlemi devam ediyor, lütfen tamamlanmasını bekleyin.'
+                })
+                if not okc_started:
+                    emit('error', {
+                        'message': 'ÖKC işlemi devam ediyor, lütfen tamamlanmasını bekleyin.',
+                        'okc_busy': busy_payload
+                    })
+                    return
+
                 logger.info(f"💳 POS/ÖKC satış başlatılıyor: {pos_amount:.2f} TL | {server.pos_type}")
-                success, msg = server.pos_manager.sale(
-                    pos_amount,
-                    masa_adi,
-                    items=payable_items,
-                    payments=payments,
-                    order_id=str(uuid.uuid4()),
-                    invoice_pending=invoice_pending,
-                    invoice_info=invoice_info if invoice_pending else None
-                )
-                if not success:
-                    raise Exception(msg)
-                logger.info(f"✅ POS/ÖKC satış başarılı: {msg}")
+                try:
+                    success, msg = server.pos_manager.sale(
+                        pos_amount,
+                        masa_adi,
+                        items=payable_items,
+                        payments=payments,
+                        order_id=str(uuid.uuid4()),
+                        invoice_pending=invoice_pending,
+                        invoice_info=invoice_info if invoice_pending else None
+                    )
+                    if not success:
+                        raise Exception(msg)
+                    logger.info(f"✅ POS/ÖKC satış başarılı: {msg}")
+                finally:
+                    server.finish_okc_operation()
         elif server.pos_enabled and has_current_account_payment:
             logger.info("📝 Açık hesap ödemesi ÖKC'ye gönderilmedi; cari borç olarak kaydedilecek.")
 

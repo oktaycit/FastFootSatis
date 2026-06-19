@@ -21,6 +21,7 @@ let isSelectivePayment = false;
 let suppressCardSplitSync = false;
 let paymentInProgress = false;
 let paymentWaitTimer = null;
+let okcBusyState = { busy: false };
 let activeShift = null;
 let cashierOrderEntryOpen = false;
 let operationsStatusTimer = null;
@@ -145,15 +146,16 @@ function refreshCurrentTotal() {
 }
 
 function resetFinalizePaymentButton() {
-    paymentInProgress = false;
+    paymentInProgress = Boolean(okcBusyState && okcBusyState.busy);
     if (paymentWaitTimer) {
         clearTimeout(paymentWaitTimer);
         paymentWaitTimer = null;
     }
     if (elements.btnFinalizePayment) {
-        elements.btnFinalizePayment.disabled = false;
-        elements.btnFinalizePayment.textContent = FINALIZE_PAYMENT_LABEL;
+        elements.btnFinalizePayment.disabled = paymentInProgress;
+        elements.btnFinalizePayment.textContent = paymentInProgress ? '⏳ ÖKC Bekleniyor...' : FINALIZE_PAYMENT_LABEL;
     }
+    applyOkcBusyState();
 }
 
 function setFinalizePaymentWaiting(message = '⏳ ÖKC Bekleniyor...') {
@@ -170,6 +172,32 @@ function setFinalizePaymentWaiting(message = '⏳ ÖKC Bekleniyor...') {
         refreshCurrentMasaFromServer();
         showNotification('ÖKC yanıtı beklenenden uzun sürdü. Masa durumu sunucudan tekrar kontrol edildi.', 'warning');
     }, PAYMENT_WAIT_TIMEOUT_MS);
+}
+
+function applyOkcBusyState() {
+    const busy = Boolean(okcBusyState && okcBusyState.busy);
+    const amount = Number(okcBusyState?.amount || 0);
+    const masa = okcBusyState?.masa ? ` (${okcBusyState.masa})` : '';
+    const label = amount > 0
+        ? `⏳ ÖKC ${amount.toFixed(2)} TL bekliyor${masa}`
+        : '⏳ ÖKC Bekleniyor...';
+
+    paymentInProgress = busy;
+    [elements.btnTotalPayment, elements.btnPaySelected].forEach(btn => {
+        if (!btn) return;
+        btn.disabled = busy;
+        btn.title = busy ? 'ÖKC işlemi bitmeden yeni ödeme alınamaz' : '';
+    });
+
+    if (elements.btnFinalizePayment) {
+        elements.btnFinalizePayment.disabled = busy;
+        elements.btnFinalizePayment.textContent = busy ? label : FINALIZE_PAYMENT_LABEL;
+    }
+}
+
+function onOkcBusyUpdate(data) {
+    okcBusyState = data || { busy: false };
+    applyOkcBusyState();
 }
 
 async function refreshCurrentMasaFromServer() {
@@ -410,6 +438,7 @@ function connectToServer() {
     socket.on('reservations_update', onReservationsUpdate);
     socket.on('reservation_menu_notice', onReservationMenuNotice);
     socket.on('payment_completed', onPaymentCompleted);
+    socket.on('okc_busy_update', onOkcBusyUpdate);
     socket.on('incoming_call', onIncomingCall);
     socket.on('success', onSuccess);
     socket.on('error', onError);
@@ -489,6 +518,9 @@ function onDisconnect() {
 
 function onError(error) {
     console.error('❌ Socket error:', error);
+    if (error && error.okc_busy) {
+        onOkcBusyUpdate(error.okc_busy);
+    }
     showNotification(error.message || 'Bir hata oluştu', 'error');
     resetFinalizePaymentButton();
 }
@@ -538,6 +570,7 @@ function onInitialData(data) {
     tableNotes = data.table_notes || {};
     reservationsPayload = normalizeReservationsPayload(data.reservations);
     activeShift = data.active_shift || activeShift || null;
+    okcBusyState = data.okc_busy || { busy: false };
 
     const currentRole = captureTerminalRoleFromLocation();
 
@@ -553,6 +586,7 @@ function onInitialData(data) {
     applyRoleProfile(currentRole);
     populateQuickDessertOptions();
     updateQuickSaleUI();
+    applyOkcBusyState();
     refreshOperationsStatus();
 }
 
@@ -769,6 +803,7 @@ function onTableNoteUpdate(data) {
 
 function onPaymentCompleted(data) {
     console.log('💰 Payment completed:', data);
+    onOkcBusyUpdate({ busy: false });
     resetFinalizePaymentButton();
 
     // Clear adisyon only when the whole account is closed.
@@ -2669,6 +2704,10 @@ function closeComplimentaryBill() {
  */
 function processPayment(type) {
     console.log(`💰 processPayment called for: ${type}`);
+    if (paymentInProgress) {
+        showNotification('ÖKC işlemi devam ediyor, lütfen tamamlanmasını bekleyin.', 'info');
+        return;
+    }
     if (!currentMasa) {
         showNotification('Lütfen önce masa seçiniz!', 'warning');
         return;
