@@ -2398,14 +2398,34 @@ function setMoneyInputValue(input, amount) {
 function splitAmountEvenly(amount, count) {
     const totalCents = moneyToCents(amount);
     const splitCount = Math.max(1, parseInt(count, 10) || 1);
-    const base = Math.floor(totalCents / splitCount);
-    let remainder = totalCents % splitCount;
+    const roundedShare = Math.round(totalCents / splitCount);
+    let remainingCents = totalCents;
 
-    return Array.from({ length: splitCount }, () => {
-        const cents = base + (remainder > 0 ? 1 : 0);
-        if (remainder > 0) remainder -= 1;
+    return Array.from({ length: splitCount }, (_, index) => {
+        const cents = index === splitCount - 1
+            ? remainingCents
+            : Math.min(roundedShare, remainingCents);
+        remainingCents -= cents;
         return centsToMoney(cents);
     });
+}
+
+function balanceAmountsToTotal(amounts, targetCents) {
+    const cents = amounts.map(moneyToCents);
+    const currentCents = cents.reduce((sum, value) => sum + value, 0);
+    const delta = targetCents - currentCents;
+    if (delta === 0 || cents.length === 0) return amounts.map(amount => centsToMoney(moneyToCents(amount)));
+
+    let adjustIndex = 0;
+    cents.forEach((value, index) => {
+        if (value > cents[adjustIndex]) adjustIndex = index;
+    });
+
+    const adjusted = cents[adjustIndex] + delta;
+    if (adjusted <= 0) return amounts.map(amount => centsToMoney(moneyToCents(amount)));
+
+    cents[adjustIndex] = adjusted;
+    return cents.map(centsToMoney);
 }
 
 function getCardSplitInputs() {
@@ -2558,7 +2578,7 @@ function splitCardsEqual() {
     }
 
     const count = Math.max(2, getCardSplitInputs().length || 2);
-    renderCardSplitRows(splitAmountEvenly(total, count));
+    renderCardSplitRows(balanceAmountsToTotal(splitAmountEvenly(total, count), moneyToCents(total)));
     syncCardTotalFromSplitRows();
 }
 
@@ -3047,6 +3067,11 @@ function finalizeSplitPayment() {
         }
         payments.push({ type: 'Açık Hesap', amount: cari, customer: customer });
     }
+
+    const balancedAmounts = balanceAmountsToTotal(payments.map(payment => payment.amount), paymentTotalCents);
+    payments.forEach((payment, index) => {
+        payment.amount = balancedAmounts[index];
+    });
 
     const invoicePending = Boolean(elements.invoicePending && elements.invoicePending.checked);
     const invoiceTaxId = elements.invoiceTaxId ? elements.invoiceTaxId.value.replace(/\D/g, '') : '';

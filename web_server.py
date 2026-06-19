@@ -9553,6 +9553,18 @@ def handle_payment(data):
             )
         })
         return
+    if payment_total_cents != payable_total_cents:
+        payment_cents = [int(round(p['amount'] * 100)) for p in payments]
+        delta_cents = payable_total_cents - sum(payment_cents)
+        adjust_index = max(range(len(payment_cents)), key=lambda idx: payment_cents[idx])
+        adjusted_cents = payment_cents[adjust_index] + delta_cents
+        if adjusted_cents <= 0:
+            emit('error', {'message': 'Ödeme tutarları yuvarlanarak dengelenemedi'})
+            return
+        payment_cents[adjust_index] = adjusted_cents
+        for idx, cents in enumerate(payment_cents):
+            payments[idx]['amount'] = round(cents / 100, 2)
+        payment_total_cents = payable_total_cents
 
     if invoice_pending and server.pos_enabled and not has_current_account_payment:
         token_bridge_enabled_for_invoice = server.pos_type in POSManager.TOKEN_BRIDGE_TYPES
