@@ -476,6 +476,8 @@ class RestaurantServer:
         self.paket_labels_configured = False
         self.direct_print = False
         self.default_payment_method = "Nakit"
+        self.shift_auto_close_enabled = True
+        self.shift_auto_close_time = "00:00"
         self.prep_panel_settings = self.get_default_prep_panel_settings()
         self.prep_category_overrides = {}
         self.prep_printers = self.get_default_prep_printer_settings()
@@ -518,6 +520,7 @@ class RestaurantServer:
         self.portion_lock = threading.RLock()
         self.portion_stock_reset_date = None
         self.portion_reset_thread = None
+        self.shift_auto_close_thread = None
         
         # Garsonlar ve Kasiyerler
         self.waiters = [] # [{"name": "Ahmet", "pin": "1234"}]
@@ -1001,6 +1004,17 @@ class RestaurantServer:
         if value in PAYMENT_METHODS:
             return value
         return aliases.get(normalized, "Nakit")
+
+    def sanitize_time_setting(self, value, default="00:00"):
+        raw = str(value or default).strip()
+        match = re.fullmatch(r"(\d{1,2}):(\d{2})", raw)
+        if not match:
+            return default
+        hour = int(match.group(1))
+        minute = int(match.group(2))
+        if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+            return default
+        return f"{hour:02d}:{minute:02d}"
 
     def normalize_keyword_list(self, value, fallback=None):
         if fallback is None:
@@ -1654,6 +1668,8 @@ class RestaurantServer:
         defaults = {
             "password": "1234",
             "direct_print": "HAYIR",
+            "shift_auto_close_enabled": "EVET",
+            "shift_auto_close_time": "00:00",
             "masa_sayisi": "30",
             "paket_sayisi": "5",
             "firma_ismi": "LİVA RESTORAN",
@@ -1705,6 +1721,8 @@ class RestaurantServer:
         
         self.admin_password = defaults["password"]
         self.direct_print = (defaults["direct_print"] == "EVET")
+        self.shift_auto_close_enabled = (defaults.get("shift_auto_close_enabled", "EVET") == "EVET")
+        self.shift_auto_close_time = self.sanitize_time_setting(defaults.get("shift_auto_close_time"), "00:00")
         self.masa_sayisi = int(defaults["masa_sayisi"])
         self.paket_sayisi = int(defaults["paket_sayisi"])
         self.company_name = defaults["firma_ismi"]
@@ -1777,6 +1795,8 @@ class RestaurantServer:
             with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
                 f.write(f"password:{self.admin_password}\n")
                 f.write(f"direct_print:{'EVET' if self.direct_print else 'HAYIR'}\n")
+                f.write(f"shift_auto_close_enabled:{'EVET' if self.shift_auto_close_enabled else 'HAYIR'}\n")
+                f.write(f"shift_auto_close_time:{self.shift_auto_close_time}\n")
                 f.write(f"masa_sayisi:{self.masa_sayisi}\n")
                 f.write(f"paket_sayisi:{self.paket_sayisi}\n")
                 f.write(f"firma_ismi:{self.company_name}\n")
@@ -5782,6 +5802,104 @@ class RestaurantServer:
         self.portion_reset_thread = threading.Thread(target=task, daemon=True)
         self.portion_reset_thread.start()
 
+    def close_shift_with_db_totals(self, shift_id, closing_data=None, source="manual"):
+        """Vardiyayı satış toplamlarıyla kapat; boş manuel alanlarda DB toplamlarını kullan."""
+        closing_data = closing_data or {}
+        totals = db.get_shift_closing_totals(shift_id)
+
+        def parse_closing_amount(field_name, default_value):
+            raw_value = closing_data.get(field_name)
+            if raw_value is None or str(raw_value).strip() == "":
+                if source == "manual":
+                    logger.warning(
+                        f"Vardiya kapatma {field_name} boş geldi; DB satış toplamı kullanıldı "
+                        f"(shift_id={shift_id}, tutar={default_value})"
+                    )
+                return float(default_value)
+            try:
+                amount = float(str(raw_value).replace(",", "."))
+            except (TypeError, ValueError):
+                raise ValueError(f"{field_name} tutarı geçersiz")
+            if amount < 0:
+                raise ValueError(f"{field_name} tutarı negatif olamaz")
+            return amount
+
+        nakit = parse_closing_amount('nakit', totals['nakit'])
+        kart = parse_closing_amount('kart', totals['kart'])
+        diger = parse_closing_amount('diger', totals['diger'])
+        kapanis_bakiyesi = nakit + kart + diger
+        db.close_shift(shift_id, nakit, kart, kapanis_bakiyesi)
+        self.revoke_public_sessions_for_shift(int(shift_id))
+        return {
+            'success': True,
+            'nakit': nakit,
+            'kart': kart,
+            'diger': diger,
+            'kapanis_bakiyesi': kapanis_bakiyesi
+        }
+
+    def get_shift_auto_close_cutoff(self, now=None):
+        now = now or datetime.datetime.now()
+        close_time = datetime.datetime.strptime(self.shift_auto_close_time, "%H:%M").time()
+        today_cutoff = datetime.datetime.combine(now.date(), close_time)
+        if now >= today_cutoff:
+            return today_cutoff
+        return today_cutoff - datetime.timedelta(days=1)
+
+    def get_seconds_until_next_shift_auto_close(self, now=None):
+        now = now or datetime.datetime.now()
+        close_time = datetime.datetime.strptime(self.shift_auto_close_time, "%H:%M").time()
+        next_cutoff = datetime.datetime.combine(now.date(), close_time)
+        if now >= next_cutoff:
+            next_cutoff += datetime.timedelta(days=1)
+        return max(10, (next_cutoff - now).total_seconds() + 2)
+
+    def auto_close_overdue_shifts(self):
+        """Seçilen kapanış saatini geçmiş açık vardiyaları otomatik kapat."""
+        if not USE_DATABASE or not self.shift_auto_close_enabled:
+            return []
+
+        cutoff_at = self.get_shift_auto_close_cutoff()
+        closed_shifts = []
+        for shift in db.get_overdue_open_shifts(cutoff_at):
+            shift_id = shift.get('id')
+            try:
+                result = self.close_shift_with_db_totals(shift_id, source="auto_close")
+                closed_shifts.append({
+                    'id': shift_id,
+                    'kasa_id': shift.get('kasa_id'),
+                    'kasa_adi': shift.get('kasa_adi'),
+                    'kapanis_bakiyesi': result['kapanis_bakiyesi']
+                })
+                logger.info(
+                    f"✓ Vardiya otomatik kapatıldı: shift_id={shift_id}, "
+                    f"kasa={shift.get('kasa_adi')}, saat={self.shift_auto_close_time}, "
+                    f"kesit={cutoff_at.isoformat()}, kapanis={result['kapanis_bakiyesi']:.2f}"
+                )
+            except Exception as e:
+                logger.error(f"Vardiya otomatik kapatma hatası (shift_id={shift_id}): {e}")
+
+        if closed_shifts:
+            socketio.emit('vardiya_update', None)
+        return closed_shifts
+
+    def start_shift_auto_close_scheduler(self):
+        if self.shift_auto_close_thread and self.shift_auto_close_thread.is_alive():
+            return
+
+        def task():
+            while True:
+                try:
+                    self.auto_close_overdue_shifts()
+                except Exception as e:
+                    logger.error(f"Vardiya otomatik kapatma zamanlayıcı hatası: {e}")
+
+                sleep_seconds = self.get_seconds_until_next_shift_auto_close()
+                time.sleep(min(sleep_seconds, 60))
+
+        self.shift_auto_close_thread = threading.Thread(target=task, daemon=True)
+        self.shift_auto_close_thread.start()
+
     def ensure_default_portion_stock(self):
         """Sadece günlük yemekler için porsiyon stoku tut."""
         now_iso = datetime.datetime.now().isoformat()
@@ -6750,6 +6868,8 @@ def get_settings():
         'paket_labels': server.get_paket_labels(),
         'direct_print': server.direct_print,
         'default_payment_method': server.default_payment_method,
+        'shift_auto_close_enabled': server.shift_auto_close_enabled,
+        'shift_auto_close_time': server.shift_auto_close_time,
         'cid_port': server.cid_port,
         'cid_type': server.cid_type,
         'cid_serial_port': server.cid_serial_port,
@@ -6799,6 +6919,14 @@ def save_settings():
     server.direct_print  = data.get('direct_print', server.direct_print)
     server.default_payment_method = server.sanitize_payment_method(
         data.get('default_payment_method', server.default_payment_method)
+    )
+    server.shift_auto_close_enabled = server.bool_from_setting(
+        data.get('shift_auto_close_enabled', server.shift_auto_close_enabled),
+        server.shift_auto_close_enabled
+    )
+    server.shift_auto_close_time = server.sanitize_time_setting(
+        data.get('shift_auto_close_time', server.shift_auto_close_time),
+        server.shift_auto_close_time
     )
 
     yeni_masa = int(data.get('masa_sayisi', server.masa_sayisi))
@@ -6867,6 +6995,9 @@ def save_settings():
         ok = server.save_paket_labels()
     if not ok:
         return jsonify({'success': False, 'error': 'Dosyaya yazılamadı'}), 500
+
+    if server.shift_auto_close_enabled:
+        server.auto_close_overdue_shifts()
 
     # Masa/paket yapısı değiştiyse yenile
     if masa_degisti:
@@ -7546,39 +7677,10 @@ def api_vardiya_kapat():
 
     if not shift_id: return jsonify({'success': False, 'error': 'Vardiya ID gerekli'})
     try:
-        totals = db.get_shift_closing_totals(shift_id)
-
-        def parse_closing_amount(field_name, default_value):
-            raw_value = data.get(field_name)
-            if raw_value is None or str(raw_value).strip() == "":
-                logger.warning(
-                    f"Vardiya kapatma {field_name} boş geldi; DB satış toplamı kullanıldı "
-                    f"(shift_id={shift_id}, tutar={default_value})"
-                )
-                return float(default_value)
-            try:
-                amount = float(str(raw_value).replace(",", "."))
-            except (TypeError, ValueError):
-                raise ValueError(f"{field_name} tutarı geçersiz")
-            if amount < 0:
-                raise ValueError(f"{field_name} tutarı negatif olamaz")
-            return amount
-
-        nakit = parse_closing_amount('nakit', totals['nakit'])
-        kart = parse_closing_amount('kart', totals['kart'])
-        diger = parse_closing_amount('diger', totals['diger'])
-        kapanis_bakiyesi = nakit + kart + diger
-        db.close_shift(shift_id, nakit, kart, kapanis_bakiyesi)
-        server.revoke_public_sessions_for_shift(int(shift_id))
+        result = server.close_shift_with_db_totals(shift_id, data)
         # Tüm bağlı istemcilere vardiya kapandığını bildir
         socketio.emit('vardiya_update', None)
-        return jsonify({
-            'success': True,
-            'nakit': nakit,
-            'kart': kart,
-            'diger': diger,
-            'kapanis_bakiyesi': kapanis_bakiyesi
-        })
+        return jsonify(result)
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
@@ -9988,6 +10090,9 @@ if __name__ == '__main__':
 
     # Porsiyon stoklarını gün değişiminde otomatik varsayılana döndür
     server.start_portion_stock_reset_scheduler()
+
+    # Ayarlanan saate kadar kapatılmayan vardiyaları otomatik kapat
+    server.start_shift_auto_close_scheduler()
     
     # Web sunucuyu başlat
     web_port = max(1, min(get_env_int("FASTFOOT_WEB_PORT", 8000), 65535))

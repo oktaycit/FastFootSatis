@@ -906,6 +906,20 @@ class Database:
             cursor.execute("SELECT * FROM vardiyalar WHERE kasa_id = %s AND durum = 'acik'", (kasa_id,))
             return cursor.fetchone()
 
+    def get_overdue_open_shifts(self, cutoff_at=None):
+        """Kapatma kesitinden önce açılmış ve halen açık olan vardiyaları getir."""
+        cutoff_at = cutoff_at or datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        with self.get_cursor() as cursor:
+            cursor.execute("""
+                SELECT v.*, k.ad as kasa_adi
+                FROM vardiyalar v
+                JOIN kasalar k ON v.kasa_id = k.id
+                WHERE v.durum = 'acik'
+                  AND COALESCE(v.acilis_zamani, v.acilma_tarihi) < %s
+                ORDER BY COALESCE(v.acilis_zamani, v.acilma_tarihi)
+            """, (cutoff_at,))
+            return cursor.fetchall()
+
     def open_shift(self, kasa_id, kasiyer, acilis_bakiyesi):
         """Vardiya aç"""
         # Önce aktif vardiya var mı kontrol et

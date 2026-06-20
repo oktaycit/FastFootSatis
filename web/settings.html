@@ -144,6 +144,7 @@
         .form-group input[type="text"],
         .form-group input[type="number"],
         .form-group input[type="password"],
+        .form-group input[type="time"],
         .form-group select {
             min-width: 0;
             padding: 11px 14px;
@@ -681,6 +682,28 @@
                     <div class="form-group">
                         <label for="terminalId">Terminal Kimliği</label>
                         <input type="text" id="terminalId" placeholder="1" maxlength="10">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-card">
+            <div class="card-header">💼 Kasa Otomasyonu</div>
+            <div class="card-body">
+                <div class="toggle-row">
+                    <div>
+                        <div class="toggle-label">Otomatik vardiya kapatma</div>
+                        <div class="toggle-desc">Seçilen saati geçen açık vardiyalar satış toplamlarıyla kapatılır.</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="shiftAutoCloseEnabled">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="form-row" style="margin-top:16px; margin-bottom:0;">
+                    <div class="form-group">
+                        <label for="shiftAutoCloseTime">Kapatma Saati</label>
+                        <input type="time" id="shiftAutoCloseTime" step="60">
                     </div>
                 </div>
             </div>
@@ -1705,6 +1728,8 @@
                 renderPaketLabelsDesigner();
                 document.getElementById('directPrint').checked = data.direct_print || false;
                 document.getElementById('defaultPaymentMethod').value = data.default_payment_method || 'Nakit';
+                document.getElementById('shiftAutoCloseEnabled').checked = data.shift_auto_close_enabled !== false;
+                document.getElementById('shiftAutoCloseTime').value = data.shift_auto_close_time || '00:00';
 
                 document.getElementById('cidEnabled').checked = data.cid_enabled || false;
                 document.getElementById('cidType').value = data.cid_type || 'tcp';
@@ -2206,6 +2231,8 @@
             const cidType = document.getElementById('cidType').value;
             const cidPort = parseInt(document.getElementById('cidPort').value);
             const cidSerialPort = document.getElementById('cidSerialPort').value;
+            const shiftAutoCloseEnabled = document.getElementById('shiftAutoCloseEnabled').checked;
+            const shiftAutoCloseTime = document.getElementById('shiftAutoCloseTime').value || '00:00';
 
             const mevcutSifre = document.getElementById('mevcutSifre').value;
             const yeniSifre = document.getElementById('yeniSifre').value;
@@ -2266,6 +2293,8 @@
                 paket_labels: paketLabels,
                 direct_print: directPrint,
                 default_payment_method: defaultPaymentMethod,
+                shift_auto_close_enabled: shiftAutoCloseEnabled,
+                shift_auto_close_time: shiftAutoCloseTime,
                 cid_enabled: cidEnabled,
                 cid_type: cidType,
                 cid_port: cidPort,
