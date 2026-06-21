@@ -1016,6 +1016,13 @@ class RestaurantServer:
             return default
         return f"{hour:02d}:{minute:02d}"
 
+    def sanitize_tax_rate(self, value, default=10.0):
+        try:
+            rate = float(value)
+        except (TypeError, ValueError):
+            rate = default
+        return max(0.0, min(rate, 100.0))
+
     def normalize_keyword_list(self, value, fallback=None):
         if fallback is None:
             fallback = []
@@ -1683,6 +1690,7 @@ class RestaurantServer:
             "pos_ip": "127.0.0.1",
             "pos_port": "5000",
             "pos_type": "demo",
+            "default_kdv_rate": "10",
             "verify_mode": "hybrid",
             "online_orders_enabled": "EVET",
             "va_max_duration": "3",
@@ -1738,7 +1746,14 @@ class RestaurantServer:
         self.pos_ip = defaults["pos_ip"]
         self.pos_port = int(defaults["pos_port"])
         self.pos_type = defaults["pos_type"]
-        self.pos_manager = POSManager(self.pos_enabled, self.pos_ip, self.pos_port, self.pos_type)
+        self.default_kdv_rate = self.sanitize_tax_rate(defaults.get("default_kdv_rate"), 10.0)
+        self.pos_manager = POSManager(
+            self.pos_enabled,
+            self.pos_ip,
+            self.pos_port,
+            self.pos_type,
+            self.default_kdv_rate
+        )
 
         # Hazırlık reyonları ve IP termal yazıcı ayarları
         self.prep_panel_settings = self.sanitize_prep_panel_settings(defaults.get("prep_panels_json"))
@@ -1810,6 +1825,7 @@ class RestaurantServer:
                 f.write(f"pos_ip:{self.pos_ip}\n")
                 f.write(f"pos_port:{self.pos_port}\n")
                 f.write(f"pos_type:{self.pos_type}\n")
+                f.write(f"default_kdv_rate:{self.default_kdv_rate:g}\n")
                 f.write(
                     "prep_panels_json:"
                     f"{json.dumps(list(self.prep_panel_settings.values()), ensure_ascii=False)}\n"
@@ -6878,6 +6894,7 @@ def get_settings():
         'pos_ip': server.pos_ip,
         'pos_port': server.pos_port,
         'pos_type': server.pos_type,
+        'default_kdv_rate': server.default_kdv_rate,
         'salons': server.salons,
         'prep_panels': server.get_preparation_panels(),
         'prep_category_overrides': server.prep_category_overrides,
@@ -6958,6 +6975,10 @@ def save_settings():
     server.pos_ip = data.get('pos_ip', server.pos_ip)
     server.pos_port = int(data.get('pos_port', server.pos_port))
     server.pos_type = data.get('pos_type', server.pos_type)
+    server.default_kdv_rate = server.sanitize_tax_rate(
+        data.get('default_kdv_rate', server.default_kdv_rate),
+        server.default_kdv_rate
+    )
 
     server.prep_panel_settings = server.sanitize_prep_panel_settings(
         data.get('prep_panels', server.prep_panel_settings)
@@ -6986,7 +7007,13 @@ def save_settings():
     server.va_kitchen_approval = data.get('va_kitchen_approval', server.va_kitchen_approval)
     
     # POS Manager'ı güncelle
-    server.pos_manager = POSManager(server.pos_enabled, server.pos_ip, server.pos_port, server.pos_type)
+    server.pos_manager = POSManager(
+        server.pos_enabled,
+        server.pos_ip,
+        server.pos_port,
+        server.pos_type,
+        server.default_kdv_rate
+    )
     server.clear_dashboard_status_cache()
 
     # Kaydet
@@ -9877,6 +9904,7 @@ def handle_payment(data):
                 'invoice_tax_id': invoice_info['tax_id'] if invoice_pending else '',
                 'invoice_serial_no': invoice_info['serial_no'] if invoice_pending else '',
                 'invoice_note': invoice_note if invoice_pending else '',
+                'default_tax_rate': server.default_kdv_rate,
                 'timestamp': timestamp
             }
             # Arka planda gönder (Arayüzü bekletme)

@@ -47,6 +47,18 @@ class TokenBridgePayloadTests(unittest.TestCase):
         self.assertEqual(payload["paymentItems"][1]["type"], 1)
         self.assertEqual(payload["paymentItems"][1]["amount"], 5500)
 
+    def test_token_bridge_payload_uses_configured_default_tax_rate(self):
+        manager = POSManager(True, "192.168.1.50", 8787, "token-bridge", default_tax_rate=20)
+
+        payload = manager._create_token_bridge_payload(
+            table_name="Masa 3",
+            order_id="basket-tax-20",
+            items=[{"urun": "Yemek", "adet": 1, "fiyat": 300.00}],
+            payments=[{"type": "Kredi Kartı", "amount": 300.00}],
+        )
+
+        self.assertEqual(payload["items"][0]["taxPercent"], 2000)
+
     def test_token_bridge_rejects_mismatched_totals(self):
         manager = POSManager(True, "192.168.1.50", 8787, "token-bridge")
 

@@ -41,7 +41,33 @@ class MysoftProviderTests(unittest.TestCase):
         self.assertEqual(payload["seller_tax_id"], "1234567890")
         self.assertEqual(len(payload["items"]), 2)
         self.assertEqual(payload["items"][0]["line_total"], 200.0)
+        self.assertEqual(payload["items"][0]["vat_rate"], 10)
         self.assertEqual(payload["totals"]["payable"], 300.0)
+
+    def test_build_invoice_payload_uses_configured_default_tax_rate(self):
+        provider = MysoftProvider({
+            "enabled": True,
+            "company_tax_id": "1234567890",
+            "draft": True,
+        })
+
+        payload = provider.build_invoice_payload({
+            "masa": "Masa 1",
+            "customer": "ABC Ltd",
+            "invoice_pending": True,
+            "invoice_document_type": 9006,
+            "invoice_tax_id": "9876543210",
+            "invoice_serial_no": "GIB2026000000001",
+            "payment_type": "Kredi Kartı",
+            "total": 300.0,
+            "timestamp": datetime.datetime(2026, 6, 9, 12, 30),
+            "default_tax_rate": 20,
+            "items": [
+                {"urun": "Yemek", "adet": 1, "fiyat": 300.0},
+            ],
+        })
+
+        self.assertEqual(payload["items"][0]["vat_rate"], 20)
 
     def test_send_invoice_skips_non_invoice_sales(self):
         provider = MysoftProvider({"enabled": True, "base_url": "https://example.test", "invoice_endpoint": "/invoice"})

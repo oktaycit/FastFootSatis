@@ -463,6 +463,9 @@ class MysoftProvider(BaseAccountingProvider):
         if not serial_no:
             raise ValueError("Mysoft faturası için fatura seri no gerekli")
 
+        default_vat_rate = self._sanitize_vat_rate(
+            order_data.get("default_tax_rate", self.config.get("default_tax_rate", 10))
+        )
         items = []
         for item in order_data.get("items", []):
             quantity = float(item.get("adet") or 1)
@@ -471,7 +474,7 @@ class MysoftProvider(BaseAccountingProvider):
                 "name": item.get("urun") or "Ürün",
                 "quantity": quantity,
                 "unit_price": unit_price,
-                "vat_rate": int(item.get("tax_percent") or item.get("kdv") or 10),
+                "vat_rate": int(item.get("tax_percent") or item.get("kdv") or default_vat_rate),
                 "line_total": round(quantity * unit_price, 2)
             })
 
@@ -499,6 +502,14 @@ class MysoftProvider(BaseAccountingProvider):
                 "complimentary": float(order_data.get("ikram_total") or 0)
             }
         }
+
+    @staticmethod
+    def _sanitize_vat_rate(value):
+        try:
+            rate = float(value)
+        except (TypeError, ValueError):
+            rate = 10.0
+        return max(0.0, min(rate, 100.0))
 
     def _headers(self):
         headers = {"Content-Type": "application/json"}

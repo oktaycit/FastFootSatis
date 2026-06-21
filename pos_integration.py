@@ -46,12 +46,21 @@ class POSManager:
         "acik hesap": 17,
     }
 
-    def __init__(self, enabled=False, ip="", port=0, pos_type="demo"):
+    def __init__(self, enabled=False, ip="", port=0, pos_type="demo", default_tax_rate=10):
         self.enabled = enabled
         self.ip = ip
         self.port = port
         self.pos_type = pos_type # "demo", "beko-json", "hugin", "generic", "token-bridge"
+        self.default_tax_rate = self._sanitize_tax_rate(default_tax_rate)
         self._sale_lock = threading.Lock()
+
+    @staticmethod
+    def _sanitize_tax_rate(value):
+        try:
+            rate = float(value)
+        except (TypeError, ValueError):
+            rate = 10.0
+        return max(0.0, min(rate, 100.0))
         
     def sale(self, amount, table_name="", items=None, payments=None, order_id=None,
              invoice_pending=False, invoice_info=None):
@@ -213,7 +222,7 @@ class POSManager:
             "pluNo": int(item.get("pluNo") or item.get("plu_no") or 0),
             "price": price,
             "sectionNo": int(item.get("sectionNo") or item.get("section_no") or 1),
-            "taxPercent": int(item.get("taxPercent") or item.get("tax_percent") or 1000),
+            "taxPercent": int(item.get("taxPercent") or item.get("tax_percent") or round(self.default_tax_rate * 100)),
             "type": int(item.get("type") or 0),
             "unit": item.get("unit") or "Adet",
             "vatID": int(item.get("vatID") or item.get("vat_id") or 0),

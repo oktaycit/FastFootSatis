@@ -1479,6 +1479,15 @@
                         Cihaz üzerinden TCP/IP bağlantısının aktif olduğundan emin olun.
                     </small>
                 </div>
+                <div class="form-row" style="margin-top: 15px;">
+                    <div class="form-group">
+                        <label for="defaultKdvRate">Varsayılan KDV Oranı (%)</label>
+                        <input type="number" id="defaultKdvRate" min="0" max="100" step="0.01" placeholder="10">
+                        <small style="color:var(--text-secondary);">
+                            ÖKC ve muhasebe entegrasyonunda ürün bazlı oran yoksa bu KDV oranı kullanılır.
+                        </small>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -1747,6 +1756,7 @@
                 document.getElementById('posIp').value = data.pos_ip || '127.0.0.1';
                 document.getElementById('posPort').value = data.pos_port || 5000;
                 document.getElementById('posType').value = data.pos_type || 'demo';
+                document.getElementById('defaultKdvRate').value = data.default_kdv_rate ?? 10;
                 togglePosUI();
 
                 // Voice Agent Settings
@@ -2226,6 +2236,7 @@
             const posIp = document.getElementById('posIp').value.trim();
             const posPort = parseInt(document.getElementById('posPort').value);
             const posType = document.getElementById('posType').value;
+            const defaultKdvRate = Number(document.getElementById('defaultKdvRate').value);
 
             const cidEnabled = document.getElementById('cidEnabled').checked;
             const cidType = document.getElementById('cidType').value;
@@ -2262,6 +2273,11 @@
             if (!mevcutSifre) {
                 focusSettingField('mevcutSifre');
                 showToast('Ayarları kaydetmek için mevcut şifreyi girin.', 'warning');
+                return;
+            }
+            if (!Number.isFinite(defaultKdvRate) || defaultKdvRate < 0 || defaultKdvRate > 100) {
+                focusSettingField('defaultKdvRate');
+                showToast('KDV oranı 0 ile 100 arasında olmalı.', 'warning');
                 return;
             }
             const prepSettings = collectPrepSettings();
@@ -2303,6 +2319,7 @@
                 pos_ip: posIp,
                 pos_port: posPort,
                 pos_type: posType,
+                default_kdv_rate: defaultKdvRate,
                 va_max_duration: parseInt(document.getElementById('vaMaxDuration').value) || 3,
                 va_rate_limit: parseInt(document.getElementById('vaRateLimit').value) || 5,
                 va_sms_verify: document.getElementById('vaSmsVerify').checked,
