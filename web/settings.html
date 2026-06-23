@@ -706,6 +706,39 @@
                         <input type="time" id="shiftAutoCloseTime" step="60">
                     </div>
                 </div>
+
+                <hr class="divider">
+
+                <div class="toggle-row">
+                    <div>
+                        <div class="toggle-label">Otomatik gün sonu yedeği</div>
+                        <div class="toggle-desc">Seçilen saatte config, menü, aktif adisyonlar ve varsa PostgreSQL verisi arşivlenir.</div>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="autoBackupEnabled">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="form-row" style="margin-top:16px; margin-bottom:0;">
+                    <div class="form-group">
+                        <label for="autoBackupTime">Yedekleme Saati</label>
+                        <input type="time" id="autoBackupTime" step="60">
+                    </div>
+                    <div class="form-group">
+                        <label for="autoBackupRetentionDays">Saklama Süresi (Gün)</label>
+                        <input type="number" id="autoBackupRetentionDays" min="1" max="3650" step="1">
+                    </div>
+                </div>
+                <div class="form-row" style="margin-top:12px; margin-bottom:0;">
+                    <div class="form-group">
+                        <label for="autoBackupDir">Yedek Klasörü</label>
+                        <input type="text" id="autoBackupDir" placeholder="backups">
+                        <small style="color:var(--text-secondary);">
+                            Göreli klasör yazılırsa proje klasörünün içinde oluşturulur.
+                            Son yedek: <span id="autoBackupLastDate">-</span>
+                        </small>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -1739,6 +1772,11 @@
                 document.getElementById('defaultPaymentMethod').value = data.default_payment_method || 'Nakit';
                 document.getElementById('shiftAutoCloseEnabled').checked = data.shift_auto_close_enabled !== false;
                 document.getElementById('shiftAutoCloseTime').value = data.shift_auto_close_time || '00:00';
+                document.getElementById('autoBackupEnabled').checked = data.auto_backup_enabled !== false;
+                document.getElementById('autoBackupTime').value = data.auto_backup_time || '00:05';
+                document.getElementById('autoBackupDir').value = data.auto_backup_dir || 'backups';
+                document.getElementById('autoBackupRetentionDays').value = data.auto_backup_retention_days || 30;
+                document.getElementById('autoBackupLastDate').textContent = data.auto_backup_last_date || '-';
 
                 document.getElementById('cidEnabled').checked = data.cid_enabled || false;
                 document.getElementById('cidType').value = data.cid_type || 'tcp';
@@ -2244,6 +2282,10 @@
             const cidSerialPort = document.getElementById('cidSerialPort').value;
             const shiftAutoCloseEnabled = document.getElementById('shiftAutoCloseEnabled').checked;
             const shiftAutoCloseTime = document.getElementById('shiftAutoCloseTime').value || '00:00';
+            const autoBackupEnabled = document.getElementById('autoBackupEnabled').checked;
+            const autoBackupTime = document.getElementById('autoBackupTime').value || '00:05';
+            const autoBackupDir = document.getElementById('autoBackupDir').value.trim();
+            const autoBackupRetentionDays = parseInt(document.getElementById('autoBackupRetentionDays').value);
 
             const mevcutSifre = document.getElementById('mevcutSifre').value;
             const yeniSifre = document.getElementById('yeniSifre').value;
@@ -2280,6 +2322,11 @@
                 showToast('KDV oranı 0 ile 100 arasında olmalı.', 'warning');
                 return;
             }
+            if (!Number.isFinite(autoBackupRetentionDays) || autoBackupRetentionDays < 1 || autoBackupRetentionDays > 3650) {
+                focusSettingField('autoBackupRetentionDays');
+                showToast('Yedek saklama süresi 1 ile 3650 gün arasında olmalı.', 'warning');
+                return;
+            }
             const prepSettings = collectPrepSettings();
             if (prepSettings.error) {
                 if (prepSettings.focusId) focusSettingField(prepSettings.focusId);
@@ -2311,6 +2358,10 @@
                 default_payment_method: defaultPaymentMethod,
                 shift_auto_close_enabled: shiftAutoCloseEnabled,
                 shift_auto_close_time: shiftAutoCloseTime,
+                auto_backup_enabled: autoBackupEnabled,
+                auto_backup_time: autoBackupTime,
+                auto_backup_dir: autoBackupDir,
+                auto_backup_retention_days: autoBackupRetentionDays,
                 cid_enabled: cidEnabled,
                 cid_type: cidType,
                 cid_port: cidPort,

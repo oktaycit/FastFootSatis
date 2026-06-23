@@ -129,6 +129,9 @@ class IntegrationManager:
         """
         Send mapped order data to the active accounting provider.
         """
+        if not order_data.get("invoice_pending"):
+            return False, "Invoice not requested"
+
         if not self.accounting_provider:
             return False, "No active accounting provider"
         

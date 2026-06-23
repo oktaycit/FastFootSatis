@@ -20,6 +20,9 @@ import logging
 import socket
 import subprocess
 import platform
+import tarfile
+import tempfile
+import shutil
 import uuid
 import re
 import hmac
@@ -104,6 +107,7 @@ PORTION_STOCK_FILE = os.path.join(SCRIPT_DIR, "portion_stock.json")
 PORTION_STOCK_RESET_FILE = os.path.join(SCRIPT_DIR, "portion_stock_reset.json")
 DAILY_MEALS_FILE = os.path.join(SCRIPT_DIR, "gunluk_yemekler.txt")
 DAILY_MEALS_HISTORY_DIR = os.path.join(SCRIPT_DIR, "gunluk_yemekler")
+BACKUP_DIR = os.path.join(SCRIPT_DIR, "backups")
 DEFAULT_PORTION_STOCK = 40
 SERVER_PORT = 5555
 AUTH_COOKIE_NAME = "ff_auth_token"
@@ -478,6 +482,12 @@ class RestaurantServer:
         self.default_payment_method = "Nakit"
         self.shift_auto_close_enabled = True
         self.shift_auto_close_time = "00:00"
+        self.auto_backup_enabled = True
+        self.auto_backup_time = "00:05"
+        self.auto_backup_dir = BACKUP_DIR
+        self.auto_backup_retention_days = 30
+        self.auto_backup_last_date = ""
+        self.last_backup_info = {}
         self.prep_panel_settings = self.get_default_prep_panel_settings()
         self.prep_category_overrides = {}
         self.prep_printers = self.get_default_prep_printer_settings()
@@ -521,6 +531,7 @@ class RestaurantServer:
         self.portion_stock_reset_date = None
         self.portion_reset_thread = None
         self.shift_auto_close_thread = None
+        self.auto_backup_thread = None
         
         # Garsonlar ve Kasiyerler
         self.waiters = [] # [{"name": "Ahmet", "pin": "1234"}]
@@ -1015,6 +1026,15 @@ class RestaurantServer:
         if hour < 0 or hour > 23 or minute < 0 or minute > 59:
             return default
         return f"{hour:02d}:{minute:02d}"
+
+    def sanitize_backup_dir(self, value):
+        raw = str(value or "").strip()
+        if not raw:
+            return BACKUP_DIR
+        expanded = os.path.expanduser(raw)
+        if not os.path.isabs(expanded):
+            expanded = os.path.join(SCRIPT_DIR, expanded)
+        return os.path.abspath(expanded)
 
     def sanitize_tax_rate(self, value, default=10.0):
         try:
@@ -1677,6 +1697,11 @@ class RestaurantServer:
             "direct_print": "HAYIR",
             "shift_auto_close_enabled": "EVET",
             "shift_auto_close_time": "00:00",
+            "auto_backup_enabled": "EVET",
+            "auto_backup_time": "00:05",
+            "auto_backup_dir": BACKUP_DIR,
+            "auto_backup_retention_days": "30",
+            "auto_backup_last_date": "",
             "masa_sayisi": "30",
             "paket_sayisi": "5",
             "firma_ismi": "LİVA RESTORAN",
@@ -1731,6 +1756,16 @@ class RestaurantServer:
         self.direct_print = (defaults["direct_print"] == "EVET")
         self.shift_auto_close_enabled = (defaults.get("shift_auto_close_enabled", "EVET") == "EVET")
         self.shift_auto_close_time = self.sanitize_time_setting(defaults.get("shift_auto_close_time"), "00:00")
+        self.auto_backup_enabled = self.bool_from_setting(defaults.get("auto_backup_enabled"), True)
+        self.auto_backup_time = self.sanitize_time_setting(defaults.get("auto_backup_time"), "00:05")
+        self.auto_backup_dir = self.sanitize_backup_dir(defaults.get("auto_backup_dir"))
+        self.auto_backup_retention_days = self.bounded_int(
+            defaults.get("auto_backup_retention_days"),
+            30,
+            1,
+            3650
+        )
+        self.auto_backup_last_date = str(defaults.get("auto_backup_last_date") or "").strip()
         self.masa_sayisi = int(defaults["masa_sayisi"])
         self.paket_sayisi = int(defaults["paket_sayisi"])
         self.company_name = defaults["firma_ismi"]
@@ -1812,6 +1847,11 @@ class RestaurantServer:
                 f.write(f"direct_print:{'EVET' if self.direct_print else 'HAYIR'}\n")
                 f.write(f"shift_auto_close_enabled:{'EVET' if self.shift_auto_close_enabled else 'HAYIR'}\n")
                 f.write(f"shift_auto_close_time:{self.shift_auto_close_time}\n")
+                f.write(f"auto_backup_enabled:{'EVET' if self.auto_backup_enabled else 'HAYIR'}\n")
+                f.write(f"auto_backup_time:{self.auto_backup_time}\n")
+                f.write(f"auto_backup_dir:{self.auto_backup_dir}\n")
+                f.write(f"auto_backup_retention_days:{self.auto_backup_retention_days}\n")
+                f.write(f"auto_backup_last_date:{self.auto_backup_last_date}\n")
                 f.write(f"masa_sayisi:{self.masa_sayisi}\n")
                 f.write(f"paket_sayisi:{self.paket_sayisi}\n")
                 f.write(f"firma_ismi:{self.company_name}\n")
@@ -5818,6 +5858,168 @@ class RestaurantServer:
         self.portion_reset_thread = threading.Thread(target=task, daemon=True)
         self.portion_reset_thread.start()
 
+    def get_backup_sources(self):
+        files = [
+            SETTINGS_FILE,
+            MENU_FILE,
+            MENU_META_FILE,
+            COUNTER_FILE,
+            WAITERS_FILE,
+            INTEGRATION_CONFIG,
+            SALONS_FILE,
+            PAKET_LABELS_FILE,
+            CASHIERS_FILE,
+            KITCHEN_FILE,
+            USERS_FILE,
+            AUTH_SESSIONS_FILE,
+            ACTIVE_ADISYONLAR_FILE,
+            TABLE_NOTES_FILE,
+            RESERVATIONS_FILE,
+            PORTION_STOCK_FILE,
+            PORTION_STOCK_RESET_FILE,
+            DAILY_MEALS_FILE,
+        ]
+        directories = [
+            FIS_KLASORU,
+            DAILY_MEALS_HISTORY_DIR,
+            MENU_UPLOAD_DIR,
+        ]
+        return files, directories
+
+    def add_path_to_backup(self, archive, source_path, arcname=None):
+        if not os.path.exists(source_path):
+            return
+        arcname = arcname or os.path.relpath(source_path, SCRIPT_DIR)
+        archive.add(source_path, arcname=arcname, recursive=True)
+
+    def create_database_backup(self, output_dir):
+        if not USE_DATABASE:
+            return None
+        try:
+            from db_config import DB_CONFIG
+        except Exception as e:
+            logger.error(f"Yedekleme DB ayarı okunamadı: {e}")
+            return None
+
+        database_name = DB_CONFIG.get("database") or DB_CONFIG.get("dbname")
+        if not database_name:
+            logger.error("Yedekleme için veritabanı adı bulunamadı")
+            return None
+
+        dump_path = os.path.join(output_dir, "postgresql.dump")
+        cmd = [
+            "pg_dump",
+            "--format=custom",
+            "--file", dump_path,
+            "--host", str(DB_CONFIG.get("host", "localhost")),
+            "--port", str(DB_CONFIG.get("port", 5432)),
+            "--username", str(DB_CONFIG.get("user", "")),
+            str(database_name),
+        ]
+        env = os.environ.copy()
+        if DB_CONFIG.get("password"):
+            env["PGPASSWORD"] = str(DB_CONFIG.get("password"))
+
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, text=True, env=env, timeout=120)
+            return dump_path
+        except FileNotFoundError:
+            logger.error("PostgreSQL yedeği alınamadı: pg_dump bulunamadı")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"PostgreSQL yedeği alınamadı: {e.stderr or e.stdout or e}")
+        except subprocess.TimeoutExpired:
+            logger.error("PostgreSQL yedeği zaman aşımına uğradı")
+        return None
+
+    def cleanup_old_backups(self):
+        retention_days = self.bounded_int(self.auto_backup_retention_days, 30, 1, 3650)
+        cutoff = time.time() - (retention_days * 86400)
+        backup_dir = self.sanitize_backup_dir(self.auto_backup_dir)
+        if not os.path.isdir(backup_dir):
+            return
+        for filename in os.listdir(backup_dir):
+            if not (filename.startswith("fastfoot-backup-") and filename.endswith(".tar.gz")):
+                continue
+            path = os.path.join(backup_dir, filename)
+            try:
+                if os.path.isfile(path) and os.path.getmtime(path) < cutoff:
+                    os.remove(path)
+                    logger.info(f"Eski yedek silindi: {path}")
+            except Exception as e:
+                logger.error(f"Eski yedek silinemedi ({path}): {e}")
+
+    def create_system_backup(self, reason="auto"):
+        backup_dir = self.sanitize_backup_dir(self.auto_backup_dir)
+        os.makedirs(backup_dir, exist_ok=True)
+        timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        backup_name = f"fastfoot-backup-{timestamp}.tar.gz"
+        backup_path = os.path.join(backup_dir, backup_name)
+
+        temp_dir = tempfile.mkdtemp(prefix="fastfoot-backup-")
+        try:
+            db_dump_path = self.create_database_backup(temp_dir)
+            with tarfile.open(backup_path, "w:gz") as archive:
+                manifest = {
+                    "created_at": datetime.datetime.now().isoformat(),
+                    "reason": reason,
+                    "database_included": bool(db_dump_path),
+                    "company_name": self.company_name,
+                }
+                manifest_path = os.path.join(temp_dir, "manifest.json")
+                with open(manifest_path, "w", encoding="utf-8") as f:
+                    json.dump(manifest, f, ensure_ascii=False, indent=2)
+                archive.add(manifest_path, arcname="manifest.json")
+                if db_dump_path:
+                    archive.add(db_dump_path, arcname="database/postgresql.dump")
+
+                files, directories = self.get_backup_sources()
+                for file_path in files:
+                    self.add_path_to_backup(archive, file_path)
+                for dir_path in directories:
+                    self.add_path_to_backup(archive, dir_path)
+
+            self.cleanup_old_backups()
+            self.last_backup_info = {
+                "path": backup_path,
+                "created_at": datetime.datetime.now().isoformat(),
+                "reason": reason,
+            }
+            logger.info(f"✅ Sistem yedeği oluşturuldu: {backup_path}")
+            return backup_path
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def should_run_auto_backup(self, now=None):
+        if not self.auto_backup_enabled:
+            return False
+        now = now or datetime.datetime.now()
+        backup_time = datetime.datetime.strptime(self.auto_backup_time, "%H:%M").time()
+        scheduled_at = datetime.datetime.combine(now.date(), backup_time)
+        return now >= scheduled_at and self.auto_backup_last_date != now.date().isoformat()
+
+    def run_auto_backup_if_needed(self):
+        if not self.should_run_auto_backup():
+            return None
+        backup_path = self.create_system_backup(reason="auto")
+        self.auto_backup_last_date = datetime.date.today().isoformat()
+        self.save_settings()
+        return backup_path
+
+    def start_auto_backup_scheduler(self):
+        if self.auto_backup_thread and self.auto_backup_thread.is_alive():
+            return
+
+        def task():
+            while True:
+                try:
+                    self.run_auto_backup_if_needed()
+                except Exception as e:
+                    logger.error(f"Otomatik yedekleme zamanlayıcı hatası: {e}")
+                time.sleep(60)
+
+        self.auto_backup_thread = threading.Thread(target=task, daemon=True)
+        self.auto_backup_thread.start()
+
     def close_shift_with_db_totals(self, shift_id, closing_data=None, source="manual"):
         """Vardiyayı satış toplamlarıyla kapat; boş manuel alanlarda DB toplamlarını kullan."""
         closing_data = closing_data or {}
@@ -6886,6 +7088,12 @@ def get_settings():
         'default_payment_method': server.default_payment_method,
         'shift_auto_close_enabled': server.shift_auto_close_enabled,
         'shift_auto_close_time': server.shift_auto_close_time,
+        'auto_backup_enabled': server.auto_backup_enabled,
+        'auto_backup_time': server.auto_backup_time,
+        'auto_backup_dir': server.auto_backup_dir,
+        'auto_backup_retention_days': server.auto_backup_retention_days,
+        'auto_backup_last_date': server.auto_backup_last_date,
+        'last_backup_info': server.last_backup_info,
         'cid_port': server.cid_port,
         'cid_type': server.cid_type,
         'cid_serial_port': server.cid_serial_port,
@@ -6944,6 +7152,23 @@ def save_settings():
     server.shift_auto_close_time = server.sanitize_time_setting(
         data.get('shift_auto_close_time', server.shift_auto_close_time),
         server.shift_auto_close_time
+    )
+    server.auto_backup_enabled = server.bool_from_setting(
+        data.get('auto_backup_enabled', server.auto_backup_enabled),
+        server.auto_backup_enabled
+    )
+    server.auto_backup_time = server.sanitize_time_setting(
+        data.get('auto_backup_time', server.auto_backup_time),
+        server.auto_backup_time
+    )
+    server.auto_backup_dir = server.sanitize_backup_dir(
+        data.get('auto_backup_dir', server.auto_backup_dir)
+    )
+    server.auto_backup_retention_days = server.bounded_int(
+        data.get('auto_backup_retention_days', server.auto_backup_retention_days),
+        server.auto_backup_retention_days,
+        1,
+        3650
     )
 
     yeni_masa = int(data.get('masa_sayisi', server.masa_sayisi))
@@ -9886,35 +10111,36 @@ def handle_payment(data):
         emit('success', {'message': msg})
         
         # --- MUHASEBE ENTEGRASYONU ---
-        try:
-            order_data = {
-                'masa': masa_adi,
-                'customer': payments[0].get('customer', 'Genel Müşteri'),
-                'items': [{
-                    'urun': i['urun'],
-                    'adet': i['adet'],
-                    'fiyat': i['fiyat']
-                } for i in payable_items],
-                'total': payable_total,
-                'ikram_total': ikram_total,
-                'payment_type': final_payment_label,
-                'invoice_pending': invoice_pending,
-                'invoice_document_type': invoice_info['document_type'] if invoice_pending else None,
-                'invoice_document_label': invoice_info['document_label'] if invoice_pending else '',
-                'invoice_tax_id': invoice_info['tax_id'] if invoice_pending else '',
-                'invoice_serial_no': invoice_info['serial_no'] if invoice_pending else '',
-                'invoice_note': invoice_note if invoice_pending else '',
-                'default_tax_rate': server.default_kdv_rate,
-                'timestamp': timestamp
-            }
-            # Arka planda gönder (Arayüzü bekletme)
-            threading.Thread(
-                target=server.integration_manager.send_to_accounting,
-                args=(order_data,),
-                daemon=True
-            ).start()
-        except Exception as ae:
-            logger.error(f"Muhasebe gönderim hazırlık hatası: {ae}")
+        if invoice_pending:
+            try:
+                order_data = {
+                    'masa': masa_adi,
+                    'customer': payments[0].get('customer', 'Genel Müşteri'),
+                    'items': [{
+                        'urun': i['urun'],
+                        'adet': i['adet'],
+                        'fiyat': i['fiyat']
+                    } for i in payable_items],
+                    'total': payable_total,
+                    'ikram_total': ikram_total,
+                    'payment_type': final_payment_label,
+                    'invoice_pending': invoice_pending,
+                    'invoice_document_type': invoice_info['document_type'],
+                    'invoice_document_label': invoice_info['document_label'],
+                    'invoice_tax_id': invoice_info['tax_id'],
+                    'invoice_serial_no': invoice_info['serial_no'],
+                    'invoice_note': invoice_note,
+                    'default_tax_rate': server.default_kdv_rate,
+                    'timestamp': timestamp
+                }
+                # Arka planda gönder (Arayüzü bekletme)
+                threading.Thread(
+                    target=server.integration_manager.send_to_accounting,
+                    args=(order_data,),
+                    daemon=True
+                ).start()
+            except Exception as ae:
+                logger.error(f"Muhasebe gönderim hazırlık hatası: {ae}")
         
     except Exception as e:
         logger.error(f"Ödeme hatası: {e}")
@@ -10121,6 +10347,9 @@ if __name__ == '__main__':
 
     # Ayarlanan saate kadar kapatılmayan vardiyaları otomatik kapat
     server.start_shift_auto_close_scheduler()
+
+    # Gün değişiminde otomatik sistem yedeği al
+    server.start_auto_backup_scheduler()
     
     # Web sunucuyu başlat
     web_port = max(1, min(get_env_int("FASTFOOT_WEB_PORT", 8000), 65535))
